@@ -1,0 +1,5 @@
+# Files Git should ignore
+Thumbs.db
+desktop.ini
+*.tmp
+*.log
