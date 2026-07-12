@@ -167,24 +167,28 @@ var TEX = (function () {
       '.kmmk.',
       '..kk..'
     ]);
+    // M3.5 color pass: the portal is NEUTRAL greyscale and always tinted by
+    // purpose — PORTAL GREEN for realm clear (DATA.modes.clear.color; user
+    // call: blue-on-blue was unreadable), gold for the trial, red for the
+    // realm boss portal (a true red now, not blue-multiplied mud).
     grid(scene, 'portal', [
       '......kkkkkkkk......',
-      '....kkbBBBBBBbkk....',
-      '...kbBddddddddBbk...',
-      '..kbBdd......ddBbk..',
-      '.kbBd..........dBbk.',
-      '.kBd....bbbb....dBk.',
-      'kbBd...bwwwwb...dBbk',
-      'kBd...bw....wb...dBk',
-      'kBd...bw.bb.wb...dBk',
-      'kBd...bw.bb.wb...dBk',
-      'kBd...bw....wb...dBk',
-      'kbBd...bwwwwb...dBbk',
-      '.kBd....bbbb....dBk.',
-      '.kbBd..........dBbk.',
-      '..kbBdd......ddBbk..',
-      '...kbBddddddddBbk...',
-      '....kkbBBBBBBbkk....',
+      '....kklwwwwwwlkk....',
+      '...klwKKKKKKKKwlk...',
+      '..klwKK......KKwlk..',
+      '.klwK..........Kwlk.',
+      '.kwK....llll....Kwk.',
+      'klwK...lwwwwl...Kwlk',
+      'kwK...lw....wl...Kwk',
+      'kwK...lw.ll.wl...Kwk',
+      'kwK...lw.ll.wl...Kwk',
+      'kwK...lw....wl...Kwk',
+      'klwK...lwwwwl...Kwlk',
+      '.kwK....llll....Kwk.',
+      '.klwK..........Kwlk.',
+      '..klwKK......KKwlk..',
+      '...klwKKKKKKKKwlk...',
+      '....kklwwwwwwlkk....',
       '......kkkkkkkk......',
       '....................',
       '....................'
@@ -343,6 +347,19 @@ var TEX = (function () {
       '.....kLddLk.....',
       '.....kLddLk.....'
     ]);
+    // softglow: a big radial light pool, tinted at runtime — the "lighting
+    // inside the map": platform well glow, console screen spill, title halo.
+    (function () {
+      var t = scene.textures.createCanvas('softglow', 128, 128);
+      var ctx = t.getContext();
+      var grad = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
+      grad.addColorStop(0, 'rgba(255,255,255,0.55)');
+      grad.addColorStop(0.4, 'rgba(255,255,255,0.22)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 128, 128);
+      t.refresh();
+    })();
     // glowdot: a soft round light, tinted at runtime (ring lights + pulses).
     (function () {
       var t = scene.textures.createCanvas('glowdot', 8, 8);
@@ -353,6 +370,96 @@ var TEX = (function () {
       ctx.beginPath(); ctx.arc(4, 4, 2, 0, Math.PI * 2); ctx.fill();
       t.refresh();
     })();
+    // M3.7: the RECORDS wall screen — a wide monitor mounted under the chamber
+    // title; scenes render the live account readout onto its face in green.
+    (function () {
+      // M3.8 v2 (user): WIDER glass so the graveyard page keeps a big font
+      var t = scene.textures.createCanvas('wallscreen', 190, 26);
+      var ctx = t.getContext();
+      ctx.fillStyle = '#1a1c2c'; ctx.fillRect(0, 0, 190, 26);      // bezel
+      ctx.fillStyle = '#333c57'; ctx.fillRect(1, 1, 188, 24);      // frame
+      ctx.fillStyle = '#0a1408'; ctx.fillRect(3, 3, 184, 20);      // dark green glass
+      ctx.fillStyle = '#123317'; ctx.fillRect(3, 3, 184, 2);       // glass sheen
+      ctx.fillStyle = '#49e83b';                                    // power pip
+      ctx.fillRect(184, 21, 2, 2);
+      // mounting struts to the wall above
+      ctx.fillStyle = '#333c57'; ctx.fillRect(44, 0, 3, 3); ctx.fillRect(143, 0, 3, 3);
+      t.refresh();
+    })();
+    // M3.8 v2: the records SWITCH — a GIANT riveted metal breaker lever.
+    // Up = records, down = graveyard stats. Its wire feeds the wall screen.
+    grid(scene, 'lever_up', [
+      '......klllk......',
+      '......klwlk......',
+      '......klllk......',
+      '.......kwk.......',
+      '.......kwk.......',
+      '.......kwk.......',
+      '.......kwk.......',
+      '.kkkkkkkkkkkkkkk.',
+      'klLLLLLLLLLLLLLlk',
+      'klLwLLLLkLLLLwLlk',
+      'klLLLLLkKkLLLLLlk',
+      'klLLLLkKKKkLLLLlk',
+      'klLLLLLkKkLLLLLlk',
+      'klLwLLLLkLLLLwLlk',
+      'klLLLLLLLLLLLLLlk',
+      '.kkkkkkkkkkkkkkk.',
+      '.................',
+      '.................',
+      '.................',
+      '.................',
+      '.................',
+      '.................',
+      '.................',
+      '.................'
+    ]);
+    grid(scene, 'lever_down', [
+      '.................',
+      '.................',
+      '.................',
+      '.................',
+      '.................',
+      '.................',
+      '.................',
+      '.kkkkkkkkkkkkkkk.',
+      'klLLLLLLLLLLLLLlk',
+      'klLwLLLLkLLLLwLlk',
+      'klLLLLLkKkLLLLLlk',
+      'klLLLLkKKKkLLLLlk',
+      'klLLLLLkKkLLLLLlk',
+      'klLwLLLLkLLLLwLlk',
+      'klLLLLLLLLLLLLLlk',
+      '.kkkkkkkkkkkkkkk.',
+      '.......kwk.......',
+      '.......kwk.......',
+      '.......kwk.......',
+      '.......kwk.......',
+      '......klllk......',
+      '......klwlk......',
+      '......klllk......',
+      '.................'
+    ]);
+    // M3.6: the BESTIARY — the console's green-screened sibling on the right
+    // wall: field notes on everything the realm sends at you.
+    grid(scene, 'bestiary', [
+      '................',
+      '..kkkkkkkkkkkk..',
+      '.kggggggggggggk.',
+      '.kgGGGGGGGGGGgk.',
+      '.kgGwgGGGGwGGgk.',
+      '.kgGGGGgGGGGGgk.',
+      '.kgGGwGGGGgGGgk.',
+      '.kggggggggggggk.',
+      '..kkkkkkkkkkkk..',
+      '....llllllll....',
+      '....lLLLLLLl....',
+      '....lLLLLLLl....',
+      '...llllllllll...',
+      '..lLLLLLLLLLLl..',
+      '..llllllllllll..',
+      '................'
+    ]);
     // M3.5: the REALM CONSOLE — an arcane terminal on a stone base. The
     // glowing blue "screen" is where runs are configured before a portal
     // exists at all (scenes.js NexusScene console overlay).

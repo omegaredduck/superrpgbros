@@ -104,10 +104,10 @@ var TitleScene = new Phaser.Class({
       fontFamily: 'monospace', fontSize: 13, color: '#94b0c2'
     }).setOrigin(0.5);
 
-    // decorative portal
-    var portal = this.add.sprite(W / 2, oy + 205, 'portal').setScale(2.4);
+    // decorative portal (portal green — the texture is neutral, always tint it)
+    var portal = this.add.sprite(W / 2, oy + 205, 'portal').setScale(2.4).setTint(DATA.modes.clear.color);
     this.tweens.add({ targets: portal, angle: 360, duration: 6000, repeat: -1 });
-    portalSwirl(this, W / 2, oy + 205, 0x41a6f6);
+    portalSwirl(this, W / 2, oy + 205, DATA.modes.clear.color);
     wireFullscreen(this);
 
     if (!SAVE.storageOk()) {
@@ -190,7 +190,8 @@ var TitleScene = new Phaser.Class({
     AUDIO.play('ui');
     this.cameras.main.fadeOut(350);
     var self = this;
-    this.time.delayedCall(400, function () { self.scene.start('Nexus'); });
+    // M3.8: entry:'login' → the records screen boots empty and TYPES itself out
+    this.time.delayedCall(400, function () { self.scene.start('Nexus', { entry: 'login' }); });
   }
 });
 
@@ -217,8 +218,9 @@ function makeInputRig(scene) {
 var NexusScene = new Phaser.Class({
   Extends: Phaser.Scene,
   initialize: function () { Phaser.Scene.call(this, { key: 'Nexus' }); },
-  create: function () {
+  create: function (data) {
     if (!GAME_SAVE) { this.scene.start('Title'); return; }   // no slot bound → welcome screen
+    this.entry = (data && data.entry) || 'none';             // M3.8: login / realm / none
     persist();                                               // autosave on every nexus arrival
     // RESIZE mode: the nexus safe room IS the screen, whatever size it is
     // (DATA.nexus.w/h is the windowed minimum).
@@ -240,13 +242,38 @@ var NexusScene = new Phaser.Class({
 
     // M3: THE VAULT — 8 account slots that survive death (the whole point).
     // Click the chest or press V to open the swap UI.
+    // M3.6 polish (user, 2026-07-12): station labels are GREEN, ABOVE their
+    // object, and minimal — no counters, no headers.
     var vc = this.add.sprite(120, H / 2 - 60, 'chest').setScale(2.5).setInteractive({ useHandCursor: true });
-    this.add.text(120, H / 2 - 20, 'VAULT (V)\n' + GAME_SAVE.vault.length + '/' + DATA.vault.slots + ' banked',
-      { fontFamily: 'monospace', fontSize: 10, color: '#94b0c2', align: 'center' }).setOrigin(0.5).setName('vaultLabel');
+    var vl = this.add.text(120, H / 2 - 100, 'VAULT (V)',
+      { fontFamily: 'monospace', fontSize: 11, color: '#49e83b' }).setOrigin(0.5);
+    vl.setShadow(1, 2, '#1a1c2c', 2, true, true);        // readable on the light floor
     var vSelf = this;
-    vc.on('pointerdown', function () { vSelf.toggleVault(); });
+    vc.on('pointerdown', function () { vSelf.requestStation('vault'); });
     this.vaultUi = null;
-    this.input.keyboard.on('keydown-V', function () { vSelf.toggleVault(); });
+    this.input.keyboard.on('keydown-V', function () { vSelf.requestStation('vault'); });
+
+    // M3.6: THE BESTIARY — the vault's mirror on the right wall (same height,
+    // same distance from the edge): a green terminal of field notes on every
+    // mob and boss currently implemented. Click, B, or SPACE in range.
+    this.bestiaryPos = { x: W - 120, y: H / 2 - 60 };
+    var bglow = this.add.sprite(W - 120, H / 2 - 66, 'softglow').setScale(1.0)
+      .setTint(0x49e83b).setAlpha(0.25).setDepth(1);
+    this.tweens.add({ targets: bglow, alpha: 0.13, yoyo: true, repeat: -1, duration: 1400 });
+    var bst = this.add.sprite(W - 120, H / 2 - 60, 'bestiary').setScale(3).setDepth(3)
+      .setInteractive({ useHandCursor: true });
+    this.bestiarySprite = bst;
+    this.tweens.add({ targets: bst, alpha: 0.78, yoyo: true, repeat: -1, duration: 1400 });
+    var bl = this.add.text(W - 120, H / 2 - 100, 'BESTIARY (B)',
+      { fontFamily: 'monospace', fontSize: 11, color: '#49e83b' }).setOrigin(0.5);
+    bl.setShadow(1, 2, '#1a1c2c', 2, true, true);
+    bst.on('pointerdown', function () { vSelf.requestStation('bestiary'); });
+    this.bestiaryUi = null;
+    this.bestiaryIndex = 0;
+    this.input.keyboard.on('keydown-B', function () { vSelf.requestStation('bestiary'); });
+    // M3.8: R / G walk to the switch and flip the wall readout
+    this.input.keyboard.on('keydown-R', function () { vSelf.requestStation('switchRecords'); });
+    this.input.keyboard.on('keydown-G', function () { vSelf.requestStation('switchGrave'); });
 
     // M3.5: you arrive just south of the console — the works are the first
     // thing you see, and the prompt is two steps away.
@@ -254,23 +281,78 @@ var NexusScene = new Phaser.Class({
     this.physics.add.collider(this.player, walls);
     this.rig = makeInputRig(this);
 
-    // M2: potion stash + graveyard
+    // M2: potion stash + records page (G now flips the wall switch — M3.8;
+    // the full records page opens by walking to the screen / clicking it)
     this.potUi = null; this.gyUi = null;
     this.buildPotionUi();
-    var gkey = this;
-    this.input.keyboard.on('keydown-G', function () { gkey.toggleGraveyard(); });
 
-    var drunk = 0, k;
-    for (k in CURRENT.potionsDrunk) drunk += CURRENT.potionsDrunk[k];
-    var acct = 'Slot ' + SAVE_SLOT + '   ·   ' + DATA.classes[CURRENT.cls].name + ' Lv ' + CURRENT.level +
-               (drunk ? '   ·   pots drunk: ' + drunk : '') +
-               '   ·   Deaths: ' + ACCOUNT.records.deaths + '   ·   Best level: ' + ACCOUNT.records.bestLevel +
-               '   ·   Realms closed: ' + ACCOUNT.records.realmsClosed;
-    this.add.text(W / 2, 40, 'THE NEXUS', { fontFamily: 'monospace', fontSize: 28, color: '#ffcd75' }).setOrigin(0.5);
-    this.add.text(W / 2, 72, acct, { fontFamily: 'monospace', fontSize: 12, color: '#94b0c2' }).setOrigin(0.5);
-    this.add.text(W / 2, H - 48,
-      'WASD move · mouse aim · T auto-fire · SPACE volley / interact · F fullscreen · V vault · G graveyard · M map builder (dev) · ESC title\nUse the REALM CONSOLE to configure a run and spawn its portal  (ESC/P pauses in a realm)',
-      { fontFamily: 'monospace', fontSize: 12, color: '#f4f4f4', align: 'center' }).setOrigin(0.5);
+    // M3.5 polish (user, 2026-07-12): the room is the PORTAL CHAMBER — the
+    // title glows like light cast by the works themselves (a soft halo that
+    // breathes). NO instructional text inside the frame — the page footer
+    // under the canvas carries the controls, including SPACE to interact.
+    var halo = this.add.sprite(W / 2, 44, 'softglow').setScale(4.4, 1.6)
+      .setTint(0x49e83b).setAlpha(0.4).setDepth(1);
+    this.tweens.add({ targets: halo, alpha: 0.22, yoyo: true, repeat: -1, duration: 1600 });
+    var title = this.add.text(W / 2, 40, 'PORTAL CHAMBER',
+      { fontFamily: 'monospace', fontSize: 28, color: '#d8ffd8' }).setOrigin(0.5).setDepth(2);
+    title.setShadow(0, 0, '#49e83b', 12, false, true);
+    this.tweens.add({ targets: title, alpha: 0.82, yoyo: true, repeat: -1, duration: 1600 });
+
+    // M3.7/3.8 (user, 2026-07-12): THE RECORDS SCREEN — the floating account
+    // header is GONE; a wall monitor under the title carries the live readout
+    // on its glass (no slot number — the chamber shows WHO you are, not which
+    // save you're in). Click / SPACE at the screen opens the full RECORDS page.
+    // M3.8: a large UNLABELED LEVER left of the screen swaps the readout —
+    // up = character records (R), down = graveyard stats (G) — and its wire
+    // feeds the screen with little energy pulses, portal-machine style.
+    this.recordsPos = { x: W / 2, y: 92 };
+    var rglow = this.add.sprite(W / 2, 96, 'softglow').setScale(3.6, 0.8)
+      .setTint(0x49e83b).setAlpha(0.18).setDepth(1);
+    this.tweens.add({ targets: rglow, alpha: 0.1, yoyo: true, repeat: -1, duration: 1800 });
+    var rs = this.add.sprite(W / 2, 92, 'wallscreen').setScale(3).setDepth(2)
+      .setInteractive({ useHandCursor: true });
+    this.recordsSprite = rs;
+    var rSelf = this;
+    rs.on('pointerdown', function () { rSelf.requestStation('recordsPage'); });
+    this.recordsText = this.add.text(W / 2, 92, '',
+      { fontFamily: 'monospace', fontSize: 12, color: '#49e83b' }).setOrigin(0.5).setDepth(3);
+    this.recordsText.setShadow(0, 0, '#49e83b', 6, false, true);   // phosphor glow
+    this.tweens.add({ targets: this.recordsText, alpha: 0.86, yoyo: true, repeat: -1, duration: 900 });
+    this.typeTimer = null; this.countTimer = null;       // scene-instance guards (bug #1)
+    this.recordsMode = this.registry.get('recordsMode') || 'records';
+
+    // the GIANT metal switch + its wire to the screen (v2: pulses only when
+    // the lever is thrown — the wire is quiet otherwise)
+    var screenLeft = W / 2 - this.recordsSprite.displayWidth / 2;
+    var swX = screenLeft - 78, swY = 92;
+    this.switchPos = { x: swX, y: swY };
+    var lever = this.add.sprite(swX, swY, this.recordsMode === 'records' ? 'lever_up' : 'lever_down')
+      .setScale(3).setDepth(2).setInteractive({ useHandCursor: true });
+    this.leverSprite = lever;
+    // left-click: walk over and throw it (same trip as the hotkeys)
+    lever.on('pointerdown', function () {
+      rSelf.requestStation(rSelf.recordsMode === 'records' ? 'switchGrave' : 'switchRecords');
+    });
+    // floating hotkey chip above the lever: shows the key that flips it
+    // to the OTHER page — (G) while records is up, (R) while graveyard is down
+    this.leverLabel = this.add.text(swX, swY - 46, this.recordsMode === 'records' ? '(G)' : '(R)',
+      { fontFamily: 'monospace', fontSize: 11, color: '#49e83b' }).setOrigin(0.5).setDepth(3);
+    this.leverLabel.setShadow(1, 2, '#1a1c2c', 2, true, true);
+    for (var wx = swX + 34; wx < screenLeft; wx += 24) {
+      this.add.sprite(wx, swY, 'conduit').setScale(1.4).setDepth(1).setAngle(90).setAlpha(0.9);
+    }
+    this.wireFrom = swX + 28; this.wireTo = screenLeft + 6;
+
+    // walk-to-interact targets (M3.8): stand JUST BELOW the object, then act
+    this.stations = {
+      vault:         { x: 120,     y: H / 2 - 14, act: function () { this.toggleVault(); } },
+      bestiary:      { x: W - 120, y: H / 2 - 14, act: function () { this.toggleBestiary(); } },
+      machine:       { x: W / 2,   y: H / 2 + 158, act: function () { this.toggleConsole(); } },
+      recordsPage:   { x: W / 2,   y: 150,        act: function () { this.toggleGraveyard(); } },
+      switchGrave:   { x: swX,     y: 150,        act: function () { this.setRecordsMode('grave'); } },
+      switchRecords: { x: swX,     y: 150,        act: function () { this.setRecordsMode('records'); } }
+    };
+    this.autoWalk = null;                                // scene-instance guard (bug #1)
 
     // ESC: save and return to the welcome screen (switch slots without reloading)
     // — unless an overlay is open, in which case ESC just closes the overlay.
@@ -278,7 +360,10 @@ var NexusScene = new Phaser.Class({
     this.input.keyboard.on('keydown-ESC', function () {
       if (esc.consoleUi) { esc.toggleConsole(); return; }
       if (esc.vaultUi) { esc.toggleVault(); return; }
+      if (esc.bestiaryUi) { esc.toggleBestiary(); return; }
+      if (esc.gyUi) { esc.toggleGraveyard(); return; }
       persist();
+      AUDIO.stopMusic();                                 // M3.9
       esc.scene.start('Title');
     });
 
@@ -286,20 +371,29 @@ var NexusScene = new Phaser.Class({
     // (not the player flow) so a save slot is always bound for playtests.
     this.input.keyboard.on('keydown-M', function () {
       persist();
+      AUDIO.stopMusic();                                 // M3.9
       esc.scene.start('Builder');
     });
 
-    // M3 polish (pre-builds the M5 pedestal-commit moment): portals are
-    // SPACE-ACTIVATED, not walk-in — approach, read the pedestal, THEN commit.
+    // M3 polish: portals are SPACE-ACTIVATED, not walk-in — approach, THEN
+    // commit. (M3.5: no floating prompts — the footer says SPACE to interact.)
     this.entering = false;
-    this.portalPrompt = null;
-    this.consolePrompt = null;
 
     // M3.5: a portal spawned by the console survives a scene restart (resize,
     // fullscreen toggle, vault detours) via the game registry — but it is
     // ONE-SHOT: enterPortal clears the registry, so it never outlives a run.
     var pending = this.registry.get('pendingPortal');
     if (pending) this.materializePortal(pending, false);
+
+    // M3.8: how the glass wakes up depends on how you arrived —
+    // login: empty box → letters type out · back from a realm: letters ready,
+    // numbers ramp · anything else (resize, builder): instant.
+    this.showRecords(this.entry === 'login' ? 'type' : this.entry === 'realm' ? 'count' : 'none');
+
+    // M3.9: chamber music — "The Chamber at Rest" (original composition;
+    // plays only here, idempotent across resize restarts, waits for the
+    // browser's audio unlock if needed)
+    AUDIO.playMusic('chamber');
 
     this.cameras.main.fadeIn(300);
   },
@@ -321,7 +415,11 @@ var NexusScene = new Phaser.Class({
     var platY = H / 2 - 110, conY = H / 2 + 110;
     this.portalSpot = { x: cx, y: platY - 6 };            // portal floats in the well
 
-    // PLATFORM — big stone ring, 8 dark light sockets the console ignites
+    // PLATFORM — big stone ring, 8 dark light sockets the console ignites.
+    // A soft glow pool sits in the well: dim while dormant, blazing in the
+    // mode color while powered — the room's lighting comes from the works.
+    this.wellGlow = this.add.sprite(cx, platY, 'softglow').setScale(1.6)
+      .setTint(0x29366f).setAlpha(0.35).setDepth(1);
     this.add.sprite(cx, platY, 'platform').setScale(2.4).setDepth(2);
     var J = DATA.juice.conduit;
     this.ringLights = [];
@@ -331,8 +429,9 @@ var NexusScene = new Phaser.Class({
         cx + Math.cos(a) * J.ringRadius, platY + Math.sin(a) * J.ringRadius, 'glowdot')
         .setScale(1.4).setDepth(3).setTint(0x29366f).setAlpha(0.25));
     }
-    this.add.text(cx, platY - 96, 'PORTAL WORKS',
-      { fontFamily: 'monospace', fontSize: 11, color: '#566c86' }).setOrigin(0.5, 1).setName('worksTitle');
+    var wt = this.add.text(cx, platY - 96, 'PORTAL WORKS',
+      { fontFamily: 'monospace', fontSize: 11, color: '#94b0c2' }).setOrigin(0.5, 1).setName('worksTitle');
+    wt.setShadow(1, 2, '#1a1c2c', 2, true, true);
 
     // CONDUIT — carved channel from the console up to the platform
     this.conduitTop = platY + 70; this.conduitBottom = conY - 42;
@@ -340,13 +439,19 @@ var NexusScene = new Phaser.Class({
       this.add.sprite(cx, y, 'conduit').setScale(2).setDepth(2).setAlpha(0.9);
     }
 
-    // CONSOLE — the terminal that drives it all
+    // CONSOLE — the terminal that drives it all; its screen spills blue light
+    var spill = this.add.sprite(cx, conY - 6, 'softglow').setScale(1.1)
+      .setTint(0x41a6f6).setAlpha(0.3).setDepth(1);
+    this.tweens.add({ targets: spill, alpha: 0.16, yoyo: true, repeat: -1, duration: 1200 });
     this.consolePos = { x: cx, y: conY };
     var c = this.add.sprite(cx, conY, 'console').setScale(3).setDepth(3).setInteractive({ useHandCursor: true });
     this.consoleSprite = c;
     this.tweens.add({ targets: c, alpha: 0.75, yoyo: true, repeat: -1, duration: 1200 });   // dormant heartbeat
-    this.add.text(cx, conY + 36, DATA.console.name, { fontFamily: 'monospace', fontSize: 11, color: '#41a6f6' }).setOrigin(0.5);
-    c.on('pointerdown', function () { self.toggleConsole(); });
+    var cl = this.add.text(cx, conY + 36, DATA.console.name + ' (' + DATA.console.hotkey + ')',
+      { fontFamily: 'monospace', fontSize: 11, color: '#49e83b' }).setOrigin(0.5);
+    cl.setShadow(1, 2, '#1a1c2c', 2, true, true);
+    c.on('pointerdown', function () { self.requestStation('machine'); });
+    this.input.keyboard.on('keydown-P', function () { self.requestStation('machine'); });
     this.consoleUi = null;
     this.flowTimer = null;       // powered-state pulse stream
     // run config survives open/close within a visit; defaults are fresh per scene
@@ -373,29 +478,19 @@ var NexusScene = new Phaser.Class({
       self.tweens.killTweensOf(l);
       l.setTint(0x29366f); l.setAlpha(0.25); l.setScale(1.4);
     });
+    this.tweens.killTweensOf(this.wellGlow);
+    this.wellGlow.setTint(0x29366f).setAlpha(0.35).setScale(1.6);   // dormant pool
   },
 
+  // M3.5 polish (user, 2026-07-12): NO floating instructional text — the page
+  // footer says "SPACE to interact". In range, the console just brightens
+  // (diegetic invitation); SPACE opens it.
   handleConsole: function () {
-    if (this.entering) return;
-    if (this.consoleUi || this.vaultUi || this.gyUi || this.charging) {
-      if (this.consolePrompt) { this.consolePrompt.destroy(); this.consolePrompt = null; }
-      return;
-    }
+    if (this.entering || this.consoleUi || this.vaultUi || this.gyUi || this.charging) return;
     var p = this.player, cp = this.consolePos;
     var near = Math.hypot(cp.x - p.x, cp.y - p.y) <= DATA.interact.consoleRange;
-    if (near) {
-      if (!this.consolePrompt) {
-        this.consolePrompt = this.add.text(0, 0, DATA.console.prompt,
-          { fontFamily: 'monospace', fontSize: 12, color: '#41a6f6' }).setOrigin(0.5).setDepth(60);
-        var hw = this.consolePrompt.width / 2 + 8;
-        this.consolePrompt.setPosition(
-          Phaser.Math.Clamp(cp.x, hw, this.scale.width - hw),
-          Math.max(96, cp.y - 64));
-      }
-      if (Phaser.Input.Keyboard.JustDown(this.rig.keys.SPACE)) this.toggleConsole();
-    } else if (this.consolePrompt) {
-      this.consolePrompt.destroy(); this.consolePrompt = null;
-    }
+    this.consoleSprite.setScale(near ? 3.3 : 3);          // leans toward you
+    if (near && Phaser.Input.Keyboard.JustDown(this.rig.keys.SPACE)) this.toggleConsole();
   },
 
   toggleConsole: function () {
@@ -405,8 +500,10 @@ var NexusScene = new Phaser.Class({
       this.input.keyboard.off('keydown-ENTER', this.consoleEnterFn, this);   // bug #2 family
       return;
     }
+    if (this.charging) return;                           // one cinematic at a time
     if (this.vaultUi) this.toggleVault();                // one overlay at a time
     if (this.gyUi) this.toggleGraveyard();
+    if (this.bestiaryUi) this.toggleBestiary();
     this.buildConsoleUi();
     AUDIO.play('ui');
   },
@@ -531,31 +628,26 @@ var NexusScene = new Phaser.Class({
       self.tweens.add({ targets: l, alpha: 0.55, yoyo: true, repeat: -1,
         duration: 700, delay: i * 90 });                 // the ring breathes
     });
+    // the well floods with the mode color — the chamber is LIT by the portal
+    this.tweens.killTweensOf(this.wellGlow);
+    this.wellGlow.setTint(tint).setAlpha(0.8).setScale(2.2);
+    this.tweens.add({ targets: this.wellGlow, alpha: 0.5, scale: 2.0,
+      yoyo: true, repeat: -1, duration: 900 });
     if (this.flowTimer) this.flowTimer.remove();
     this.flowTimer = this.time.addEvent({ delay: J.flowEveryMs, loop: true,
       callback: function () { self.conduitPulse(tint, J.flowTravelMs); } });
   },
 
-  // The portal itself (sprite, swirl, label) — shared by both spawn paths.
+  // The portal itself (sprite + swirl) — shared by both spawn paths.
+  // M3.5 polish (user, 2026-07-12): NO text on the works — the run reads
+  // through color and light (mode-tinted portal/ring/well; board recaps it).
   createPortalAt: function (cfg, tint) {
-    var spot = this.portalSpot, mode = DATA.modes[cfg.mode];
+    var spot = this.portalSpot;
     var p = this.physics.add.staticSprite(spot.x, spot.y, 'portal').setScale(2.2).setDepth(4);
-    if (cfg.mode === 'survival') p.setTint(tint);
+    p.setTint(tint);                                     // neutral texture, mode color
     this.tweens.add({ targets: p, angle: 360, duration: 4000, repeat: -1 });
     var swirl = portalSwirl(this, spot.x, spot.y, tint);
-    var names = cfg.affixes.map(function (k) { return DATA.affixes.map[k].name; });
-    var text = cfg.mode === 'clear'
-      ? mode.name + ' · ' + DATA.realm.name + '\n' + DATA.realm.killQuota + ' ' + mode.desc
-      : mode.name + ' · ' + mode.desc;
-    if (names.length) text += '\n— ' + names.join(' · ') + ' —';
-    // signpost to the RIGHT of the platform (clear of the account header even
-    // in the 960×640 window; the SPACE prompt floats above the portal itself)
-    var label = this.add.text(spot.x + 104, spot.y + 6, text,
-      { fontFamily: 'monospace', fontSize: 10, color: cfg.mode === 'survival' ? '#ffcd75' : '#41a6f6',
-        align: 'left', wordWrap: { width: 260 } }).setOrigin(0, 0.5);
-    var wt = this.children.getByName('worksTitle');
-    if (wt) wt.setVisible(false);                        // the label takes its spot
-    this.spawnedPortal = { sprite: p, label: label, swirl: swirl, mode: cfg.mode, affixes: cfg.affixes.slice() };
+    this.spawnedPortal = { sprite: p, swirl: swirl, mode: cfg.mode, affixes: cfg.affixes.slice() };
     this.plazaPortals = [{ sprite: p, mode: cfg.mode, affixes: cfg.affixes.slice() }];
     this.portal = p;                                     // canonical (suites + docs)
   },
@@ -566,13 +658,13 @@ var NexusScene = new Phaser.Class({
   // conduit → ring lights ignite one by one → the portal tears open.
   materializePortal: function (cfg, animate) {
     this.despawnPortal();                                // a new spawn replaces the old
-    var tint = cfg.mode === 'survival' ? 0xffcd75 : 0x41a6f6;
+    var tint = DATA.modes[cfg.mode].color;               // portal green / trial gold
     var self = this, J = DATA.juice.conduit;
 
     if (!animate) { this.createPortalAt(cfg, tint); this.powerUp(tint); return; }
 
     this.charging = true;
-    AUDIO.play('ui');
+    AUDIO.play('charge');                                // electricity crackles
     // 1. console flare
     var flare = this.add.sprite(this.consolePos.x, this.consolePos.y, 'console')
       .setScale(3).setDepth(5).setTintFill(0xf4f4f4).setAlpha(0.9);
@@ -592,12 +684,17 @@ var NexusScene = new Phaser.Class({
       });
     });
     var ringDone = pulsesDone + this.ringLights.length * J.segMs;
-    // 4. the portal tears open
+    // 4. the portal RISES OUT OF THE FLOOR of the platform well (user ask,
+    // 2026-07-12): born sunken and squashed flat, it climbs up and unfolds —
+    // then the phaser zap + flash + shake sell the tear-open.
     this.time.delayedCall(ringDone, function () {
-      AUDIO.play('portal');
+      AUDIO.play('spawn');                               // phaser zap
       self.createPortalAt(cfg, tint);
-      self.portal.setScale(0.2);
-      self.tweens.add({ targets: self.portal, scale: 2.2, duration: J.portalMs, ease: 'Back.Out' });
+      self.portal.setPosition(self.portalSpot.x, self.portalSpot.y + 22);
+      self.portal.setScale(1.6, 0.12).setAlpha(0.65);    // flat sliver in the floor
+      self.tweens.add({ targets: self.portal,
+        y: self.portalSpot.y, scaleX: 2.2, scaleY: 2.2, alpha: 1,
+        duration: J.portalMs, ease: 'Back.Out' });
       var flash = self.add.sprite(self.portalSpot.x, self.portalSpot.y, 'portal')
         .setScale(0.4).setDepth(5).setTint(0xf4f4f4).setAlpha(0.9);
       self.tweens.add({ targets: flash, scale: 3.4, alpha: 0, duration: 480,
@@ -608,28 +705,195 @@ var NexusScene = new Phaser.Class({
     });
   },
 
+  // ------------------------------- M3.7/3.8: THE RECORDS SCREEN --
+  // Live account readout rendered on the wall monitor's glass. No slot
+  // number by design (user call). Two pages, chosen by the big lever:
+  //   'records' (R, lever up)  — the character: class/level/deaths/best/closed
+  //   'grave'   (G, lever down) — the graveyard: fallen/kills/entered/last death
+  // Anim modes: 'type' (login + every lever flip: the glass boots empty and
+  // the letters hammer out one by one) · 'count' (back from a realm: letters
+  // already there, NUMBERS tick slowly then shoot up) · 'none' (instant).
+  recordsParts: function () {
+    var R = ACCOUNT.records;
+    if (this.recordsMode === 'grave') {
+      var last = ACCOUNT.graveyard.length ? ACCOUNT.graveyard[ACCOUNT.graveyard.length - 1] : null;
+      var parts = [
+        { t: 'FALLEN ', n: ACCOUNT.graveyard.length },
+        { t: '  ·  TOTAL KILLS ', n: R.totalKills },
+        { t: '  ·  REALMS ENTERED ', n: R.realmsEntered }
+      ];
+      if (last) parts.push({ t: '  ·  LAST: ' + last.killer.toUpperCase(), n: null });
+      return parts;
+    }
+    var drunk = 0, k;
+    for (k in CURRENT.potionsDrunk) drunk += CURRENT.potionsDrunk[k];
+    var p = [
+      { t: DATA.classes[CURRENT.cls].name.toUpperCase() + ' LV ', n: CURRENT.level },
+      { t: '  ·  DEATHS ', n: ACCOUNT.records.deaths },
+      { t: '  ·  BEST LV ', n: ACCOUNT.records.bestLevel },
+      { t: '  ·  REALMS CLOSED ', n: ACCOUNT.records.realmsClosed }
+    ];
+    if (drunk) p.push({ t: '  ·  POTS ', n: drunk });
+    return p;
+  },
+
+  recordsString: function (scale) {
+    return this.recordsParts().map(function (p) {
+      return p.t + (p.n === null ? '' : (scale === undefined ? p.n : Math.floor(p.n * scale)));
+    }).join('');
+  },
+
+  fitRecordsFont: function (text) {
+    var glass = this.recordsSprite.displayWidth - 30;
+    var fs = 12;                                         // v2: bigger base font
+    this.recordsText.setFontSize(fs).setText(text);
+    while (this.recordsText.width > glass && fs > 8) {
+      fs--;
+      this.recordsText.setFontSize(fs);
+    }
+  },
+
+  showRecords: function (anim) {
+    var self = this, JR = DATA.juice.records;
+    var full = this.recordsString();
+    if (this.typeTimer) { this.typeTimer.remove(); this.typeTimer = null; }
+    if (this.countTimer) { this.countTimer.remove(); this.countTimer = null; }
+    this.fitRecordsFont(full);                           // size for the FINAL text
+    if (anim === 'type') {
+      // the glass boots empty, then the letters hammer out rapidly
+      this.recordsText.setText('');
+      var i = 0;
+      this.typeTimer = this.time.addEvent({ delay: JR.typeMs, loop: true, callback: function () {
+        // looped timers CATCH UP under a slow clock (headless ~2fps) — the
+        // callback can fire again in the same frame after completion. Guard.
+        if (!self.typeTimer) return;
+        i += 1 + (i % 3 === 0 ? 1 : 0);                  // uneven, rapid
+        self.recordsText.setText(full.slice(0, i) + (i < full.length ? '_' : ''));
+        if (i % 4 === 0) AUDIO.play('ui');
+        if (i >= full.length) {
+          self.recordsText.setText(full);
+          self.typeTimer.remove(); self.typeTimer = null;
+        }
+      } });
+    } else if (anim === 'count') {
+      // letters already typed — the NUMBERS ramp: slow ticks, then they fly
+      var step = 0;
+      this.recordsText.setText(this.recordsString(0));
+      this.countTimer = this.time.addEvent({ delay: JR.countTickMs, loop: true, callback: function () {
+        if (!self.countTimer) return;                    // catch-up guard (see above)
+        step++;
+        var t = step / JR.countTicks;
+        self.recordsText.setText(self.recordsString(t * t * t));   // cubic ease-in
+        if (step % 3 === 0) AUDIO.play('ui');
+        if (step >= JR.countTicks) {
+          self.recordsText.setText(full);
+          self.countTimer.remove(); self.countTimer = null;
+        }
+      } });
+    } else {
+      this.recordsText.setText(full);
+    }
+  },
+
+  // kept for callers that just need a silent refresh (potion drink, etc.)
+  updateRecordsScreen: function () { this.showRecords('none'); },
+
+  // the lever: flips the page, kicks a pulse down the wire, re-TYPES the glass
+  setRecordsMode: function (mode) {
+    if (mode !== 'records' && mode !== 'grave') return;
+    if (this.recordsMode === mode) return;
+    this.recordsMode = mode;
+    this.registry.set('recordsMode', mode);              // survives resize restarts
+    this.leverSprite.setTexture(mode === 'records' ? 'lever_up' : 'lever_down');
+    this.leverLabel.setText(mode === 'records' ? '(G)' : '(R)');   // the OTHER page's key
+    AUDIO.play('ui');
+    // v2: the wire only carries energy when the lever is THROWN — a burst
+    // of three pulses races to the screen, then it goes quiet again
+    var self = this;
+    this.wirePulse();
+    this.time.delayedCall(140, function () { self.wirePulse(); });
+    this.time.delayedCall(280, function () { self.wirePulse(); });
+    this.showRecords('type');
+  },
+
+  // one energy pulse traveling the wire switch → screen (mini portal-machine)
+  wirePulse: function () {
+    var self = this, JR = DATA.juice.records;
+    var p = this.add.sprite(this.wireFrom, this.switchPos.y, 'glowdot')
+      .setScale(0.9).setDepth(4).setTint(0x49e83b).setAlpha(0.9);
+    this.tweens.add({ targets: p, x: this.wireTo, duration: JR.wireTravelMs,
+      ease: 'Sine.In', onComplete: function () {
+        self.tweens.add({ targets: p, scale: 1.8, alpha: 0, duration: 140,
+          onComplete: function () { p.destroy(); } });
+      } });
+  },
+
+  // ---------------------------------- M3.8: WALK-TO-INTERACT --
+  // A hotkey or click doesn't open a window — the character walks a straight
+  // line to stand just below the station, THEN interacts. Manual movement
+  // cancels the trip. If the station's window is already open, close it.
+  closeOverlays: function () {
+    if (this.vaultUi) this.toggleVault();
+    if (this.gyUi) this.toggleGraveyard();
+    if (this.consoleUi) this.toggleConsole();
+    if (this.bestiaryUi) this.toggleBestiary();
+  },
+
+  requestStation: function (key) {
+    var st = this.stations[key];
+    if (!st || this.entering || this.charging) return;
+    // toggle-close if this station's window is already open
+    if (key === 'vault' && this.vaultUi) { this.toggleVault(); return; }
+    if (key === 'bestiary' && this.bestiaryUi) { this.toggleBestiary(); return; }
+    if (key === 'machine' && this.consoleUi) { this.toggleConsole(); return; }
+    if (key === 'recordsPage' && this.gyUi) { this.toggleGraveyard(); return; }
+    // v2 (user): R/G ALWAYS walk you to the switch, whatever position it's in
+    // (setRecordsMode no-ops on arrival if the page is already showing)
+    this.closeOverlays();
+    var d = Math.hypot(st.x - this.player.x, st.y - this.player.y);
+    if (d < 16) { st.act.call(this); return; }           // already standing there
+    this.autoWalk = { x: st.x, y: st.y, act: st.act };
+  },
+
+  handleRecords: function () {
+    if (this.entering || this.consoleUi || this.vaultUi || this.gyUi || this.bestiaryUi || this.charging) return;
+    var p = this.player, rp = this.recordsPos;
+    var near = Math.hypot(rp.x - p.x, rp.y - p.y) <= DATA.interact.consoleRange;
+    this.recordsSprite.setScale(near ? 3.2 : 3);         // leans toward you
+    if (near && Phaser.Input.Keyboard.JustDown(this.rig.keys.SPACE)) this.toggleGraveyard();
+  },
+
+  // M3.8 v3: SPACE at the switch throws it, like every other station
+  handleSwitch: function () {
+    if (this.entering || this.consoleUi || this.vaultUi || this.gyUi || this.bestiaryUi || this.charging) return;
+    var p = this.player, sp = this.switchPos;
+    var near = Math.hypot(sp.x - p.x, sp.y - p.y) <= DATA.interact.consoleRange;
+    this.leverSprite.setScale(near ? 3.3 : 3);           // leans toward you
+    if (near && Phaser.Input.Keyboard.JustDown(this.rig.keys.SPACE)) {
+      this.setRecordsMode(this.recordsMode === 'records' ? 'grave' : 'records');
+    }
+  },
+
   // ---------------------------------------------- M2: POTIONS (R5/F4) --
   buildPotionUi: function () {
     if (this.potUi) this.potUi.forEach(function (o) { o.destroy(); });
+    // M3.6 polish (user, 2026-07-12): no header, no empty-state line — the
+    // stash is just the potions themselves when you have them.
     var self = this, ui = [], H = this.scale.height;
     var x = 48, y = H / 2 + 40;
-    ui.push(this.add.text(x, y - 22, 'POTION STASH', { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }));
-    var any = false;
     DATA.potions.stats.forEach(function (stat) {
       var n = ACCOUNT.potions[stat];
       if (!n) return;
-      any = true;
       ui.push(self.add.sprite(x + 10, y + 10, 'potion').setScale(2).setTint(DATA.potions.tints[stat]));
       var t = self.add.text(x + 26, y + 3, stat.toUpperCase() + ' ×' + n + '   [ drink: +' + DATA.potions.boost + ' ]',
         { fontFamily: 'monospace', fontSize: 12, color: '#f4f4f4' }).setInteractive({ useHandCursor: true });
+      t.setShadow(1, 2, '#1a1c2c', 2, true, true);
       t.on('pointerover', function () { t.setColor('#38b764'); });
       t.on('pointerout', function () { t.setColor('#f4f4f4'); });
       t.on('pointerdown', function () { self.drinkPotion(stat); });
       ui.push(t);
       y += 26;
     });
-    if (!any) ui.push(this.add.text(x, y + 2, 'empty — close a realm (beat its boss) to earn potions',
-      { fontFamily: 'monospace', fontSize: 11, color: '#566c86' }));
     this.potUi = ui;
   },
 
@@ -650,6 +914,7 @@ var NexusScene = new Phaser.Class({
     st.mp = Math.min(st.stats.mp, st.mp + Math.max(0, st.stats.mp - before.mp));
     this.toast('+' + DATA.potions.boost + ' ' + stat.toUpperCase() + ' — yours until this character falls');
     this.buildPotionUi();
+    this.updateRecordsScreen();                          // M3.7: the wall screen is live
   },
 
   toast: function (msg) {
@@ -666,12 +931,11 @@ var NexusScene = new Phaser.Class({
     if (this.vaultUi) {
       this.vaultUi.forEach(function (o) { o.destroy(); });
       this.vaultUi = null;
-      var lbl = this.children.getByName('vaultLabel');
-      if (lbl) lbl.setText('VAULT (V)\n' + GAME_SAVE.vault.length + '/' + DATA.vault.slots + ' banked');
       return;
     }
     if (this.gyUi) this.toggleGraveyard();               // one overlay at a time
     if (this.consoleUi) this.toggleConsole();
+    if (this.bestiaryUi) this.toggleBestiary();
     this.buildVaultUi();
     AUDIO.play('ui');
   },
@@ -797,14 +1061,16 @@ var NexusScene = new Phaser.Class({
   toggleGraveyard: function () {
     if (this.gyUi) { this.gyUi.forEach(function (o) { o.destroy(); }); this.gyUi = null; return; }
     if (this.consoleUi) this.toggleConsole();            // one overlay at a time
+    if (this.bestiaryUi) this.toggleBestiary();
     var W = this.scale.width, H = this.scale.height, cx = W / 2, cy = H / 2;
     var ui = [], R = ACCOUNT.records;
-    ui.push(this.add.rectangle(cx, cy, 620, 460, 0x0f0f1b, 0.96).setDepth(80).setStrokeStyle(2, 0x29366f));
-    ui.push(this.add.text(cx, cy - 200, 'GRAVEYARD & RECORDS', { fontFamily: 'monospace', fontSize: 20, color: '#ffcd75' }).setOrigin(0.5).setDepth(81));
-    ui.push(this.add.text(cx, cy - 164,
+    ui.push(this.add.rectangle(cx, cy, 620, 460, 0x0f0f1b, 0.96).setDepth(80).setStrokeStyle(2, 0x49e83b));
+    ui.push(this.add.text(cx, cy - 200, 'RECORDS', { fontFamily: 'monospace', fontSize: 20, color: '#49e83b' }).setOrigin(0.5).setDepth(81));
+    ui.push(this.add.text(cx, cy - 178, 'the account · fallen heroes', { fontFamily: 'monospace', fontSize: 11, color: '#94b0c2' }).setOrigin(0.5).setDepth(81));
+    ui.push(this.add.text(cx, cy - 152,
       'best level ' + R.bestLevel + ' · deaths ' + R.deaths + ' · total kills ' + R.totalKills +
       ' · realms entered ' + R.realmsEntered + ' · closed ' + R.realmsClosed,
-      { fontFamily: 'monospace', fontSize: 12, color: '#94b0c2' }).setOrigin(0.5).setDepth(81));
+      { fontFamily: 'monospace', fontSize: 12, color: '#f4f4f4' }).setOrigin(0.5).setDepth(81));
     var rows = ACCOUNT.graveyard.slice(-10).reverse();
     if (!rows.length) {
       ui.push(this.add.text(cx, cy - 40, 'No one has died yet.\nThe realm will fix that.',
@@ -817,13 +1083,155 @@ var NexusScene = new Phaser.Class({
           { fontFamily: 'monospace', fontSize: 12, color: i === 0 ? '#f4f4f4' : '#94b0c2' }).setOrigin(0.5).setDepth(81));
       }
     }
-    ui.push(this.add.text(cx, cy + 200, '[ G to close ]', { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }).setOrigin(0.5).setDepth(81));
+    ui.push(this.add.text(cx, cy + 200, '[ G or ESC to close ]', { fontFamily: 'monospace', fontSize: 12, color: '#49e83b' }).setOrigin(0.5).setDepth(81));
     this.gyUi = ui;
   },
 
-  // M3: SPACE-activated portal travel (Q6 pattern, nexus edition). Shows a
-  // floating prompt at the nearest unlocked portal; SPACE commits. Held while
-  // the vault/graveyard overlays are open so a click-spree can't warp you.
+  // ------------------------------------------------ M3.6: THE BESTIARY --
+  // Field notes on every implemented creature, read STRAIGHT from data.js —
+  // a new mob or boss in DATA appears here automatically. Navigate with the
+  // LEFT/RIGHT arrows (or click ◀ ▶); B/ESC closes.
+  handleBestiary: function () {
+    if (this.entering || this.consoleUi || this.vaultUi || this.gyUi || this.bestiaryUi || this.charging) return;
+    var p = this.player, bp = this.bestiaryPos;
+    var near = Math.hypot(bp.x - p.x, bp.y - p.y) <= DATA.interact.consoleRange;
+    this.bestiarySprite.setScale(near ? 3.3 : 3);        // leans toward you
+    if (near && Phaser.Input.Keyboard.JustDown(this.rig.keys.SPACE)) this.toggleBestiary();
+  },
+
+  bestiaryEntries: function () {
+    var e = [], k;
+    for (k in DATA.mobs) e.push({ kind: 'mob', key: k });
+    for (k in DATA.bosses) e.push({ kind: 'boss', key: k });
+    return e;
+  },
+
+  toggleBestiary: function () {
+    if (this.bestiaryUi) {
+      this.bestiaryUi.forEach(function (o) { o.destroy(); });
+      this.bestiaryUi = null;
+      this.input.keyboard.off('keydown-LEFT', this.bestiaryNavL, this);   // bug #2 family
+      this.input.keyboard.off('keydown-RIGHT', this.bestiaryNavR, this);
+      return;
+    }
+    if (this.vaultUi) this.toggleVault();                // one overlay at a time
+    if (this.gyUi) this.toggleGraveyard();
+    if (this.consoleUi) this.toggleConsole();
+    this.buildBestiaryUi();
+    this.bestiaryNavL = this.bestiaryNavL || function () { this.bestiaryNav(-1); };
+    this.bestiaryNavR = this.bestiaryNavR || function () { this.bestiaryNav(1); };
+    this.input.keyboard.off('keydown-LEFT', this.bestiaryNavL, this);
+    this.input.keyboard.off('keydown-RIGHT', this.bestiaryNavR, this);
+    this.input.keyboard.on('keydown-LEFT', this.bestiaryNavL, this);
+    this.input.keyboard.on('keydown-RIGHT', this.bestiaryNavR, this);
+    AUDIO.play('ui');
+  },
+
+  bestiaryNav: function (dir) {
+    if (!this.bestiaryUi) return;
+    var n = this.bestiaryEntries().length;
+    this.bestiaryIndex = (this.bestiaryIndex + dir + n) % n;
+    AUDIO.play('ui');
+    this.buildBestiaryUi();
+  },
+
+  buildBestiaryUi: function () {
+    if (this.bestiaryUi) { this.bestiaryUi.forEach(function (o) { o.destroy(); }); this.bestiaryUi = null; }
+    var self = this;
+    var W = this.scale.width, H = this.scale.height, cx = W / 2, cy = H / 2;
+    var entries = this.bestiaryEntries();
+    this.bestiaryIndex = ((this.bestiaryIndex % entries.length) + entries.length) % entries.length;
+    var entry = entries[this.bestiaryIndex];
+    var GREEN = '#49e83b', DIM = '#94b0c2', FAINT = '#566c86';
+    var ui = [];
+    ui.push(this.add.rectangle(cx, cy, 640, 520, 0x0f0f1b, 0.97).setDepth(80).setStrokeStyle(2, 0x49e83b));
+    ui.push(this.add.text(cx, cy - 232, 'BESTIARY', { fontFamily: 'monospace', fontSize: 22, color: GREEN }).setOrigin(0.5).setDepth(81));
+    ui.push(this.add.text(cx, cy - 206, 'field notes on everything the realm sends at you',
+      { fontFamily: 'monospace', fontSize: 11, color: DIM }).setOrigin(0.5).setDepth(81));
+
+    // navigation: ◀ entry n/N ▶ (arrow keys or click)
+    var navL = this.add.text(cx - 160, cy - 170, '◀', { fontFamily: 'monospace', fontSize: 26, color: GREEN })
+      .setOrigin(0.5).setDepth(81).setInteractive({ useHandCursor: true });
+    navL.on('pointerdown', function () { self.bestiaryNav(-1); });
+    ui.push(navL);
+    var navR = this.add.text(cx + 160, cy - 170, '▶', { fontFamily: 'monospace', fontSize: 26, color: GREEN })
+      .setOrigin(0.5).setDepth(81).setInteractive({ useHandCursor: true });
+    navR.on('pointerdown', function () { self.bestiaryNav(1); });
+    ui.push(navR);
+    ui.push(this.add.text(cx, cy - 170, 'entry ' + (this.bestiaryIndex + 1) + ' / ' + entries.length,
+      { fontFamily: 'monospace', fontSize: 12, color: DIM }).setOrigin(0.5).setDepth(81));
+
+    var d, lines = [], role, tint;
+    if (entry.kind === 'mob') {
+      d = DATA.mobs[entry.key];
+      role = d.shoot ? 'SHOOTER' : 'CHASER';
+      tint = d.deathTint;
+      lines.push(['HP', d.hp], ['SPEED', d.spd], ['XP', d.xp], ['THREAT COST', d.cost]);
+      if (d.chase) lines.push(['CONTACT DMG', d.chase.contactDmg]);
+      if (d.shoot) {
+        lines.push(['BOLT DMG', d.shoot.dmg], ['RANGE', d.shoot.range],
+                   ['BOLT SPEED', d.shoot.projSpeed], ['COOLDOWN', (d.shoot.cooldownMs / 1000) + 's']);
+        if (d.shoot.count > 1) lines.push(['VOLLEY', d.shoot.count + ' bolts · ' + d.shoot.spreadDeg + '° fan']);
+      }
+    } else {
+      d = DATA.bosses[entry.key];
+      role = 'BOSS';
+      tint = d.deathTint;
+      lines.push(['HP', d.hp], ['SPEED', d.spd], ['XP', d.xp], ['CONTACT DMG', d.contactDmg]);
+    }
+
+    // portrait + name
+    ui.push(this.add.sprite(cx - 180, cy - 60, d.texture).setScale(entry.kind === 'boss' ? 4.5 : 5).setDepth(81));
+    ui.push(this.add.text(cx - 180, cy + 6, d.name, { fontFamily: 'monospace', fontSize: 14, color: '#f4f4f4' }).setOrigin(0.5).setDepth(81));
+    ui.push(this.add.text(cx - 180, cy + 24, entry.kind === 'boss' ? (d.title || role) : role,
+      { fontFamily: 'monospace', fontSize: 10, color: '#' + ('00000' + tint.toString(16)).slice(-6) }).setOrigin(0.5).setDepth(81));
+
+    // stat block
+    var sy = cy - 120;
+    lines.forEach(function (row) {
+      ui.push(self.add.text(cx - 40, sy, row[0], { fontFamily: 'monospace', fontSize: 11, color: DIM }).setDepth(81));
+      ui.push(self.add.text(cx + 120, sy, String(row[1]), { fontFamily: 'monospace', fontSize: 11, color: '#f4f4f4' }).setDepth(81));
+      sy += 20;
+    });
+
+    // abilities / behavior notes
+    var notes = [];
+    if (entry.kind === 'mob') {
+      notes.push(d.shoot
+        ? (d.shoot.count > 1
+            ? 'Keeps its distance and looses a ' + d.shoot.count + '-bolt spray.'
+            : 'Keeps its distance and fires single aimed bolts.')
+        : 'Chases you down — damage on contact.');
+      notes.push(d.unlockAt ? 'Joins the realm ' + d.unlockAt + 's in.' : 'Hunts from the first second.');
+      notes.push('May spawn as a CHAMPION (' + Math.round(DATA.affixes.mobRollChance * 100) + '% roll) wearing an affix.');
+    } else {
+      var pk;
+      for (pk in d.patterns) {
+        var pat = d.patterns[pk];
+        notes.push(pk.toUpperCase() + ' — ' +
+          (pat.count ? pat.count + ' bolts in a ring' : pat.shots + ' aimed bolts') +
+          ' · ' + pat.dmg + ' dmg · every ' + (pat.everyMs / 1000) + 's');
+      }
+      (d.hints || []).forEach(function (h) { notes.push(h); });
+    }
+    var ny = cy + 60;
+    notes.forEach(function (n) {
+      var t = self.add.text(cx - 285, ny, '· ' + n,
+        { fontFamily: 'monospace', fontSize: 10, color: FAINT, wordWrap: { width: 570 } }).setDepth(81);
+      ny += t.height + 6;
+      ui.push(t);
+    });
+
+    ui.push(this.add.text(cx, cy + 236, '[ ◀ ▶ browse · B or ESC to close ]',
+      { fontFamily: 'monospace', fontSize: 11, color: GREEN }).setOrigin(0.5).setDepth(81));
+    this.bestiaryUi = ui;
+  },
+
+  // M3: SPACE-activated portal travel (Q6 pattern, nexus edition). Held while
+  // the vault/graveyard/console overlays are open so a click-spree can't warp
+  // you. M3.5 polish (user, 2026-07-12): no floating prompt — the run you
+  // configured is visible ON the works (mode-colored portal, ring, well glow);
+  // the footer says SPACE to interact.
   handlePortals: function () {
     if (this.entering) return;
     var near = null, p = this.player, R = DATA.interact.portalRange;
@@ -832,38 +1240,16 @@ var NexusScene = new Phaser.Class({
       if (Math.hypot(e.sprite.x - p.x, e.sprite.y - p.y) <= R) { near = e; break; }
     }
     if (near && !this.vaultUi && !this.gyUi && !this.consoleUi) {
-      if (this.portalPrompt && this.portalPrompt.portalRef !== near) {
-        this.portalPrompt.destroy(); this.portalPrompt = null;
-      }
-      if (!this.portalPrompt) {
-        // M3.5: the pedestal-commit moment — the prompt reads back the run you
-        // configured (mode + slotted affixes) before you press SPACE.
-        var ptxt = 'SPACE — enter ' + DATA.modes[near.mode].name;
-        if (near.affixes && near.affixes.length) {
-          ptxt += '\n' + near.affixes.map(function (k) { return DATA.affixes.map[k].name; }).join(' · ');
-        }
-        this.portalPrompt = this.add.text(0, 0, ptxt,
-          { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75', align: 'center' }).setOrigin(0.5).setDepth(60);
-        // plaza portals hug the screen edge — keep the prompt fully on screen
-        var hw = this.portalPrompt.width / 2 + 8;
-        this.portalPrompt.setPosition(
-          Phaser.Math.Clamp(near.sprite.x, hw, this.scale.width - hw),
-          Math.max(96, near.sprite.y - 48));
-        this.portalPrompt.portalRef = near;
-      }
       if (Phaser.Input.Keyboard.JustDown(this.rig.keys.SPACE)) this.enterPortal(near);
-    } else if (this.portalPrompt) {
-      this.portalPrompt.destroy(); this.portalPrompt = null;
     }
   },
 
   enterPortal: function (entry) {
     if (this.entering) return;
     this.entering = true;
-    if (this.portalPrompt) { this.portalPrompt.destroy(); this.portalPrompt = null; }
-    if (this.consolePrompt) { this.consolePrompt.destroy(); this.consolePrompt = null; }
     this.registry.remove('pendingPortal');               // M3.5: ONE-SHOT — consumed on entry
     this.powerDown();                                    // the works go dark behind you
+    AUDIO.stopMusic();                                   // M3.9: the chamber falls silent
     persist();
     AUDIO.play('portal');
     this.cameras.main.fadeOut(400);
@@ -876,8 +1262,32 @@ var NexusScene = new Phaser.Class({
   update: function (time, delta) {
     var intent = this.rig.collect(this.player, false);
     intent.firing = false; intent.ability = false;      // nexus is safe (Fusion Law F1)
+    // M3.8: walk-to-interact — a straight line to the station, then act.
+    // Any manual movement input cancels the trip.
+    if (this.autoWalk) {
+      if (intent.moveX || intent.moveY) {
+        this.autoWalk = null;
+      } else {
+        var aw = this.autoWalk;
+        var dx = aw.x - this.player.x, dy = aw.y - this.player.y;
+        var dist = Math.hypot(dx, dy);
+        // arrival window scales with the distance covered per frame, so the
+        // ~2fps headless clock can't oscillate around the target forever
+        var arrive = Math.max(12, this.player.state.stats.spd * delta / 1000);
+        if (dist <= arrive) {
+          this.player.body.reset(aw.x, aw.y);            // true snap: position + velocity
+          this.autoWalk = null;
+          aw.act.call(this);
+        } else {
+          intent.moveX = dx / dist; intent.moveY = dy / dist;
+        }
+      }
+    }
     this.handlePortals();                               // M3: SPACE commits at a portal
-    this.handleConsole();                               // M3.5: SPACE opens the console
+    this.handleConsole();                               // M3.5: SPACE opens the machine
+    this.handleBestiary();                              // M3.6: SPACE opens the bestiary
+    this.handleRecords();                               // M3.7: SPACE opens the records
+    this.handleSwitch();                                // M3.8: SPACE throws the lever
     Entities.updatePlayer(this, this.player, intent, time, delta);
   }
 });
@@ -1008,7 +1418,7 @@ var RealmScene = new Phaser.Class({
       if (!self.paused) return;
       AUDIO.play('ui');
       persist();
-      self.scene.start('Nexus');
+      self.scene.start('Nexus', { entry: 'realm' });      // M3.8: numbers ramp on return
     });
 
     this.buildHud();
@@ -1426,7 +1836,7 @@ var RealmScene = new Phaser.Class({
       { fontFamily: 'monospace', fontSize: 13, color: '#ffcd75' }).setScrollFactor(0).setOrigin(0.5).setDepth(91);
     this.add.text(cx, cy + 134, '[ ENTER or CLICK to return to the Nexus ]',
       { fontFamily: 'monospace', fontSize: 14, color: '#ffcd75' }).setScrollFactor(0).setOrigin(0.5).setDepth(91);
-    var back = function () { self.physics.world.resume(); self.scene.start('Nexus'); };
+    var back = function () { self.physics.world.resume(); self.scene.start('Nexus', { entry: 'realm' }); };
     this.rig.keys.ENTER.once('down', back);
     this.input.once('pointerdown', back);
   },
@@ -1747,7 +2157,7 @@ var RealmScene = new Phaser.Class({
       'Death is permanent (Fusion Law F4 / Q1). A new ' + DATA.classes[freshCharacter().cls].name + ' awaits in the Nexus.',
       { fontFamily: 'monospace', fontSize: 13, color: '#f4f4f4' }).setScrollFactor(0).setOrigin(0.5).setDepth(91);
     this.add.text(cx, cy + 140, '[ ENTER or CLICK to return ]', { fontFamily: 'monospace', fontSize: 14, color: '#ffcd75' }).setScrollFactor(0).setOrigin(0.5).setDepth(91);
-    var self = this, back = function () { self.scene.start('Nexus'); };
+    var self = this, back = function () { self.scene.start('Nexus', { entry: 'realm' }); };
     this.rig.keys.ENTER.once('down', back);
     this.input.once('pointerdown', back);
     cam.shake(220, 0.012);

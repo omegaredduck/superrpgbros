@@ -40,7 +40,7 @@ function check(name, ok, extra) {
   check('E5/M3.5 one platform (8 ring lights) + console; clear + survival spawnable',
     plaza.spot && plaza.ring === 8 && plaza.console &&
     plaza.modes.indexOf('clear') >= 0 && plaza.modes.indexOf('survival') >= 0 &&
-    plaza.blob.indexOf('PORTAL WORKS') >= 0 && plaza.blob.indexOf('REALM CONSOLE') >= 0);
+    plaza.blob.indexOf('PORTAL WORKS') >= 0 && plaza.blob.indexOf('PORTAL MACHINE') >= 0);
 
   // -- 2. enter the clear realm ----------------------------------------------------
   await page.evaluate(`(function(){var n=${scene('Nexus')}; if(!n.portal){n.consoleSetMode('clear');n.consoleSpawnPortal(true);} n.player.setPosition(n.portal.x, n.portal.y);})()`);

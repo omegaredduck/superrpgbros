@@ -148,16 +148,16 @@ function check(name, ok, extra) {
   })()`);
   check('stats clamp at class caps; wasted-drink detected', cap.capped && cap.wasted);
 
-  // -- 9. graveyard overlay -------------------------------------------------------
-  await page.keyboard.press('g');
-  await sleep(150);
+  // -- 9. records page overlay (M3.8: G flips the wall switch now, so the
+  // page opens via the screen itself — suites drive the method directly) ----------
   const gy = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    n.toggleGraveyard();
     var texts=[]; n.children.list.forEach(function(c){ if(c.text) texts.push(c.text); });
     return { open: !!n.gyUi, blob: texts.join(' | ') };})()`);
-  check('G opens graveyard & records', gy.open && gy.blob.indexOf('GRAVEYARD & RECORDS') >= 0 && gy.blob.indexOf('closed 1') >= 0);
-  await page.keyboard.press('g');
+  check('records page opens (graveyard merged in, M3.7)', gy.open && gy.blob.indexOf('RECORDS') >= 0 && gy.blob.indexOf('fallen heroes') >= 0 && gy.blob.indexOf('closed 1') >= 0);
+  await page.evaluate(`${scene('Nexus')}.toggleGraveyard()`);
   await sleep(100);
-  check('G closes it again', !(await page.evaluate(`!!${scene('Nexus')}.gyUi`)));
+  check('and closes again', !(await page.evaluate(`!!${scene('Nexus')}.gyUi`)));
 
   // -- 10. death path still intact after M2 (permadeath loses drunk pots) ---------
   await page.evaluate(`(function(){var n=${scene('Nexus')}; if(!n.portal){n.consoleSetMode('clear');n.consoleSpawnPortal(true);} n.player.setPosition(n.portal.x, n.portal.y);})()`);

@@ -6,6 +6,273 @@
 
 ---
 
+## 2026-07-12 · M3.9 · "THE CHAMBER AT REST" — the portal room gets music
+
+**User ask: an 8-bit Balamb Garden (FFVIII) for the chamber. That melody is
+COPYRIGHTED (Uematsu / Square Enix — an 8-bit cover is a derivative work), so
+per the user's fallback: an ORIGINAL calming chiptune in the same emotional
+space, composed for this game. No files, no licenses — it's data, like every
+other sound (Lane A).**
+
+**Landed:**
+- MUSIC SEQUENCER in audio.js: songs are data (DATA.audio.music.*) — tracks
+  of [note, beats] pairs (null = rest), each an oscillator voice with a soft
+  envelope; loops via a lookahead timer; failure-safe (no Web Audio → silence,
+  never a crash); waits for the browser's audio unlock and starts on the first
+  gesture; idempotent (resize restarts don't hiccup the song); follows the
+  master volume control.
+- "THE CHAMBER AT REST" (original composition, 72bpm, 32-beat loop ≈ 27s):
+  I–V–vi–iii–IV–I–ii/V–I — the classic warm descent — in three chip voices:
+  triangle bass (slow root/fifth), soft square arpeggios (gentle eighth-note
+  motion), and a small, kind square lead. Safe-place energy, retro to the bone.
+- Plays ONLY in the Portal Chamber: starts on nexus create, stops on portal
+  entry (the chamber falls silent as the works go dark), ESC-to-title, and
+  the M builder door.
+
+**Files:** `audio.js` (sequencer: noteHz/scheduleLoop/playMusic/stopMusic +
+unlock hook), `data.js` (the composition), `scenes.js` (play/stop wiring),
+`index.html` (**?v= m3m → m3n**). **143 checks ALL GREEN ×3 full batteries —
+the sequencer ran headless in every suite (keypresses unlock audio) with zero
+console errors.** Preview WAV rendered for the user pre-ship.
+
+## 2026-07-12 (addendum) · M3.8 · SWITCH v3 — SPACE throws it, and it wears its key
+
+**User polish (?v=m3m):**
+- SPACE at the switch THROWS it (handleSwitch — same proximity pattern as
+  every station; the lever brightens in range).
+- A floating hotkey chip above the lever shows the key that flips it to the
+  OTHER page: (G) while records is up, (R) while graveyard is down; updates
+  on every flip.
+- Left-click on the lever confirmed: walks the character over, then throws it
+  (same trip as the hotkeys).
+
+**Files:** `scenes.js` (leverLabel, handleSwitch), `index.html`
+(**?v= m3l → m3m**), m3c (+1 check: chip reads (R)/(G) per state; now 143
+checks). **ALL GREEN ×3 full batteries** (one m2 timer flake, 2× green rerun).
+
+## 2026-07-12 (addendum) · M3.8 · SWITCH v2 — bigger glass, heavier iron, quieter wire
+
+**User review (?v=m3l): graveyard font too small · switch should be a GIANT
+metal thing · the wire should only carry energy when the switch is USED ·
+R/G should walk you to the switch REGARDLESS of its position.**
+
+- WIDER GLASS: wallscreen texture 130→190 wide; base font 11→12 — the
+  graveyard page ("FALLEN · TOTAL KILLS · REALMS ENTERED · LAST: …") now
+  renders full-size; auto-fit remains as a fallback for monster numbers.
+- GIANT METAL SWITCH: the lever is a riveted breaker plate (17×24 frames,
+  aligned so only the HANDLE moves when thrown) mounted beside the screen.
+- QUIET WIRE: the ambient pulse stream is gone — throwing the lever fires a
+  3-pulse burst down the wire, then it goes dark again.
+- ALWAYS-WALK: R/G now walk the character to the switch whatever page is
+  showing (setRecordsMode no-ops on arrival if it's already there) — before,
+  the trip only happened when the page needed changing.
+
+**Files:** `textures.js` (wallscreen v2, lever frames), `scenes.js` (layout,
+font, burst-only pulses, guard removal), `data.js` (records knobs),
+`index.html` (**?v= m3k → m3l**). **142 checks ALL GREEN ×3 full batteries.**
+
+## 2026-07-12 · M3.8 · THE CHAMBER COMES ALIVE — typed glass, ramping numbers, the lever, and walk-to-interact
+
+**User spec (?v=m3k): the records glass should BOOT — empty on login, then the
+letters hammer out one by one; returning from a realm keeps the letters and
+RAMPS the numbers (slow ticks, then they fly). A large UNLABELED LEVER swaps
+the readout between character records (R) and graveyard stats (G), re-typing
+on every flip, with a live wire feeding the screen portal-machine-style. And
+hotkeys stop teleporting windows open: the character WALKS to the station
+first, then interacts.**
+
+**Landed:**
+- SCREEN BOOT: NexusScene now knows how you arrived (scene.start data —
+  Title passes entry:'login', all realm exits pass entry:'realm'; resize/
+  builder pass nothing). Login → glass boots EMPTY, letters type out rapidly
+  with a cursor + key ticks. Realm return → letters present, numbers count up
+  with cubic ease-in (a few slow ticks, then they shoot to the final values).
+  Knobs in DATA.juice.records.
+- THE LEVER (new lever_up/lever_down textures, left of the screen): up =
+  records page, down = GRAVEYARD STATS (fallen · total kills · realms entered
+  · last death) — a new second readout. R/G hotkeys and clicking the lever
+  flip it; every flip re-TYPES the glass. Page choice survives resize
+  restarts (registry). A wire of conduit segments runs lever → screen with
+  green energy pulses traveling it constantly (mini portal-machine), plus a
+  double-pulse burst on each flip.
+- WALK-TO-INTERACT: V/B/P/R/G and station clicks no longer open instantly —
+  the character walks a straight line to stand JUST BELOW the station, then
+  the window/action fires (body.reset snap on arrival). Manual movement
+  cancels the trip; a hotkey whose window is already open still closes it
+  instantly; flipping to the already-active page does nothing.
+- G no longer opens the records page directly (it flips the lever) — the full
+  page opens by walking to the screen (click) or SPACE in range. ESC-to-title
+  still yields to any open overlay first.
+
+**BUG found & fixed pre-ship (new gotcha for the book): looped Phaser timers
+CATCH UP under the slow headless clock — after the final tick nulls the timer,
+the same callback can fire AGAIN in the same frame → null.remove() crash.
+Guard looped-timer callbacks with `if (!self.timer) return;`.**
+
+**Files:** `data.js` (juice.records), `textures.js` (lever_up/lever_down),
+`scenes.js` (entry tags on all Nexus starts, records anim system, lever+wire,
+stations map + requestStation/autoWalk, catch-up guards), `index.html`
+(footer, **?v= m3j → m3k**), suites (m3c 33→36: typed boot, lever page,
+walk-then-open ×2, P-walk; m3b + m2 adapted to walk-first hotkeys).
+
+**Verified: 142 checks — ALL GREEN ×3 consecutive full batteries, zero console
+errors.** (m3b initially failed ALL batteries — a real catch, not the flake:
+its V-press assumed instant opening. That's the regression-suite system
+working as designed.)
+
+**Next up:** unchanged — Q3/Q5 flags · CC0 art batch 1 · then M4 (Wizard).
+
+## 2026-07-12 (addendum) · M3.7 · NAMES & HOTKEYS — PORTAL MACHINE (P), BESTIARY (B)
+
+**User polish (?v=m3j): the bestiary label reads its hotkey, and the portal
+computer is renamed.**
+
+- REALM CONSOLE → **PORTAL MACHINE** (DATA.console.name + new hotkey field),
+  with a **P** hotkey that opens the board from anywhere in the chamber; its
+  station label reads "PORTAL MACHINE (P)". (P still pauses inside a realm —
+  scene-scoped keys don't collide.)
+- Bestiary label reads "BESTIARY (B)". All three stations now advertise their
+  hotkeys: VAULT (V) · BESTIARY (B) · PORTAL MACHINE (P).
+- Footer updated. m21's works check + new m3c checks (labels carry hotkeys;
+  P opens the machine, ESC closes).
+
+**Verified: 139 checks (m3c 31→33), full battery GREEN.** Flake note: suite
+flakes got more frequent late in the day (m21/m2/m3b each failed once across
+batteries, ALWAYS green on serial rerun; container healthy — no zombie
+processes, 7GB free). All failures cluster in timer-dependent sections =
+the known headless slow-clock gotcha. If it keeps up, next session should
+harden those waits rather than chase ghosts.
+
+## 2026-07-12 · M3.7 · THE RECORDS SCREEN — the header becomes furniture
+
+**User ask (?v=m3i, design settled via Q&A): the floating account header
+("Slot 1 · Ranger Lv 11 · Deaths 5 …") becomes an in-world SCREEN. Calls of
+record: wall screen that's always readable (no interaction needed) · the old
+floating header is REMOVED · active slot only and NO slot number displayed
+anywhere · the graveyard MERGES in as the records page.**
+
+**Landed:**
+- THE RECORDS SCREEN: a wide wall monitor (new 'wallscreen' texture — bezel,
+  dark-green glass, sheen, power pip, mounting struts) hangs under the chamber
+  title. Its glass carries the LIVE readout in glowing phosphor green:
+  "RANGER LV 11 · DEATHS 5 · BEST LV 11 · REALMS CLOSED 4 · POTS 3". No slot
+  number by design. Auto-fit: the font steps down if the numbers outgrow the
+  glass. Re-rendered on create and after drinking a potion.
+- FLOATING HEADER GONE — zero floating UI text left in the chamber.
+- GRAVEYARD MERGED: the G overlay is now the RECORDS page ("the account ·
+  fallen heroes"), green-themed; opened by G, clicking the wall screen, or
+  SPACE in range (the screen leans toward you like the other stations). ESC
+  closes it before meaning "to title". Footer says "G records".
+
+**Files:** `textures.js` (wallscreen), `scenes.js` (records screen +
+updateRecordsScreen w/ auto-fit + handleRecords + gy retitle + ESC),
+`index.html` (footer, **?v= m3h → m3i**), m2 (retitled check), m3c (+2:
+readout w/ no slot anywhere; screen opens the records page).
+
+**Verified: 137 checks — m3c 29→31 — ALL GREEN ×3 full batteries + a clean
+final battery on shipping code** (one m1 flake mid-run, 2× green on rerun —
+same rare load blip). Screenshots: wall screen lit over the works · records
+page with fallen heroes.
+
+**Next up:** unchanged — Q3/Q5 flags · CC0 art batch 1 · then M4 (Wizard).
+
+## 2026-07-12 · M3.6 · THE BESTIARY — the chamber learns what lives out there
+
+**User ask (?v=m3h): a bestiary computer on the right wall mirroring the vault
+(same height, same edge spacing), green "BESTIARY" above it, browsable pages of
+every implemented mob + boss. Plus a green-label pass: "VAULT (V)" in green
+ABOVE the chest (banked counter + "POTION STASH" header + empty-state line all
+removed), "REALM CONSOLE" label green.**
+
+**Landed:**
+- THE BESTIARY (new green-screened terminal texture at W−120, mirroring the
+  vault at x=120): click, B, or SPACE in range (brightens like the console).
+  Overlay = one page per creature — big portrait, name, role (CHASER/SHOOTER/
+  BOSS w/ the boss's title), stat block (HP/speed/XP/threat cost/contact dmg;
+  shooters add bolt dmg/range/speed/cooldown/volley), and behavior notes
+  (derived: chaser vs sprayer, unlock time, champion roll odds; boss: both
+  attack patterns with numbers + the three scouter hints). Navigation: LEFT/
+  RIGHT arrow keys or clickable ◀ ▶, wrap-around, entry counter. B/ESC closes.
+- EVERYTHING IS READ LIVE FROM data.js (DATA.mobs + DATA.bosses) — a new mob
+  or boss appears in the book automatically, zero bestiary code changes.
+- Green-label pass: all station labels (VAULT (V) · BESTIARY · REALM CONSOLE)
+  are portal-green, above their object, shadowed; vault banked counter,
+  POTION STASH header, and the empty-stash hint are gone (potion rows remain,
+  now shadowed for readability). Footer adds "B bestiary".
+- Overlay etiquette: bestiary joins the one-overlay-at-a-time ring (closes /
+  closed by vault, graveyard, console); ESC closes it before meaning "to
+  title"; arrow-key listeners wired per-open, off on close (bug #2 family).
+
+**Files:** `textures.js` (bestiary terminal), `scenes.js` (station + overlay +
+nav + label pass), `index.html` (footer, **?v= m3g → m3h**), m3c (+3 checks:
+5 entries w/ slime stats, boss page shows title/patterns/hints, wrap + close).
+
+**Verified: 135 checks — m3c 26→29 — ALL GREEN ×3 consecutive full batteries,
+zero console errors.** Screenshots: chamber with both stations · slime ·
+warlock (full shooter block) · Grovekeeper page.
+
+**Next up:** unchanged — Q3/Q5 flags · CC0 art batch 1 · then M4 (Wizard).
+
+## 2026-07-12 (addendum 2) · M3.5 · SOUND, RISE & LIGHT — the chamber gets a voice and loses its labels
+
+**User review round 3 (?v=m3g): sounds for the works, a rise-from-the-floor
+spawn, no instructional text inside the frame, readable header, and the room
+renamed PORTAL CHAMBER with lighting that lives in the map.**
+
+**Landed:**
+- SOUND: audio.js grew a filtered-noise layer (gated white-noise bursts through
+  a highpass — sparks, not hiss) and per-note `jitter` (electric wobble). Two new
+  data recipes: `charge` — a rising jittery sawtooth arc over a crackle bed
+  (ELECTRICITY, plays as the conduit charges) and `spawn` — a bright descending
+  square zap with a spark tail (the PHASER, plays as the portal tears open).
+  'portal' still marks actual entry.
+- RISE FROM THE FLOOR: the portal is born as a flat sliver sunken in the
+  platform well and climbs up while unfolding (y+22 → y, scaleY 0.12 → 2.2,
+  Back.Out) under the flash + shake.
+- NO TEXT INSIDE THE FRAME (user: "we only need text outside the frame"): the
+  floating SPACE prompts (portal + console), the affix signpost label, and the
+  two-line in-game help block are all GONE. The page footer now leads with
+  "SPACE to interact (console, portal, chests)". In range, the console
+  BRIGHTENS (scale 3 → 3.3) as the diegetic invitation. The run reads through
+  LIGHT: mode-colored portal, ring, and well glow. (Affixes remain visible on
+  the console board and the realm HUD preview line.)
+- PORTAL CHAMBER: "THE NEXUS" title is now PORTAL CHAMBER — pale green with a
+  breathing green halo (new 'softglow' radial texture) so the glow reads as
+  light inside the map. More map lighting: the platform well is a glow pool
+  (dim blue dormant → flooding mode color when powered, breathing) and the
+  console screen spills blue. Account line + vault label went white-with-
+  shadow (the old light-blue-on-light-floor was unreadable).
+
+**Files:** `audio.js` (noiseLayer + jitter), `data.js` (charge/spawn recipes),
+`textures.js` (softglow), `scenes.js` (rise, prompts removed, title/halo,
+glow pools, readable labels), `index.html` (footer rewrite, **?v= m3f → m3g**),
+m3c (prompt/label checks → light-based checks, 26 checks).
+
+**Verified: 132 checks ×3 full batteries GREEN** (one m21 flake, then 7 straight
+green — the rare headless load blip; couldn't reproduce in a 6-run hunt).
+Screenshots: dormant chamber with glowing title · powered works, all light no text.
+
+## 2026-07-12 (addendum) · M3.5 · PORTAL GREEN — the portal texture goes neutral, colors go data
+
+**User review of the works build: "a little hard to see a blue portal on a blue
+background — make it green like in Rick and Morty." Done, and properly:**
+
+- The `portal` texture is now NEUTRAL GREYSCALE and always tinted by purpose —
+  no more baked-in blue. Realm-clear portals (nexus + title decor) are PORTAL
+  GREEN (`DATA.modes.clear.color = 0x49e83b`), the time trial stays gold
+  (`DATA.modes.survival.color`), and the realm BOSS portal's red tint is now a
+  TRUE red (tinting the old blue texture used to multiply into mud).
+- Mode color is data: ring lights, conduit pulses, portal, and the signpost
+  label all derive from `DATA.modes[mode].color` — one knob per mode.
+
+**Files:** `data.js` (modes.*.color), `textures.js` (neutral portal grid),
+`scenes.js` (always-tint, label color derived, title portal tinted),
+`index.html` (**?v= m3e → m3f**).
+
+**Verified: 132 checks × 3 full batteries GREEN** (one m21 headless-flake blip,
+green 3× straight on rerun — the known ~5×-slow-timer gotcha). Screenshots:
+green portal + green ring + green pulses over the blue nexus floor.
+
 ## 2026-07-12 · M3.5 · THE PORTAL WORKS — one platform, and the console visibly powers it
 
 **User review of the console build: four pedestals is three too many. Redesign of

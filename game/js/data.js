@@ -122,9 +122,12 @@ var DATA = {
   // 'clear' is the classic quota → boss → chest run. 'survival' is the 5-minute
   // time trial (Q8): no boss, survive to the horn, guaranteed potion.
   modes: {
-    clear:    { name: 'REALM CLEAR', desc: 'kills open the boss portal' },
+    // color: the mode's portal/ring/pulse tint. Clear is PORTAL GREEN (user
+    // call 2026-07-12: blue-on-blue nexus floor was hard to read) — the
+    // 'portal' texture is neutral greyscale and always tinted by purpose.
+    clear:    { name: 'REALM CLEAR', desc: 'kills open the boss portal', color: 0x49e83b },
     survival: { name: 'TIME TRIAL', desc: 'survive 5:00 — the swarm never stops',
-                durationSec: 300, xpBonus: 250, potionReward: true,
+                color: 0xffcd75, durationSec: 300, xpBonus: 250, potionReward: true,
                 lootTable: 'trial' }   // M3: the trial chest rolls pocket-change gear
   },
 
@@ -138,8 +141,9 @@ var DATA = {
   // Affixes on the board are a PREVIEW: toggleable + visible on the portal/
   // realm HUD, but INERT until M5 flips live:true (risk=reward by playtest).
   console: {
-    name: 'REALM CONSOLE',
-    prompt: 'SPACE — use the REALM CONSOLE',
+    name: 'PORTAL MACHINE',      // renamed from REALM CONSOLE (user, 2026-07-12)
+    hotkey: 'P',
+    prompt: 'SPACE — use the PORTAL MACHINE',
     maxAffixes: 3,               // slots on the board
     affixChoices: ['apex', 'escalating', 'hordes'],   // keys into affixes.map
     modes: ['clear', 'survival'],                     // spawnable destinations
@@ -326,7 +330,13 @@ var DATA = {
     // While powered, a pulse flows console→platform every flowEveryMs.
     conduit: { chargePulses: 3, pulseGapMs: 220, pulseTravelMs: 500,
                segMs: 100, portalMs: 550, flowEveryMs: 400, flowTravelMs: 700,
-               ringLights: 8, ringRadius: 46 }
+               ringLights: 8, ringRadius: 46 },
+    // M3.8 RECORDS SCREEN feel: login types the readout out letter by letter;
+    // returning from a realm keeps the letters and RAMPS the numbers (a few
+    // slow ticks, then they shoot up — countTicks over countTickMs each, eased
+    // cubically). The switch's wire pulses like a tiny conduit.
+    // v2: the wire only fires when the lever is thrown (3-pulse burst)
+    records: { typeMs: 16, countTicks: 26, countTickMs: 55, wireTravelMs: 450 }
   },
 
   // --- M1 audio: generated chiptune SFX, no audio files (ASSET_PIPELINE §1) --
@@ -346,7 +356,55 @@ var DATA = {
       bossHit: { type: 'triangle', freq: 150, freqEnd: 90,  len: 0.06, vol: 0.10, limitMs: 50 },
       portal:  { type: 'sine',     freq: 190, freqEnd: 920, len: 0.5,  vol: 0.28, limitMs: 400 },
       death:   { type: 'sawtooth', freq: 440, freqEnd: 40,  len: 0.9,  vol: 0.32, limitMs: 1000 },
-      ui:      { type: 'square',   freq: 520, freqEnd: 520, len: 0.04, vol: 0.14, limitMs: 60 }
+      ui:      { type: 'square',   freq: 520, freqEnd: 520, len: 0.04, vol: 0.14, limitMs: 60 },
+      // M3.5 PORTAL WORKS: ELECTRICITY for the charge-up — a rising jittery
+      // sawtooth arc with a gated white-noise crackle bed underneath...
+      charge:  { type: 'sawtooth', arp: [90, 110, 95, 140, 130, 180, 170, 240, 230, 320, 340, 460],
+                 jitter: 0.18, len: 1.5, vol: 0.16, limitMs: 800,
+                 noise: { vol: 0.10, hp: 1800 } },
+      // ...and the PHASER for the portal tearing open — a bright descending
+      // zap with a short spark tail.
+      spawn:   { type: 'square',   freq: 1500, freqEnd: 140, len: 0.45, vol: 0.26, limitMs: 400,
+                 noise: { vol: 0.06, hp: 2400 } }
+    },
+
+    // --- M3.9: MUSIC — "The Chamber at Rest" (ORIGINAL composition, 2026).
+    // The user asked for the Balamb Garden theme; that melody is copyrighted
+    // (Uematsu/Square Enix — even as an 8-bit cover), so this is an original
+    // piece written for the same feeling: a warm, slow, safe-place loop.
+    // Classic I–V–vi–iii–IV–I–ii/V–I progression, three chip voices:
+    // triangle bass · soft square arpeggios · lyrical square lead.
+    // Notes are [name, beats]; null = rest. All tracks must sum to equal beats.
+    music: {
+      chamber: {
+        bpm: 72,
+        tracks: [
+          { type: 'triangle', vol: 0.085, notes: [   // bass — slow and warm
+            ['C3',2],['G2',2],  ['G2',2],['D3',2],  ['A2',2],['E3',2],  ['E3',2],['B2',2],
+            ['F2',2],['C3',2],  ['C3',2],['G2',2],  ['D3',2],['G2',2],  ['C3',4]
+          ] },
+          { type: 'square', vol: 0.032, notes: [     // arpeggios — gentle motion
+            ['C4',.5],['E4',.5],['G4',.5],['E4',.5],['C4',.5],['E4',.5],['G4',.5],['E4',.5],
+            ['B3',.5],['D4',.5],['G4',.5],['D4',.5],['B3',.5],['D4',.5],['G4',.5],['D4',.5],
+            ['A3',.5],['C4',.5],['E4',.5],['C4',.5],['A3',.5],['C4',.5],['E4',.5],['C4',.5],
+            ['G3',.5],['B3',.5],['E4',.5],['B3',.5],['G3',.5],['B3',.5],['E4',.5],['B3',.5],
+            ['A3',.5],['C4',.5],['F4',.5],['C4',.5],['A3',.5],['C4',.5],['F4',.5],['C4',.5],
+            ['C4',.5],['E4',.5],['G4',.5],['E4',.5],['C4',.5],['E4',.5],['G4',.5],['E4',.5],
+            ['D4',.5],['F4',.5],['A4',.5],['F4',.5],['B3',.5],['D4',.5],['G4',.5],['D4',.5],
+            ['C4',.5],['E4',.5],['G4',.5],['C5',.5],['G4',.5],['E4',.5],['C4',.5],[null,.5]
+          ] },
+          { type: 'square', vol: 0.055, notes: [     // lead — a small, kind melody
+            ['E4',1],['G4',1],['C5',2],
+            ['D5',1],['B4',1],['G4',2],
+            ['A4',1],['C5',1],['E5',2],
+            ['B4',2],['G4',2],
+            ['C5',1],['A4',1],['F4',2],
+            ['G4',2],['E4',2],
+            ['F4',1],['D4',1],['G4',2],
+            ['E4',3],[null,1]
+          ] }
+        ]
+      }
     }
   }
 };

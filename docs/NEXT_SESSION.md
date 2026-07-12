@@ -11,7 +11,7 @@ We're continuing work on my game in the connected "super rpg bros" folder
 (project memory has the standing decisions — read it, plus docs/MILESTONES.md
 and the top entry of docs/EVENT_LOG.md, before writing any code).
 
-WHERE THINGS STAND (as of 2026-07-12, build ?v=m3e):
+WHERE THINGS STAND (as of 2026-07-12, build ?v=m3n):
 - M0–M1 done. M2 + M2.1 features all landed; their gates are HUMAN gates
   (my dev self-test + an outside tester for Fun Gate 1) — don't wait on them.
 - M3 features done (map builder, equipment, vault, affix engine v2,
@@ -26,8 +26,35 @@ WHERE THINGS STAND (as of 2026-07-12, build ?v=m3e):
   visible everywhere (board [x], signpost label, SPACE prompt, realm HUD)
   but INERT until DATA.console.live flips at M5. Timings in
   DATA.juice.conduit. consoleSpawnPortal(instant=true) skips the
-  cinematic (registry rebuilds + all suites' realm entry). 132 headless
-  checks green across 6 suites (m1/m2/m21/m3/m3b/m3c), ×3 batteries.
+  cinematic (registry rebuilds + all suites' realm entry). COLOR PASS:
+  the portal texture is neutral greyscale, always tinted by purpose —
+  realm clear = PORTAL GREEN (DATA.modes.clear.color, Rick&Morty style,
+  user call: blue-on-blue was unreadable), trial gold, boss portal true
+  red. SOUND/RISE/LIGHT pass: electricity charge + phaser spawn SFX,
+  portal rises out of the platform floor, NO text inside the frame (the
+  page footer says SPACE to interact; console brightens in range), room
+  is the PORTAL CHAMBER (glowing title, well/console glow pools as in-map
+  lighting, white-on-shadow header). M3.6 BESTIARY: green terminal
+  mirroring the vault (right wall), browsable mob/boss pages read LIVE
+  from DATA.mobs/DATA.bosses (new creatures appear automatically); green
+  station-label pass (VAULT (V)/BESTIARY/REALM CONSOLE above objects, no
+  counters/headers). M3.7 RECORDS SCREEN: the floating account header is
+  GONE — a wall monitor under the title shows the live readout (NO slot
+  number by design, auto-fit text); the graveyard merged in as the
+  RECORDS page (click / SPACE at the screen). Console renamed PORTAL
+  MACHINE (P); labels advertise hotkeys. M3.8 CHAMBER-ALIVE: records
+  glass BOOTS (login = empty → letters type out w/ cursor; realm return
+  = numbers ramp slow→fast, cubic ease-in; knobs in DATA.juice.records);
+  GIANT metal LEVER (SPACE throws it in range; floating (R)/(G) chip shows the flip key; click walks you over) + wire (3-pulse burst on flip ONLY) swaps records (R) / graveyard
+  stats (G) pages, re-typing per flip (page survives resize via
+  registry); WALK-TO-INTERACT — V/B/P/R/G + clicks walk the character
+  to stand below the station THEN open (manual input cancels; open
+  window + same hotkey = instant close). NexusScene knows its entry
+  (login/realm/none via scene.start data). 142 headless checks green
+  across 6 suites, ×3 batteries. GOTCHA added to the book: looped
+  Phaser timers CATCH UP on the slow headless clock — guard callbacks
+  against firing after their own cleanup. Flakes: none seen in the
+  final 3 batteries; if they return they cluster in timer sections.
 
 THIS SESSION — close out M3, then start M4 if time:
 1. Q3/Q5 BEHIND FLAGS: XP-gems trial (Q3) and realm-buff picks (Q5) as
@@ -49,7 +76,7 @@ PROCESS (non-negotiable, enforce it on yourself):
 - Headless suites for anything new + run all existing suites (NODE_PATH to
   a global playwright install; stage game/lib/phaser.min.js too if
   rebuilding the container copy).
-- Bump ?v= in game/index.html (currently m3e) on any js change.
+- Bump ?v= in game/index.html (currently m3n) on any js change.
 - Tick MILESTONES.md boxes, append an EVENT_LOG.md entry, update project
   memory, rewrite docs/NEXT_SESSION.md for the session after, and commit
   every changed file back to my disk. I run 2_SAVE_AND_UPLOAD.bat myself.
@@ -74,8 +101,8 @@ Manual items still on ME (Red), any time:
   log per TESTING.md §3 — closes M2/MVP.
 - M3 GATE: bank an item in the vault (V in nexus), die or re-enter, confirm it
   survived; playtest a builder-painted map. Log it.
-- PLAY THE PORTAL WORKS (?v=m3e): walk to the console, slot affixes, POWER THE
+- PLAY THE PORTAL CHAMBER (?v=m3n, MUSIC ON — sound ON — log in fresh to see the glass type itself out, exit a realm to watch the numbers fly, flip the lever, and let a hotkey walk you across the room): walk to the console, slot affixes, POWER THE
   PLATFORM, watch the charge-up, step through — does it feel right? (Your redesign
   — judge the cinematic timing especially; knobs in DATA.juice.conduit.)
 - One manual TM-8 check: IMPORT TILES in the map builder with a real image file.
-- Run 2_SAVE_AND_UPLOAD.bat to push the M3.5 Portal Works build (?v=m3e).
+- Run 2_SAVE_AND_UPLOAD.bat to push the Portal Chamber build (?v=m3n).

@@ -38,13 +38,117 @@ function check(name, ok, extra) {
   check('M3.5 dormant state: all 8 ring lights dark, no conduit flow',
     empty.ring === 8 && empty.dark && !empty.flow);
 
-  // walk to the console → prompt; open the board and slot affixes
+  // walk to the console → it brightens (NO floating text — footer carries the
+  // controls); open the board and slot affixes
   await page.evaluate(`(function(){var n=${scene('Nexus')};
     n.player.setPosition(n.consolePos.x, n.consolePos.y);})()`);
   await sleep(600);
-  const cprompt = await page.evaluate(`(function(){var n=${scene('Nexus')};
-    return n.consolePrompt ? n.consolePrompt.text : null;})()`);
-  check('M3.5 console prompt appears in range', !!cprompt && cprompt.indexOf('CONSOLE') >= 0, cprompt);
+  const nearC = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    return { scale: n.consoleSprite.scaleX,
+             noPrompts: !n.consolePrompt && !n.portalPrompt };})()`);
+  check('M3.5 in range the console brightens; NO floating prompt text (footer has SPACE hint)',
+    nearC.scale > 3 && nearC.noPrompts, 'scale ' + nearC.scale);
+
+  // -- 0a2. station labels carry their hotkeys; P opens the PORTAL MACHINE ---------
+  const labels = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    var texts=[]; n.children.list.forEach(function(c){ if (c.text) texts.push(c.text); });
+    return texts.join(' | ');})()`);
+  check('station labels: VAULT (V) · BESTIARY (B) · PORTAL MACHINE (P)',
+    labels.indexOf('VAULT (V)') >= 0 && labels.indexOf('BESTIARY (B)') >= 0 &&
+    labels.indexOf('PORTAL MACHINE (P)') >= 0);
+  // M3.8: P walks the character to the machine first, THEN the board opens
+  await page.keyboard.press('p');
+  try {
+    await page.waitForFunction(`(function(){var n=${scene('Nexus')}; return !!n.consoleUi;})()`,
+      null, { timeout: 30000 });
+  } catch (e) { /* judged below */ }
+  const pkey = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    var open = !!n.consoleUi;
+    if (open) n.toggleConsole();
+    return open;})()`);
+  check('P walks to the portal machine and opens the board', pkey);
+
+  // -- 0b. M3.6 BESTIARY: field notes read straight from data.js -------------------
+  const beast = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    n.toggleBestiary();
+    var t1=[]; n.bestiaryUi.forEach(function(c){ if (c.text) t1.push(c.text); });
+    var first = t1.join(' | ');
+    n.bestiaryNav(1); n.bestiaryNav(1); n.bestiaryNav(1); n.bestiaryNav(1);   // → the boss
+    var t2=[]; n.bestiaryUi.forEach(function(c){ if (c.text) t2.push(c.text); });
+    var boss = t2.join(' | ');
+    n.bestiaryNav(1);                                                          // wraps → entry 1
+    var wrapped = n.bestiaryIndex === 0;
+    n.toggleBestiary();
+    var closed = !n.bestiaryUi;
+    return { entries: n.bestiaryEntries().length, first: first, boss: boss,
+             wrapped: wrapped, closed: closed };})()`);
+  check('M3.6 bestiary opens on the mob roster (4 mobs + 1 boss = 5 entries)',
+    beast.entries === 5 && beast.first.indexOf('Slime') >= 0 && beast.first.indexOf('CHASER') >= 0 &&
+    beast.first.indexOf('HP') >= 0, beast.entries + ' entries');
+  check('M3.6 arrows navigate to the boss: title, patterns and scouter hints shown',
+    beast.boss.indexOf('Grovekeeper') >= 0 && beast.boss.indexOf('GUARDIAN') >= 0 &&
+    beast.boss.indexOf('RADIAL') >= 0 && beast.boss.indexOf('STREAM') >= 0);
+  check('M3.6 navigation wraps around; B/ESC closes the book', beast.wrapped && beast.closed);
+
+  // -- 0c. M3.7/3.8 RECORDS wall screen: login TYPES the readout out; live data,
+  // no slot number, no floating header
+  const midType = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    return { len: n.recordsText.text.length, typing: !!n.typeTimer };})()`);
+  await page.waitForFunction(`(function(){var n=${scene('Nexus')};
+    return !n.typeTimer && n.recordsText.text.indexOf('REALMS CLOSED') >= 0;})()`,
+    null, { timeout: 30000 });
+  check('M3.8 login boots the glass EMPTY then types the readout out', midType.typing || midType.len > 0);
+  const records = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    var texts=[]; n.children.list.forEach(function(c){ if (c.text) texts.push(c.text); });
+    var blob = texts.join(' | ');
+    n.toggleGraveyard();
+    var open = !!n.gyUi;
+    n.toggleGraveyard();
+    return { screen: n.recordsText.text, blob: blob, opens: open };})()`);
+  check('M3.7 wall screen carries the readout (class/deaths/best/closed), NO slot number',
+    records.screen.indexOf('RANGER LV') >= 0 && records.screen.indexOf('DEATHS') >= 0 &&
+    records.screen.indexOf('REALMS CLOSED') >= 0 && records.screen.indexOf('Slot') < 0 &&
+    records.blob.indexOf('Slot ') < 0, records.screen);
+  check('M3.7 the screen opens the full RECORDS page (graveyard merged)', records.opens);
+
+  // -- 0d. M3.8 the SWITCH: flips the readout to graveyard stats + re-types --------
+  await page.evaluate(`(function(){var n=${scene('Nexus')}; n.setRecordsMode('grave');})()`);
+  await page.waitForFunction(`(function(){var n=${scene('Nexus')};
+    return !n.typeTimer && n.recordsText.text.indexOf('TOTAL KILLS') >= 0;})()`,
+    null, { timeout: 30000 });
+  const sw = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    var txt = n.recordsText.text;                        // capture BEFORE the flip re-types
+    var down = n.leverSprite.texture.key;
+    var chip = n.leverLabel.text;                        // v3: shows the OTHER page's key
+    n.setRecordsMode('records');
+    var chipBack = n.leverLabel.text;
+    return { text: txt, lever: down, chip: chip, chipBack: chipBack, retype: !!n.typeTimer };})()`);
+  check('M3.8 lever → GRAVEYARD STATS page types out (FALLEN/KILLS/ENTERED), lever flips down',
+    sw.text.indexOf('FALLEN') >= 0 && sw.text.indexOf('REALMS ENTERED') >= 0 &&
+    sw.lever === 'lever_down' && sw.retype);
+  check('M3.8 v3 hotkey chip above the lever shows the flip key: (R) when down, (G) when up',
+    sw.chip === '(R)' && sw.chipBack === '(G)');
+  await page.waitForFunction(`(function(){var n=${scene('Nexus')}; return !n.typeTimer;})()`,
+    null, { timeout: 30000 });
+
+  // -- 0e. M3.8 WALK-TO-INTERACT: a hotkey walks the character to the station, THEN opens
+  await page.evaluate(`(function(){var n=${scene('Nexus')};
+    var st = n.stations.bestiary;
+    n.player.setPosition(st.x - 70, st.y + 40);})()`);   // a short stroll away
+  await page.keyboard.press('b');
+  await sleep(300);
+  const walking = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    return { walking: !!n.autoWalk, notYetOpen: !n.bestiaryUi };})()`);
+  await page.waitForFunction(`(function(){var n=${scene('Nexus')};
+    return !!n.bestiaryUi;})()`, null, { timeout: 30000 });
+  const arrived = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    var st = n.stations.bestiary;
+    var atSpot = Math.hypot(n.player.x - st.x, n.player.y - st.y) < 8;
+    n.toggleBestiary();
+    return atSpot;})()`);
+  check('M3.8 hotkey does NOT open instantly — the character walks the line first',
+    walking.walking && walking.notYetOpen);
+  check('M3.8 arrival just below the station auto-opens the window', arrived);
   const board = await page.evaluate(`(function(){var n=${scene('Nexus')};
     n.toggleConsole();
     n.consoleToggleAffix('apex'); n.consoleToggleAffix('hordes');
@@ -71,24 +175,22 @@ function check(name, ok, extra) {
     null, { timeout: 30000 });
   const spawned = await page.evaluate(`(function(){var n=${scene('Nexus')};
     var lit = n.ringLights.every(function(l){ return l.tintTopLeft !== 0x29366f; });
-    return { portal: !!n.portal,
-             label: n.spawnedPortal ? n.spawnedPortal.label.text : '',
-             lit: lit, flow: !!n.flowTimer };})()`);
+    return { portal: !!n.portal, lit: lit, flow: !!n.flowTimer,
+             green: n.portal.tintTopLeft === DATA.modes.clear.color,
+             well: n.wellGlow.tintTopLeft === DATA.modes.clear.color && n.wellGlow.alpha > 0.35,
+             noLabel: !n.spawnedPortal.label };})()`);
   check('M3.5 charge-up completes: portal born, all 8 ring lights lit, conduit flowing',
     spawned.portal && spawned.lit && spawned.flow);
-  check('M3.5 the portal label wears the slotted affixes',
-    spawned.label.indexOf('APEX PREDATORS') >= 0 && spawned.label.indexOf('HORDES') >= 0, spawned.label);
+  check('M3.5 the run reads through LIGHT, not text: portal + well glow in mode color, no label',
+    spawned.green && spawned.well && spawned.noLabel);
 
-  // standing on it still does NOT enter (M3 gating unchanged); prompt reads the run back
+  // standing on it still does NOT enter (M3 gating unchanged, now promptless)
   await page.evaluate(`(function(){var n=${scene('Nexus')}; n.player.setPosition(n.portal.x, n.portal.y);})()`);
   await sleep(600);                              // long enough that walk-in WOULD have fired
   const gated = await page.evaluate(`(function(){var n=${scene('Nexus')};
-    return { stillNexus: game.scene.isActive('Nexus') && !n.entering,
-             prompt: n.portalPrompt ? n.portalPrompt.text : null };})()`);
-  check('standing on a portal does NOT enter — the prompt asks for SPACE',
-    gated.stillNexus && gated.prompt && gated.prompt.indexOf('SPACE') >= 0, gated.prompt);
-  check('the SPACE prompt reads back the slotted affixes (pedestal-commit moment)',
-    gated.prompt && gated.prompt.indexOf('APEX PREDATORS') >= 0 && gated.prompt.indexOf('HORDES') >= 0, gated.prompt);
+    return { stillNexus: game.scene.isActive('Nexus') && !n.entering };})()`);
+  check('standing on a portal does NOT enter — SPACE-gated (silently; footer has the hint)',
+    gated.stillNexus);
   // M3: portals are SPACE-activated (retried — headless fps can stall a frame)
   for (let sp = 0; sp < 3; sp++) {
     await page.keyboard.press('Space');

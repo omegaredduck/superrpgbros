@@ -175,6 +175,9 @@ function check(name, ok, extra) {
   await page.keyboard.press('Enter');
   await page.waitForFunction(`game.scene.isActive('Nexus')`, null, { timeout: 5000 });
   await sleep(300);
+  // M3.8: V walks the character to the vault first — stand there so it opens at once
+  await page.evaluate(`(function(){var n=${scene('Nexus')};
+    n.player.setPosition(n.stations.vault.x, n.stations.vault.y);})()`);
   await page.keyboard.press('v');
   await sleep(250);
   const vaultOpen = await page.evaluate(`(function(){var n=${scene('Nexus')};
