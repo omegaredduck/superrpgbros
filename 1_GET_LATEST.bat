@@ -11,12 +11,24 @@ REM  stay in sync and avoid conflicts.
 REM ============================================================
 
 set BRANCH=main
+cd /d "%~dp0"
 
 echo(
 echo  =====================================================
 echo   GET LATEST  (download the newest version)
 echo  =====================================================
 echo(
+
+REM --- Is Git even installed? (its own message, 2026-07-12) --
+where git >nul 2>&1
+if errorlevel 1 (
+    echo  [X] Git is not installed, or Windows can't find it.
+    echo      Install it from  https://git-scm.com/download/win
+    echo      ^(all default options are fine^), close this window,
+    echo      and run this file again.
+    pause
+    exit /b 1
+)
 
 git rev-parse --is-inside-work-tree >nul 2>&1
 if errorlevel 1 (
@@ -25,6 +37,17 @@ if errorlevel 1 (
     echo      or you need to clone the project. See the guide.
     pause
     exit /b 1
+)
+
+REM --- Clear a stale lock left by a crashed/interrupted git --
+if exist ".git\index.lock" (
+    tasklist /FI "IMAGENAME eq git.exe" 2>nul | find /I "git.exe" >nul
+    if errorlevel 1 (
+        del /f ".git\index.lock" >nul 2>&1
+        echo  [i] Cleared a leftover git lock file from an
+        echo      interrupted run. Continuing normally.
+        echo(
+    )
 )
 
 REM --- Warn about unsaved work before pulling ---------------
@@ -52,7 +75,7 @@ if errorlevel 1 (
     echo(
     echo  [!] Git could not merge automatically.
     echo      This usually means you and your friend edited the
-    echo      same part of the same file (a "conflict").
+    echo      same part of the same file ^(a "conflict"^).
     echo      Ask for help before saving over it, or run
     echo      3_CHECK_STATUS.bat to see what's going on.
     pause

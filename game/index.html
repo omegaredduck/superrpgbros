@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<title>Super RPG Bros</title>
+<style>
+  html,body { margin:0; padding:0; background:#0a0a12; color:#94b0c2;
+              font-family:monospace; height:100%; }
+  #wrap { display:flex; flex-direction:column; align-items:center; gap:8px; padding-top:12px; }
+  /* fixed box so Phaser Scale.FIT keeps windowed mode at exactly 960x640 */
+  #game { width:960px; height:640px; }
+  #game canvas { image-rendering: pixelated; border:2px solid #29366f; }
+  /* in fullscreen the #game div becomes the screen; canvas letterboxes inside it */
+  #game:fullscreen { width:100vw !important; height:100vh !important; background:#000; }
+  #game:fullscreen canvas { border:none; }
+  .foot { font-size:12px; }
+  a { color:#41a6f6; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="game"></div>
+  <div class="foot">
+    WASD move · mouse aim · T auto-fire · SPACE volley &#47; interact · ESC pause (realm) / title (nexus) ·
+    F fullscreen · F3 debug · M map builder (in nexus) · 3 save slots · docs in <b>/docs</b> · works fully offline
+  </div>
+</div>
+<script src="lib/phaser.min.js"></script>
+<script>
+  // Fallback: if the vendored engine file is missing, pull the same version from CDN.
+  if (typeof Phaser === 'undefined') {
+    document.write('<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></scr' + 'ipt>');
+  }
+</script>
+<!-- BUMP ?v= ON EVERY SHIP (bug #4): localhost/http servers send no cache
+     headers, so Chrome can serve a stale mix of old+new js — which crashes
+     scenes mid-create (black screen). New query string = guaranteed fresh. -->
+<script src="js/data.js?v=m3c"></script>
+<script src="js/save.js?v=m3c"></script>
+<script src="js/audio.js?v=m3c"></script>
+<script src="js/sim.js?v=m3c"></script>
+<script src="js/maps.js?v=m3c"></script>
+<script src="js/textures.js?v=m3c"></script>
+<script src="js/entities.js?v=m3c"></script>
+<script src="js/scenes.js?v=m3c"></script>
+<script src="js/builder.js?v=m3c"></script>
+<script src="js/main.js?v=m3c"></script>
+</body>
+</html>

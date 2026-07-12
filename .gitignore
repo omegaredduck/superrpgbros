@@ -3,3 +3,6 @@ Thumbs.db
 desktop.ini
 *.tmp
 *.log
+
+# local scratch - abandoned specs and stale lock files get parked here
+_to_delete/

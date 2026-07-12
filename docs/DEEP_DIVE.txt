@@ -1,0 +1,1002 @@
+SUPER RPG BROS — THE COMPLETE DEEP DIVE
+A plain-English walkthrough of every document in the project
+Compiled July 11, 2026, from the seven docs in /docs plus the three README/credit
+files in the project root.
+
+=====================================================================
+1. WHAT THIS PROJECT IS, IN ONE BREATH
+=====================================================================
+
+Super RPG Bros (a working title) is a browser game that fuses two very
+different games into one. From Vampire Survivors it takes the screen-filling
+monster swarms and the rising-pressure spectacle. From Realm of the Mad God it
+takes permadeath, manual aiming and dodging as the real skill, and — most
+importantly — an account that gets permanently stronger no matter what happens
+to any single character. The elevator pitch written in the docs: open a
+browser tab, dodge a screenful of bullets and bodies for fifteen minutes, and
+log out with an account that is permanently stronger. No installs, no shop,
+no grinding for currency. Ever.
+
+It is a solo hobby project, built for fun by one developer working with
+Claude, on a budget of exactly zero dollars — everything is free and
+open-source or CC0 (public-domain-style) licensed. The whole game runs by
+double-clicking a single HTML file. Multiplayer is deliberately not in
+version 1.0, but the code is being shaped from day one so that adding it
+later would not require a rewrite.
+
+As of July 11, 2026, milestone M0 (the playable skeleton) is finished and
+verified. You can already walk out of a safe hub, into a portal, fight two
+kinds of chasing monsters and two kinds of shooting monsters under escalating
+waves, level up to 20, die, and start over. The next work is M1, the "feel
+pass" — tuning and game-juice.
+
+=====================================================================
+2. THE VISION AND THE FOUR PILLARS (from PRODUCT_PLAN.md)
+=====================================================================
+
+The product plan opens with a vision statement and four pillars. The pillars
+exist as tie-breakers: whenever two feature ideas fight, the pillar wins.
+
+Pillar 1 — Fun in 60 seconds. From opening index.html to shooting a monster
+must take under one minute, on every build, forever. This is why there is no
+build step, no installer, and no loading pipeline to maintain.
+
+Pillar 2 — Dodging is the skill, the swarm is the show. Enemy bullets must be
+readable, hordes must be dense, and the game must hold 60 frames per second.
+The player's mastery is in movement, not in menus.
+
+Pillar 3 — The account always moves forward. Every play session must end with
+some permanent gain: experience, a stat potion, a piece of gear, or an
+unlock. Even a session that ends in death leaves the account richer.
+
+Pillar 4 — Solo-first, multiplayer-shaped. The game ships as a solo
+experience, but the code keeps a strict separation between the simulation
+(game logic) and the presentation (graphics), so a server could be slotted in
+later. This is spelled out in the architecture doc.
+
+=====================================================================
+3. THE MECHANICS MANIFESTO — THE GAME'S DNA DOCUMENT
+=====================================================================
+
+MECHANICS_MANIFESTO.md is called the DNA document. Its rule: if a future
+feature idea doesn't trace back to a row in its fusion table, the idea goes
+to the icebox, not into the code. It is currently at version 1.1 (bumped
+after a self-review pass). It has three parts: a dissection of Vampire
+Survivors, a dissection of Realm of the Mad God, and the fusion of the two.
+
+--- 3a. Vampire Survivors, dissected (Part 1) ---
+
+The manifesto's summary of what VS actually is: a horde-pressure game where
+the player's only moment-to-moment verb is movement, and all the depth lives
+in build decisions between waves. Its soul in one line: "The swarm is the
+spectacle; the build is the game." Twelve mechanics were examined, each with
+a verdict for this project:
+
+V1, movement-only input (weapons fire automatically). VS removes any
+execution barrier so your brain is free to enjoy the spectacle. Verdict:
+ADAPT. This game adds manual mouse aiming (that's the RotMG half), but keeps
+firing frictionless — you hold the button or toggle auto-fire; you never
+click per shot.
+
+V2, horde density and the "wave director." VS's core spectacle comes from a
+system that escalates the enemy spawn budget over a run timer, creating a
+rising pressure curve. Verdict: TAKE. This is the single biggest thing VS
+contributes to the fusion.
+
+V3, XP gems dropped on kills, vacuumed up by a magnet. In VS this makes
+kills feel rewarding and creates risk-reward: you walk into the horde to
+collect. Verdict: TAKE, but the MVP uses automatic XP on kill for simplicity;
+physical gem pickups are trialed at milestone M3. This is open question Q3.
+
+V4, level-up choices (pick one of three or four upgrades). This is VS's
+build-crafting dopamine loop; it makes every run different. Verdict: ADAPT.
+Here, mid-realm level-up choices become temporary buffs for the current realm
+visit only, while permanent stat growth comes from the RotMG-style side.
+
+V5, weapon evolutions (max a weapon plus a matching passive to get an
+evolved weapon). Verdict: ICEBOX, post-1.0. Might return someday as
+evolution-style upgrades of class abilities.
+
+V6, passive items and stat boosts. Verdict: ADAPT — this role is played by
+RotMG-style equipment instead.
+
+V7, the run timer with scheduled events (in VS, the unkillable Death spawns
+at 30 minutes and ends the run). Verdict: ADAPT. Realms escalate on a timer,
+but the ending is earned — you close the realm by meeting a kill quota and
+beating a boss — never a forced execution.
+
+V8, the roguelite meta shop (gold buys permanent power-ups between runs).
+Verdict: DROPPED, explicitly and loudly. This is the user's core pivot. The
+entire between-runs progression is replaced by RotMG-style character and
+account progression. No meta-currency will ever exist.
+
+V9, the character unlock roster. Verdict: TAKE — it becomes the class
+unlock chain (Ranger, then Wizard, then Knight).
+
+V10, breakables (braziers, candles) and chests, which give micro-rewards
+and lucky spikes. Verdict: TAKE, lightly. Breakables appear in realms and a
+chest drops on boss kills.
+
+V11, screen-relative danger: enemies spawn just off-screen and despawn
+behind you, giving constant pressure at cheap performance cost. Verdict:
+TAKE — enemies spawn in a ring around the camera, with a hard cap and
+recycling of enemy objects for performance.
+
+V12, gold and greed stats, which feed the shop. Verdict: DROP. No shop, no
+currency in 1.0 at all.
+
+--- 3b. Realm of the Mad God, dissected (Part 2) ---
+
+The manifesto's summary of RotMG: a permadeath bullet-hell MMO where
+progression is a pipeline of characters flowing through a persistent
+account, and mastery is dodging. Its soul in one line: "Loot you can lose,
+dodging you can master, an account that always moves forward." Fourteen
+mechanics were examined:
+
+R1, the Nexus hub — a safe zone with portals out. It is home base,
+breathing room, and the ritual of "going out." Verdict: TAKE. This is
+literally the anchor of the user's stated MVP.
+
+R2, portals leading to realms and dungeons; you pick your difficulty by
+picking your portal. Verdict: TAKE. The MVP has one portal and one realm;
+1.0 has tiered portals plus dungeon portals that drop from elite enemies.
+
+R3, permadeath plus account persistence (your vault and class unlocks
+survive your character's death). This is what gives loot its stakes.
+Verdict: ADAPT. Permadeath is ON by default because it is the spine of
+RotMG progression — but this is open question Q1, and a "casual mode"
+toggle is pre-designed as cheap insurance, since this is a fun-first solo
+game.
+
+R4, the eight-stat system (HP, MP, Attack, Defense, Speed, Dexterity,
+Vitality, Wisdom) with per-class caps, where "maxing" a stat is a milestone.
+Verdict: ADAPT down to six stats for 1.0: HP, MP, ATT (damage), DEF (flat
+damage reduction), SPD (movement speed), DEX (fire rate). Vitality and
+Wisdom are folded into per-class baked-in HP and MP regeneration.
+
+R5, stat potions dropping from dungeons and events — RotMG's endgame loop
+of farm, drink, max. Verdict: TAKE. Potions drop from realm bosses and
+dungeon bosses; maxing your stats is the 1.0 endgame.
+
+R6, leveling 1 to 20 via XP, fast in the early levels, as a quick on-ramp
+for each new character. Verdict: TAKE. Level cap 20, stats grow
+automatically per level, and then potions take over as the progression.
+
+R7, manual aim (WASD plus mouse), enemy bullet patterns, and dodging as the
+skill expression. Verdict: TAKE. This is RotMG's biggest contribution to
+the moment-to-moment feel.
+
+R8, equipment in four slots (weapon, ability, armor, ring) with tiers T0 to
+T14, where the ability item is each class's identity button. Verdict:
+ADAPT. Four slots, tiers T0 through T6 at 1.0. The ability item is used
+with SPACE and costs MP — the Ranger's is a quiver that fires a piercing
+volley.
+
+R9, the class unlock chain (level one class to unlock the next). Verdict:
+TAKE. Ranger first; Wizard unlocks when Ranger hits 20; Knight unlocks when
+Wizard hits 20. 1.0 ships three classes.
+
+R10, fame and star ratings — prestige metrics. Verdict: ICEBOX. Instead,
+1.0 gets a simple graveyard-and-records page.
+
+R11, gods and event bosses roaming the realm — density of danger equals
+density of reward. Verdict: ADAPT into elite mob modifiers plus one realm
+boss at 1.0.
+
+R12, the vault — shared item storage that makes permadeath emotionally
+survivable. Verdict: TAKE. A small vault chest sits in the nexus, eight
+slots at 1.0.
+
+R13, realm closing: when heroes clear a realm, a world boss appears.
+Verdict: ADAPT for solo play. A kill quota opens the boss arena portal;
+killing the boss "closes" the realm, pays out a big potion-and-loot reward,
+and returns you to the nexus.
+
+R14, MMO simultaneity — the "Mad" part of the name. Verdict: DEFER. It is
+designed-for but not built. The architecture seam rules protect the option.
+Post-1.0.
+
+--- 3c. The Fusion: what this game actually is (Part 3) ---
+
+The one-line definition: a browser bullet-hell horde game where
+Vampire-Survivors-style swarms pressure a Realm-of-the-Mad-God-style
+persistent character — you dodge like Realm, you're swarmed like Survivors,
+and your account gets stronger forever without a single shop.
+
+The Ten Fusion Laws — the constitutional rules of the design, each traced
+to the mechanics above:
+
+F1. The Nexus is home. Every session starts and ends (or dies) into the
+nexus. Portals are how you choose danger. (From R1 and R2.)
+
+F2. WASD moves, mouse aims, firing is frictionless. Hold the left mouse
+button or toggle auto-fire; dodging enemy patterns is the skill, never
+clicking fast. (From R7 plus V1.)
+
+F3. The swarm escalates on a clock. Inside a realm, a wave director raises
+the spawn budget over time. Standing still is death; the screen filling up
+is the spectacle. (From V2, V7, V11.)
+
+F4. Progression is the character, not the run. No roguelite meta-currency,
+ever. XP takes you to level 20, stat potions take you to maxed. Death
+matters — how much is governed by open question Q1. (From R3 through R6,
+explicitly replacing V8.)
+
+F5. Loot is equipment, not passives. Four slots — weapon, ability, armor,
+ring — with tiered drops from elites and bosses, stored in the nexus vault.
+(From R8 and R12, replacing V6.)
+
+F6. In-realm level-ups still offer a choice. When you level up mid-realm,
+you pick one of three temporary realm-buffs (for example, +15% fire rate
+for this realm only). This keeps VS's build-dopamine without breaking
+persistent balance. Arrives post-MVP, at M3. (From V4, scoped by F4.)
+
+F7. Classes are the roster. Ranger unlocks Wizard unlocks Knight. Each
+class is a weapon archetype plus a SPACE ability plus its own stat caps.
+(From R9 plus V9.)
+
+F8. Realms end; the account doesn't. Kill quota, then boss portal, then
+boss kill, then the realm closes with a guaranteed stat potion and a loot
+chest, then back to the nexus. A "run" is ten to twenty minutes with a real
+ending. (From R13 plus V7.)
+
+F9. Two mob verbs minimum, forever: CHASE and SHOOT. Every enemy is built
+from chaser DNA (pressures your position) and/or shooter DNA (denies your
+space). All future monsters are combinations or elaborations of these —
+orbiting, splitting, turrets, spiral-shooters, and so on. (From V2 plus R7,
+and the user's explicit MVP request.)
+
+F10. Solo-first, multiplayer-shaped. No feature may assume "exactly one
+player" inside the simulation layer. Entity state is plain data; input is
+expressed as intents. The network wire can come later without a rewrite.
+(From R14 and the user's stated future interest.)
+
+--- 3d. Explicitly OUT (so they stay out) ---
+
+The manifesto keeps a blacklist to prevent scope creep: shop, monetization,
+or currency of any kind (user mandate); roguelite meta-upgrades; a forced
+run-ending Death figure; fame and star ratings; trading or a market (would
+need multiplayer); pets; crafting; and anything that requires hand-made
+animation beyond flips, flashes, and particles — because the developer has
+no art skills, which the project treats as a design constraint, not a
+problem.
+
+--- 3e. The five open design questions (answered by playtest, not argument) ---
+
+Q1. Permadeath: full RotMG style (character gone) or softened (you drop
+carried gear but keep the character)? Default: full permadeath, with the
+vault protecting stored gear. If playtests show rage-quits outnumbering
+"one more run" reactions, a casual toggle is added. Tested at the M2 fun
+gate.
+
+Q2. Should auto-fire default to ON, or should you hold to fire? Default:
+auto-fire toggle on the T key, defaulting to ON. Tested at M1.
+
+Q3. XP: automatic on kill (RotMG style) or physical gem pickups (VS style)?
+Default: automatic for the MVP because it's cheaper to build; gems get a
+trial at M3 to test the magnet-vacuum joy. Tested at M3.
+
+Q4. How long should a realm take? Default: 12 minutes to reach the boss
+portal at competent play. Tested at the M2 fun gate.
+
+Q5. Do the temporary realm-buffs (Fusion Law F6) dilute the RotMG identity?
+Default: ship them at M3 behind a feature flag; keep them if testers call
+the mid-realm level-up "a moment." Tested at the M3 fun gate.
+
+The change process for the manifesto itself: edit the file, log the change
+in the event log, and if a Fusion Law changes, bump the version number.
+
+=====================================================================
+4. THE WARGAMED STRATEGY (from PRODUCT_PLAN.md)
+=====================================================================
+
+Before building, three courses of action (COAs) were written out and
+war-gamed — meaning each was played forward mentally to see where it fails.
+
+COA-A: "Build the Vampire Survivors clone first, bolt RotMG on later."
+Build the wave spectacle and level-up choices, add persistence at the end.
+Wargamed outcome: persistence bolted on last collides with every balance
+number already tuned; permadeath retrofitted onto a game tuned around run
+resets feels punitive; and the part the user actually wants most
+(progression) arrives last and riskiest. REJECTED.
+
+COA-B: "Build the RotMG spine first, add VS pressure second." Build the
+nexus, portal, realm, persistent ranger, chaser and shooter mobs, and the
+death-back-to-nexus loop at LOW enemy density first. Then crank the wave
+director up until it feels like Survivors. Wargamed outcome: the riskiest
+question of the whole project — does persistent progression plus horde
+pressure actually feel good together? — gets answered by around milestone
+M2 with very little sunk cost. Density becomes a tuning knob rather than an
+architectural decision. It also matches the user's own MVP instinct (nexus
+plus ranger plus leveling against both mob types). SELECTED.
+
+COA-C: "Parallel tracks" — develop progression systems and combat feel side
+by side. Wargamed outcome: viable for a team, but for a solo developer it
+means two half-finished systems and no playable game for weeks, violating
+Pillar 1. REJECTED.
+
+--- The red-team pass (attacking the chosen plan) ---
+
+After selecting COA-B, the plan was deliberately attacked to find its weak
+points, and each attack got a counter built into the plan:
+
+Attack: "A low-density RotMG slice isn't fun, and dev morale dies during
+M1-M2." Counter: the skeleton ships with juice basics — hit flash,
+knockback, screenshake, damage numbers — from day one. These are cheap in
+Phaser and huge for feel.
+
+Attack: "The art pipeline stalls because the user can't make art," hurting
+every visual milestone. Counter: the placeholder-first rule. Every feature
+ships with procedural placeholder art; real CC0 assets are swapped in
+batches at M3 and M5 and never block a mechanic. The Blender lane is a
+bonus, not a dependency.
+
+Attack: "Scope creep toward MMO features" from M4 onward. Counter: the
+Fusion Laws and the Explicitly-OUT list; anything that doesn't trace to a
+law goes to the icebox.
+
+Attack: "Permadeath makes solo playtesting miserable" at M2. Counter: the
+Q1 default plus a dev-mode god flag; the casual toggle is a pre-designed
+escape hatch.
+
+Attack: "Solo-dev burnout and project abandonment," possible at any time.
+Counter: milestones are sized at two weekends or less each; every milestone
+ends with a playable game; the event log makes progress visible.
+
+Attack: "Phaser 4 (released spring 2026) tempts a mid-project engine
+migration" during M2-M4. Counter: locked decision — Phaser 3.x for the
+entire 1.0. Phaser 4 migration is a post-1.0 line item. The plan literally
+says "No relitigation."
+
+Attack: "Browser performance collapses at horde density" around M3.
+Counter: a performance gate in the testing plan (300 mobs plus 200
+projectiles at 60fps on desktop) and object pooling built in from M0.
+
+Attack: "Retrofitting multiplayer later requires a rewrite." Counter: the
+seam rules in the architecture doc are enforced from the skeleton onward.
+
+--- The risk register (reviewed at every milestone) ---
+
+Risk 1: The fusion isn't fun — pressure plus permadeath equals frustration.
+Likelihood medium, impact high. Mitigation: Fun Gate 1 at M2 and the
+pre-designed Q1 casual toggle. Trigger to act: testers quit after their
+first death.
+
+Risk 2: The art wall — nothing looks good enough to stay motivated.
+Likelihood medium, impact medium. Mitigation: placeholder-first rule, CC0
+batches at M3/M5, the Blender lane. Trigger: the developer starts avoiding
+opening the project.
+
+Risk 3: Performance at density. Likelihood low, impact high. Mitigation:
+pooling from M0 and the testing perf gate. Trigger: under 50fps at 200
+mobs.
+
+Risk 4: Scope creep. Likelihood HIGH, impact medium. Mitigation: Fusion
+Laws plus icebox plus milestone exit gates. Trigger: any "while I'm at
+it..." change.
+
+Risk 5: Save-wipe rage — the browser's localStorage gets cleared and
+progress is lost. Likelihood medium, impact medium. Mitigation:
+export/import of saves at M6, plus a warning in the README. Trigger: the
+first real progress loss.
+
+Risk 6: Solo burnout. Likelihood medium, impact high. Mitigation:
+milestones of two weekends or less and the always-playable rule. Trigger:
+three weeks without an event-log entry.
+
+--- The alignment table ---
+
+The plan ends with a table mapping every clause of the original founding
+request to where it is honored — Survivors-style but not roguelite, RotMG
+progression, browser PC game, no-art-skills constraint, map builder with
+tilesets, open-source assets, the Blender question, the exact MVP slice,
+the 1.0 plan, playtesting, test modules, tracked milestones, documentation,
+event log, mechanics manifesto, wargamed strategy, solo-for-fun/no-shop,
+multiplayer-later design, and a recursion/iteration pass. This table exists
+so nothing from the original ask silently falls out of the plan.
+
+=====================================================================
+5. THE TECH STACK (locked decisions)
+=====================================================================
+
+Engine: Phaser 3, pinned to the 3.90 line. Phaser 4 shipped in 2026, but
+3.x has a decade of documentation, tutorials, and AI familiarity, which
+means the highest development velocity for this team. Migration to 4 is
+post-1.0 at most. (Note: the README and product plan say "via CDN," and the
+architecture doc says "CDN, pinned 3.90.0," while the folder actually
+contains a vendored copy at game/lib/phaser.min.js — the engine now lives
+locally in the repo so the game works fully offline. The docs' CDN wording
+predates that swap.)
+
+Language: plain JavaScript in old-fashioned script files, deliberately with
+NO build step. You double-click index.html and it runs. Procedural textures
+avoid the file:// CORS problem that real image files would hit. TypeScript
+was considered and deferred.
+
+A small START_SERVER.bat exists for the moment real asset files arrive
+(from M3 onward), because Tiled map JSON and PNG images require an http
+server rather than file://. STOP_SERVER.bat accompanies it.
+
+Map builder: Tiled (free, from mapeditor.org) plus CC0 tilesets, exporting
+JSON that Phaser's native tilemap loader reads. This answers the user's
+"map builder with a tile set" request. It is introduced at M3.
+
+Data-driven design: monsters, weapons, classes, and realms are defined as
+pure data objects in game/js/data.js. Balancing the game means editing
+numbers in that one file, never editing code. This is a locked rule: ALL
+tunable numbers live in data.js with comments; no magic numbers are allowed
+in scene or entity code.
+
+Persistence: localStorage holds the account save (classes, vault,
+graveyard, records) as JSON, with export/import-as-file buttons planned so
+saves survive browser resets. localStorage is judged fine for a local PC
+game, and the save schema is versioned from day one so future format
+changes can migrate old saves.
+
+Testing: headless module tests in Node for the simulation layer, plus
+manual test checklists.
+
+Version control: the existing numbered .bat git workflow in the folder,
+unchanged.
+
+=====================================================================
+6. THE ARCHITECTURE (from ARCHITECTURE.md)
+=====================================================================
+
+--- The file map (M0 skeleton) ---
+
+game/index.html boots Phaser and loads the scripts in order, working from
+file://. Inside game/js:
+
+- data.js: ALL tunable numbers and definitions — classes, mobs, weapons,
+  the wave director curve, the XP curve, the color palette. Balance equals
+  editing this file only.
+- textures.js: the Lane-A procedural pixel art. Sprite designs are written
+  as character grids in code and converted to canvas textures when the game
+  boots. No image files exist at all.
+- sim.js: pure-logic helpers — damage math, XP and level math, the seeded
+  random number generator, and intent handling.
+- entities.js: Player, Mob, and Projectile behaviors — Phaser sprites
+  driven by the sim's data.
+- scenes.js: BootScene, NexusScene, RealmScene, and the HUD.
+- main.js: the Phaser configuration and game start.
+
+A planned extraction at M2 (when saving and permadeath land): sim.js grows
+into a js/sim/ package containing state, systems, and events, imported by
+the scenes — which is exactly the shape a future multiplayer server would
+import.
+
+--- The data-driven rules ---
+
+A new mob, class, or weapon is a new object in data.js, requiring no new
+code until it needs a genuinely new verb. Mob definitions compose the two
+core verbs from Fusion Law F9: a definition can contain a chase block, a
+shoot block, or both.
+
+--- The multiplayer seam (Fusion Law F10), enforced now ---
+
+Six rules are already enforced in the skeleton, chosen because they cost
+almost nothing today and save a rewrite later:
+
+1. State is plain data. Everything that matters — positions, HP, cooldowns,
+   wave state — lives in serializable fields, never only inside Phaser
+   objects, tweens, or closures.
+2. Input becomes intents. The keyboard and mouse produce one intent object
+   per frame (moveX, moveY, aimAngle, firing, ability). Gameplay code reads
+   intents; it never reads the keyboard directly.
+3. Sim mutates, render reads. The update order every frame is: collect
+   intents, then the sim systems tick (movement, firing, mob AI,
+   collisions, XP), then presentation (sprites, bars, particles,
+   screenshake) reflects the state. Presentation NEVER writes gameplay
+   state.
+4. Seeded randomness. All gameplay randomness flows through the sim's
+   seedable rng() function. Cosmetic randomness (like particle jitter) may
+   use plain Math.random() freely, because it doesn't affect outcomes.
+5. IDs everywhere. Every entity carries a stable numeric ID from the moment
+   it spawns.
+6. No singletons touching the DOM in sim code. The test is literal: sim.js
+   must run in Node, unmodified.
+
+The post-1.0 payoff if multiplayer ever happens: a Node server imports
+data.js and the sim package, owns the game tick, and broadcasts state over
+WebSocket; the Phaser client keeps its render layer and just sends intents.
+Whether to use Colyseus or raw WebSockets is a decision deferred until
+then.
+
+--- Scene flow ---
+
+Boot (generate textures, load the account) leads to Nexus (safe zone; class
+selection and vault come later; portal). Walking into the portal leads to
+Realm (wave director; at M2, kill quota leading to a boss portal). On
+death: a recap screen, then back to Nexus with a new character. On closing
+a realm (M2 and later): rewards, then back to Nexus.
+
+--- The save schema (version 1, lands at M2) ---
+
+A JSON object with a version field ("v": 1) and three sections. "account"
+holds unlockedClasses (starting as just ranger), the graveyard list, and a
+records object. "vault" is the stored-items list. "character" holds the
+class, level, XP, the six stats (hp, mp, att, def, spd, dex), a record of
+potions drunk, and equipment. The loader migrates old versions or resets
+with a warning on a mismatch — that behavior is itself a test item (TM-4).
+
+=====================================================================
+7. THE ASSET PIPELINE — ART WITHOUT BEING AN ARTIST
+=====================================================================
+
+ASSET_PIPELINE.md opens by accepting the constraint as a design input: no
+hand-drawn art, no hand animation, no hand VFX — ever. Four lanes cover
+everything, and every lane ends in a PNG or JSON file the game loads; the
+game never knows or cares which lane produced an asset.
+
+--- Lane A: procedural placeholders (ACTIVE — the lane of record until M3) ---
+
+Claude generates pixel-art sprites directly in code: character grids in
+textures.js become canvas textures when the game boots. Zero files, zero
+licenses, works from file://, instantly editable. The iron rule: every new
+mechanic ships FIRST with a Lane-A placeholder. Art never blocks gameplay.
+
+The doc also directly answers the founding question "can Claude make the
+assets?" — yes, for: pixel sprites and tiles (the entire look of the
+current skeleton), palettes, UI, icons; the whole "juice" layer of
+animation effects that aren't hand animation (flips, squash-and-stretch
+tweens, hit-flash, particles, screenshake, knockback — all code); sound
+effects via ZzFX/jsfxr, tiny JavaScript chiptune-style generators needing
+no audio files; and optionally loopable chiptune music via code after M5.
+The honest caveat: the quality ceiling is "charming programmer pixel art."
+For hero and boss showpieces, use Lanes B and C/D.
+
+--- Lane B: open-source and CC0 packs (the primary quality lane; batches at M3 and M5) ---
+
+Named sources: kenney.nl (nicknamed "Asset Jesus") for the Tiny Dungeon,
+Pixel Platformer, and RPG packs — tiles, props, UI, characters, all CC0.
+0x72 on itch.io for DungeonTileset II, the classic 16x16 dungeon set with
+floors, walls, heroes, and mobs, CC0. General itch.io game assets filtered
+to CC0/free for mob packs and effect sheets (suggested search: "16x16 CC0
+monsters"), with licenses verified per pack. opengameart.org for
+gap-filling items like potions, icons, and bullets, preferring CC0 and
+noting that CC-BY requires credit. And Tiled itself from mapeditor.org —
+the tool is free and GPL-licensed, which matters for the tool, not the
+assets.
+
+The lane's rules: stick to a 16x16 pixel grid; use one palette family per
+biome, because mixing packs with clashing palettes is "the #1 amateur
+tell" — recolor packs to a shared palette with a script if needed. And
+every imported file gets a line in ASSET_CREDITS.md (file, source URL,
+license) the same day it lands. CC-BY credit text goes into the README
+credits section during the M6 sweep. (ASSET_CREDITS.md currently contains
+nothing but the rule and an empty table, because the entire M0 build is
+procedural.)
+
+--- Lane C: Tiled maps (the "map builder," from M3) ---
+
+The concrete workflow: install Tiled (free, on Windows); import a CC0
+tileset PNG from Lane B; paint layers named ground, walls (with a collision
+flag), and decor, plus an object layer named spawns holding the player
+start, the portal, mob spawn zones, and the boss arena; export JSON into
+game/assets/maps/; Phaser loads it natively with its
+load.tilemapTiledJSON call. Realm generation then becomes: pick a map, a
+mob roster, and a wave script from data.js. Note: Tiled JSON and PNG
+loading require http, so from M3 onward you use START_SERVER.bat; the older
+procedural scenes still work from a double-click.
+
+--- Lane D: Blender MCP to sprite sheets (the experiment, at M5) ---
+
+The user has Blender MCP, meaning Claude can drive Blender directly. The
+lane that fits a no-animation-skills project is render-to-spritesheet: the
+3D software does the animating, and the game stays 2D. The five steps:
+
+1. Source models: CC0 or CC-BY rigged low-poly packs — Quaternius (CC0),
+   KayKit (CC0), Kenney 3D. No modeling required; Claude imports them via
+   MCP scripts.
+2. Rig and animate: the packs ship with idle/walk/attack animation clips,
+   or clips can be retargeted from Mixamo-style libraries. Claude handles
+   the retargeting scripts; the user never touches a keyframe.
+3. A camera jig — a reusable Python script Claude writes, living in
+   tools/blender/: an orthographic camera at the game's top-down-ish angle,
+   rendering N frames across 4 or 8 facing directions at 64 to 128 pixels
+   with a transparent background.
+4. Packing: Claude stitches the frames into a sprite sheet and writes the
+   Phaser atlas JSON.
+5. Import: the result drops into game/assets/sprites/ like any Lane-B
+   file.
+
+When to use it: hero classes and bosses only, where the visual return on
+effort is highest. Never for tiles or props (Lane B is better) and never
+for bulk mobs (too slow per unit). The first experiment is a scheduled M5
+checklist item; the pipeline script gets built once and reused forever. The
+risk note is explicit: this lane is a BONUS — if the results look worse
+than Lane-B pixel packs, the project keeps pixels with zero schedule
+damage.
+
+--- Folder and naming conventions ---
+
+game/assets/sprites/ holds atlases like hero_ranger.png plus its .json
+(Lanes B and D). game/assets/tiles/ holds tileset images like
+biome1_dungeon.png (Lane B). game/assets/maps/ holds Tiled exports like
+realm1.json and dungeon_spider.json (Lane C). game/assets/audio/ exists
+only if the project ever moves beyond ZzFX. ASSET_CREDITS.md gets one line
+per imported file — enforced. tools/blender/ will hold
+spritesheet_render.py (Lane D). Lane-A assets have no files by definition;
+they live in textures.js.
+
+=====================================================================
+8. THE MVP DEFINITION (Milestone M2, "First Fun")
+=====================================================================
+
+The MVP is exactly the user's stated slice made concrete, and it is DONE
+only when every one of these boxes ticks:
+
+- A Nexus scene: a safe zone with no enemy spawns, a visible portal, and a
+  vault chest present (visual-only is acceptable at this stage).
+- Walking into the portal loads the realm.
+- The default Ranger class: WASD movement, mouse aim, an auto-fire toggle,
+  and a SPACE ability (an MP-costing volley).
+- Chaser mobs (contact damage, pursue the player) — at least two visual
+  variants.
+- Shooter mobs (ranged projectile patterns: single-shot and a three-way
+  spray) — at least two variants.
+- A wave director whose spawn budget escalates over the realm timer.
+- XP taking you through levels 1 to 20 with automatic stat growth, and HP,
+  MP, and XP bars on the HUD.
+- Death means the character is lost (permadeath, per question Q1), followed
+  by a death recap screen and a return to the nexus with a fresh level-1
+  Ranger.
+- A kill quota that spawns a boss portal, a placeholder boss behind it, and
+  a realm-close reward of a stat potion.
+- Saving and loading the account via localStorage.
+- Running at 60fps with 150 mobs on a mid-range PC in Chrome, Edge, and
+  Firefox.
+
+The plan notes that the M0 skeleton already covers roughly 70% of these
+boxes.
+
+=====================================================================
+9. WHAT 1.0 MEANS (the full scope)
+=====================================================================
+
+Version 1.0 is defined as "the complete solo game": three classes (Ranger,
+Wizard, Knight) with the unlock chain; the six-stat system with potion
+maxing; equipment tiers T0 through T6 across four slots plus the nexus
+vault; three realm biomes built in Tiled, each with a distinct mob roster;
+two dungeons whose portals drop from elite enemies; three realm bosses and
+two dungeon bosses; elite and rare mob modifiers; breakables and chests;
+temporary realm-buff picks (Fusion Law F6, if question Q5 passes its test);
+a graveyard and records page; settings for volume, screenshake, and a
+casual mode if Q1 demands it; a CC0 art pass and a sound-effects pass; and
+save export/import. No shop. No multiplayer — but the seams stay intact.
+
+=====================================================================
+10. THE MILESTONE LADDER (from MILESTONES.md)
+=====================================================================
+
+MILESTONES.md calls itself the single source of truth for "where are we."
+Its rule: a milestone is DONE only when its exit gate passes — not when its
+features merely exist. Every status change also gets an event-log entry.
+Milestones are deliberately sized at one to two weekends of solo work each,
+with no calendar dates on purpose — this is a for-fun project; the ladder
+orders the work and the event log proves motion.
+
+--- M0, Skeleton — DONE, July 11, 2026 ---
+
+Exit gate: boots from a double-click; the nexus-portal-realm-death loop is
+playable with chaser and shooter mobs. Result: PASSED, verified in a
+headless browser with screenshots during the founding session.
+
+Everything checked off in M0: the Phaser 3 project boots from file:// with
+procedural textures; the scene flow Boot to Nexus to Realm to (death) back
+to Nexus works; the Ranger has WASD movement, mouse aim, auto-fire toggled
+by T, and a SPACE piercing volley costing MP; two chaser variants exist
+(slime and brute); two shooter variants exist (a single-shot spitter and a
+three-spray warlock); the wave director escalates its spawn budget and
+spawns in an off-screen ring; XP leads to levels capped at 20 with
+automatic growth across HP, MP, ATT, DEF, SPD, and DEX; the HUD shows HP,
+MP, XP, level, a kill counter, and the realm timer; contact damage,
+projectile damage, DEF-based reduction, and invincibility-frame flashing
+all work; death produces a recap and a fresh level-1 character (with a
+graveyard counter); mobs and projectiles are object-pooled; the
+sim/presentation seam is respected; and basic juice is in — hit flash,
+knockback, damage numbers, and screenshake when the player is hit.
+
+--- M1, Feel pass — NOT STARTED (this is the next work) ---
+
+Contents: a tuning sweep through data.js covering player speed, mob speed
+ratios, fire rates, and projectile speeds; hitstop (freezing the game for 2
+to 3 frames) when player shots land; particle bursts on mob deaths and a
+portal swirl effect; a generated sound-effect set via jsfxr/ZzFX (shoot,
+hit, die, level-up, portal) plus a volume control; auto-fire polish, a
+pause menu on ESC, and a fullscreen toggle; and an upgraded death recap
+showing cause of death, time survived, and kills.
+
+Exit gate: a self-test — the developer voluntarily plays three consecutive
+realms.
+
+--- M2, First Fun (the MVP) — NOT STARTED ---
+
+Contents: the kill quota spawning a boss portal in the realm; Boss 1
+(placeholder art is fine) with two attack patterns, a radial burst and an
+aimed stream; the realm-close reward of a guaranteed stat potion plus an XP
+bonus and the return to the nexus; stat potions drinkable in the nexus (+5
+to a stat, respecting caps); permadeath per Q1 plus a graveyard page
+listing dead characters, their level, and what killed them; the versioned
+localStorage account save/load; and the first formal fun-gate playtest,
+executed and logged.
+
+Exit gate: FUN GATE 1 — an outside tester plays for 20+ minutes unprompted
+and asks at least one progression question.
+
+--- M3, World and loot — NOT STARTED ---
+
+Contents: the Tiled editor pipeline (JSON map into Phaser's loader), with
+realm 1 rebuilt on a real CC0 tileset; the START_SERVER.bat flow
+documented for asset loading; equipment with weapon/ability/armor/ring
+slots, tier T0-T3 drops, and drop tables in data.js; the nexus vault (8
+slots) with a drag or click-to-swap interface; an elite mob modifier
+(bigger, color-tinted, better drops); the XP-gems trial behind a flag
+(question Q3) and the realm-buff picks behind a flag (question Q5); and
+CC0 art batch 1 — a hero, four mobs, and a tileset, with credits logged.
+
+Exit gate: the loot chase is observable — a tester banks an item in the
+vault and goes back out to a realm.
+
+--- M4, Roster — NOT STARTED ---
+
+Contents: the Wizard (a piercing staff shot and an area-of-effect nova
+ability) and the Knight (short-range high damage and a shield ability);
+the class unlock chain and a class-select interface in the nexus; and
+per-class stat caps in data.js with a balance pass across all three
+classes.
+
+Exit gate: every class can beat the realm-1 boss, and testers disagree
+about which class is best — disagreement being the proof of real variety.
+
+--- M5, Content ramp — NOT STARTED ---
+
+Contents: biomes 2 and 3 built in Tiled with distinct mob rosters (about
+12 mobs total); dungeons 1 and 2, whose portals drop from elites, with
+handcrafted Tiled maps and dungeon bosses; bosses 2 through 5 across the
+realms and dungeons; tier T4-T6 gear; breakables and chests; the Blender
+MCP experiment — one hero or boss rendered to a spritesheet; and the
+second formal fun gate, executed and logged.
+
+Exit gate: FUN GATE 2 — three testers, a median session of at least 30
+minutes, and at least one death that produces a "one more run" reaction
+rather than a quit.
+
+--- M6, 1.0 polish — NOT STARTED ---
+
+Contents: settings (volume, screenshake, and casual mode if Q1 demanded
+it); save export and import as a file; a records page with the graveyard,
+personal bests, and totals; an audio pass; the performance gate (300 mobs
+and 200 projectiles at 60fps) and a cross-browser sweep; the complete
+ASSET_CREDITS.md license sweep; a player-facing README section; and
+tagging v1.0 via the save-and-upload batch file.
+
+Exit gate: the 1.0 checklist at 100% and zero P0 (play-blocking) bugs for
+seven days of play.
+
+--- The icebox (post-1.0, in rough order) ---
+
+A multiplayer spike (Node plus WebSocket, per the architecture doc);
+weapon and ability evolutions (the VS mechanic V5); more classes; fame and
+stars; pets; the Phaser 4 migration; and a Steam wrapper (Electron or
+Tauri) if ever desired.
+
+=====================================================================
+11. THE TESTING PLAN (from TESTING.md)
+=====================================================================
+
+The testing doc's framing: there are two kinds of truth — "does it work"
+(test modules) and "is it fun" (fun gates) — and neither substitutes for
+the other.
+
+--- Principles ---
+
+Every milestone exit runs its module checklist BEFORE its fun gate. The
+simulation layer must stay runnable headless in Node so logic tests never
+need a browser. Bugs are logged at the bottom of the testing file with
+priorities: P0 blocks play, P1 hurts play, P2 is cosmetic. And playtest
+results are DATA — they get logged even, and especially, when they're
+embarrassing.
+
+--- The six test modules ---
+
+TM-1, Movement and input: WASD moves in 8 directions at equal speed (with
+diagonals normalized so diagonal movement isn't faster); mouse aim tracks
+correctly at all screen positions with the aim indicator matching; the
+auto-fire toggle persists across realm re-entry and the SPACE ability
+fires only when you have the MP; the player cannot leave the world bounds
+or clip through walls.
+
+TM-2, Combat math (runnable headless): damage equals weapon damage times
+(1 + ATT/50), floored, and DEF subtracts a flat amount with a minimum of 1
+damage; DEX maps to fire rate and SPD to pixels-per-second per the curves
+in data.js; invincibility frames guarantee no double-hit within 500
+milliseconds; the XP curve levels up at documented thresholds, caps at 20,
+and applies stat growth exactly once per level.
+
+TM-3, Mobs and the wave director: chasers pursue, with brutes slower but
+tankier per data.js; shooters keep their preferred range, with the spitter
+firing aimed single shots and the warlock firing three-way sprays; the
+spawn budget escalates with the timer, mobs spawn off-screen only, and the
+hard cap is respected through pool recycling; and there are no mob or
+projectile leaks — pool counters return to baseline after a wave clears.
+
+TM-4, Progression and persistence (from M2): death deletes the character
+per the Q1 rule, the graveyard increments, and the nexus grants a fresh
+level-1 character; stat potions apply and respect caps, and a save/load
+round trip is lossless (verified by JSON diff); a save-schema version bump
+either migrates the save or safely resets it with a warning.
+
+TM-5, Performance gates: for M0 through M2, 150 mobs plus 100 projectiles
+at 60fps in Chrome on a mid-range PC; for M5 and M6, 300 mobs plus 200
+projectiles at 60fps with no garbage-collection hitches longer than 30
+milliseconds during a 15-minute soak test; and memory stays stable across
+five realm cycles (no scene-restart leaks). How to check: press F3
+in-game for the debug overlay showing fps, mob count, projectile count,
+and pool statistics.
+
+TM-6, Compatibility: latest Chrome, Edge, and Firefox can all boot, play,
+and save; and the game works from file:// during M0-M2 and from
+START_SERVER.bat from M3 onward when Tiled assets arrive.
+
+--- The fun-alignment playtest protocol ---
+
+Cadence: a self-test every session, and an outside tester at minimum at
+every fun gate (M2 and M5). Testers should be friends who did NOT watch
+development, and you say nothing to them except the controls line.
+
+The session script: hand over the game with controls only; observe for 20
+minutes, taking timestamps, and DO NOT coach; run the exit interview; log
+the results in the testing doc.
+
+The observable metrics — write them down, don't vibe: time to first
+death; deaths per 20 minutes; whether sessions get voluntarily extended
+past 20 minutes; the One-More-Run test — after a death, does the tester
+relaunch WITHOUT being asked (count how many times); whether they use the
+SPACE ability unprompted; whether they dodge bullet patterns or just
+face-tank damage; and whether they ask any progression question ("what do
+potions do?", "how do I unlock...") — which the doc calls engagement gold.
+
+The exit interview, recorded verbatim: (1) Describe the game in one
+sentence to a friend. (2) What was the best moment, and the worst? (3)
+When you died — fair or cheap? (4) What would make you play tomorrow? (5)
+From M3 on: did losing your character on death feel like exciting stakes
+or a rage-quit? — this last one decides question Q1.
+
+The pass criteria for each fun gate live in the milestones doc. A failed
+gate allows at most two design-iteration cycles targeting the specific
+failed metric, then a re-test. Two consecutive failures on the same gate
+mean honestly revisiting the relevant Fusion Law.
+
+--- Current logs ---
+
+The playtest log holds one baseline entry from July 11, 2026: a
+dev/Claude headless run of the M0 build — boots clean, the loop
+functions, no console errors. It is marked explicitly as a baseline only,
+not a fun test. The bug log is empty: no open bugs.
+
+=====================================================================
+12. THE EVENT LOG (from EVENT_LOG.md)
+=====================================================================
+
+The event log is append-only, newest entries on top, one entry per work
+session or notable change, in the format: date, milestone, what landed,
+files touched, notes and decisions. Its motto: "This file is the
+project's memory — if it's not logged here, it didn't happen."
+
+It currently holds one entry, from July 11, 2026 (milestone M0), titled
+"PROJECT FOUNDED + skeleton shipped + recursion pass." What landed: the
+old project7-spec.md was archived to the _to_delete folder (user
+decision: Project 7 is abandoned, do not consider it); the full
+documentation suite was written (manifesto, wargamed product plan,
+milestones, testing, asset pipeline, architecture, the event log itself,
+and the README); and the playable M0 skeleton was built, covering the
+scenes, the Ranger, the four mob variants, the wave director, the XP and
+stat systems, the HUD and juice effects, and the F3 debug overlay.
+START_SERVER.bat also shipped, ready for the M3+ asset era.
+
+Decisions of record from that entry: the engine is locked to Phaser 3.x
+through 1.0 (Phaser 4 exists; migration is post-1.0; no relitigation);
+the strategy is locked to COA-B, RotMG spine first and VS density second;
+progression is full RotMG-style with the roguelite meta-shop explicitly
+dropped (Fusion Law F4); and the open questions Q1 through Q5 were
+registered with defaults and test points.
+
+The entry also documents the recursion pass — the original founding
+message was re-read against the deliverables, and four gaps were found
+and fixed: (1) the Blender question "can Claude make assets?" had gone
+unanswered, so the Lane-A capabilities list was added to the asset
+pipeline doc; (2) the map-builder request was under-specified, so the
+Tiled lane was written with concrete import steps and START_SERVER.bat
+shipped immediately rather than at M3; (3) an alignment table was added
+to the product plan mapping every clause of the founding message to a
+deliverable; (4) the manifesto was bumped from v1.0 to v1.1, adding the
+explicit OUT-list and the Q1-Q5 defaults table.
+
+Next up per the log: M1 — the tuning sweep, the juice pass, and ZzFX
+sound.
+
+=====================================================================
+13. THE WORKING PROCESS (from README.md)
+=====================================================================
+
+The README defines the loop for how work happens:
+
+1. Open docs/MILESTONES.md and pick the next unchecked box in the current
+   milestone.
+2. Build it — placeholder art first, always. Balance numbers live only in
+   game/js/data.js.
+3. Tick the box and append an entry to docs/EVENT_LOG.md.
+4. Playtest per docs/TESTING.md. Milestones only close when their exit
+   gate passes.
+5. Run 2_SAVE_AND_UPLOAD.bat to commit and push.
+
+Playing the current build: double-click game/index.html. Controls: WASD
+to move, mouse to aim, auto-fire is ON by default (T toggles it), SPACE
+fires the volley ability, F3 opens the debug overlay, and you walk into
+the blue portal to enter the realm.
+
+=====================================================================
+14. THE GIT WORKFLOW (from README_HOW_TO_USE.md)
+=====================================================================
+
+The project uses a beginner-friendly, two-person GitHub workflow built
+from five numbered batch files, designed so nobody ever types a git
+command. The golden rule: GET LATEST before you start; SAVE AND UPLOAD
+when you're done.
+
+The files: 0_FIRST_TIME_SETUP.bat is run once, by one person only, after
+creating an empty GitHub repository (the second person instead clones the
+repo and copies the .bat files in). 1_GET_LATEST.bat downloads whatever
+your partner uploaded, and warns about unsaved local work first.
+2_SAVE_AND_UPLOAD.bat saves and uploads your work, but first checks
+GitHub — if your partner uploaded while you were working, it stops you
+and tells you to get latest first; this is the main protection against
+wiping out each other's work. 3_CHECK_STATUS.bat is read-only and shows
+unsaved work, who is ahead or behind, and recent uploads.
+4_UNDO_LAST_UPLOAD.bat safely reverses the most recent upload using a
+git revert — it creates a new change canceling the old one rather than
+deleting history, so it never breaks the other person's copy.
+
+Two tips the doc gives to avoid the one messy scenario: don't both edit
+the exact same file at the same time (split the work; if a file must be
+shared, take turns), and upload often in small chunks, because small
+frequent uploads merge far more easily than one giant one. If a
+"conflict" appears, it means both people changed the same lines of the
+same file — the advice is don't panic, don't force anything, run
+CHECK_STATUS, and get help deciding which version to keep; nothing is
+lost. The workflow assumes the branch is named main; if not, each .bat
+file has a BRANCH= line near the top to edit.
+
+=====================================================================
+15. CURRENT STATE AND WHAT HAPPENS NEXT
+=====================================================================
+
+Where things stand as of July 11, 2026: M0 is complete and its exit gate
+passed. The playable skeleton exists, the full seven-document suite plus
+README exists, no bugs are open, no imported assets exist yet (everything
+on screen is procedurally generated code), and the abandoned Project 7
+spec sits in _to_delete awaiting deletion.
+
+The locked, no-relitigation decisions: Phaser 3.90 through 1.0; COA-B as
+the strategy; full RotMG-style progression with no roguelite meta and no
+shop ever; 2D pixel art through the four-lane pipeline; balance numbers
+only in data.js; solo game at 1.0 with the multiplayer seam preserved.
+
+The immediate next work is M1, the feel pass: tune the numbers in
+data.js, add hitstop and particles, generate the sound effects with
+ZzFX/jsfxr, add pause and fullscreen, and upgrade the death recap — then
+pass its exit gate by voluntarily playing three realms in a row. After
+that, M2 turns the skeleton into the true MVP with the first boss, stat
+potions, real permadeath with a graveyard, and saving — and then the
+first outside human being sits down with it for Fun Gate 1.
+
+The open questions that only playtests can answer: how harsh permadeath
+should be (Q1), the auto-fire default (Q2), auto-XP versus gem pickups
+(Q3), the target realm length of about 12 minutes (Q4), and whether
+temporary realm-buffs help or hurt the game's identity (Q5). Every one
+has a default already chosen and a scheduled moment to be tested, so no
+argument ever needs to happen in the abstract.
+
+END OF DEEP DIVE

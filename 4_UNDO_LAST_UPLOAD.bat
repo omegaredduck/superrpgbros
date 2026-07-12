@@ -12,6 +12,7 @@ REM  Your old work is never truly lost - it stays in history.
 REM ============================================================
 
 set BRANCH=main
+cd /d "%~dp0"
 
 echo(
 echo  =====================================================
@@ -19,12 +20,34 @@ echo   UNDO LAST UPLOAD  (reverse the most recent change)
 echo  =====================================================
 echo(
 
+REM --- Is Git even installed? (its own message, 2026-07-12) --
+where git >nul 2>&1
+if errorlevel 1 (
+    echo  [X] Git is not installed, or Windows can't find it.
+    echo      Install it from  https://git-scm.com/download/win
+    echo      ^(all default options are fine^), close this window,
+    echo      and run this file again.
+    pause
+    exit /b 1
+)
+
 git rev-parse --is-inside-work-tree >nul 2>&1
 if errorlevel 1 (
     echo  [X] This folder is not connected to GitHub yet.
     echo      Run 0_FIRST_TIME_SETUP.bat first. See the guide.
     pause
     exit /b 1
+)
+
+REM --- Clear a stale lock left by a crashed/interrupted git --
+if exist ".git\index.lock" (
+    tasklist /FI "IMAGENAME eq git.exe" 2>nul | find /I "git.exe" >nul
+    if errorlevel 1 (
+        del /f ".git\index.lock" >nul 2>&1
+        echo  [i] Cleared a leftover git lock file from an
+        echo      interrupted run. Continuing normally.
+        echo(
+    )
 )
 
 REM --- Must have a clean folder to undo safely --------------
@@ -35,7 +58,7 @@ if defined CHANGES (
     echo      Please deal with those first:
     echo        - To keep them:  run 2_SAVE_AND_UPLOAD.bat
     echo        - Then come back and run this undo.
-    echo      (Undo needs a clean folder to work safely.)
+    echo      ^(Undo needs a clean folder to work safely.^)
     pause
     exit /b 1
 )
@@ -68,7 +91,7 @@ echo  Creating the undo...
 git revert HEAD --no-edit
 if errorlevel 1 (
     echo(
-    echo  [!] The undo could not be applied cleanly (conflict).
+    echo  [!] The undo could not be applied cleanly ^(conflict^).
     echo      Ask for help before continuing. To back out safely
     echo      you can run:  git revert --abort
     pause
