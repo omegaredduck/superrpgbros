@@ -6,6 +6,99 @@
 
 ---
 
+## 2026-07-12 · M3.5 · THE PORTAL WORKS — one platform, and the console visibly powers it
+
+**User review of the console build: four pedestals is three too many. Redesign of
+record (2026-07-12): ONE portal platform, and the nexus should look like the
+CONSOLE POWERS THE PORTAL. Design calls (user): center stage · sealed realms move
+INSIDE the console UI · cinematic ~2s charge-up · full power fantasy (dormant /
+charging / powered states).**
+
+**Landed:**
+- THE PORTAL WORKS: the new nexus centerpiece — a big stone PLATFORM (new 64px
+  procedural ring texture, 8 light sockets) at the heart of the room, an energy
+  CONDUIT (new tile) running down to the REALM CONSOLE, player arrives just south
+  of the console. The pedestal plaza is GONE (`DATA.plaza` deleted, buildPlaza →
+  buildPortalWorks); future realms are dim SEALED rows inside the console's mode
+  list (`DATA.console.sealed`).
+- THREE POWER STATES: DORMANT — ring lights dark, conduit dead, console screen
+  dim-pulsing. CHARGING (~2s, on SPAWN): console flares white → 3 pulses race up
+  the conduit → the 8 ring lights ignite one per 100ms in the MODE COLOR (blue
+  clear / gold trial) with a tick of audio each → the portal tears open (flash +
+  shake). POWERED: a pulse flows console→platform every 400ms, the ring breathes,
+  portal spins; run label sits beside the platform like a signpost. Enter → the
+  works go dark behind you (one-shot unchanged). All timings are data:
+  `DATA.juice.conduit`.
+- Plumbing kept from the console build: registry one-shot (a resize mid-charge
+  rebuilds the POWERED state instantly — no replayed cinematic), SPACE-commit
+  prompt reads the run back, affixes still PREVIEW-only until `DATA.console.live`.
+- `consoleSpawnPortal(instant)` — instant=true skips the cinematic: used by the
+  registry rebuild and by every suite's realm entry (the ~2.3s cinematic would be
+  ~12s headless at ~5× slow). m3c plays the FULL cinematic once and asserts each
+  phase: dormant (lights dark, no flow) → charging (board closed, portal not yet
+  born) → powered (portal born, 8/8 lit, conduit flowing).
+
+**Files:** `data.js` (DATA.plaza deleted; console.modes/sealed; juice.conduit),
+`textures.js` (platform ring, conduit tile, glowdot), `scenes.js` (buildPortalWorks,
+conduitPulse/powerUp/powerDown, charge cinematic in materializePortal, createPortalAt,
+signpost label, player spawn moved south of console), `index.html` (**?v= m3d → m3e**),
+suites (m3c 23→26 — power-state phases + sealed rows; m21 works-boot checks;
+all suites' entries use instant spawn).
+
+**Verified (headless Chromium): 132 checks — m1 23 + m2 22 + m21 18 + m3 19 +
+m3b 24 + m3c 26 — ALL GREEN ×3 consecutive full batteries on the shipping code,
+zero console errors.** Screenshots: dormant works · console board with sealed
+rows · pulses mid-charge · ring igniting · powered portal with signpost + prompt.
+
+**Next up:** Q3/Q5 behind flags · CC0 art batch 1 · then M4 (Wizard).
+
+## 2026-07-12 · M3.5 · THE REALM CONSOLE — the plaza boots empty; you configure the run, then the portal exists
+
+**User review of the m3c build: pre-existing portals aren't the vision. Decision of
+record (2026-07-12): NO portal in the nexus until the player uses an interactive
+screen — pick the mode, slot the affixes onto the map, SPAWN the portal, step
+through. Design calls (user): one central console · risk=reward affix framework ·
+one-shot portal consumed on entry · PLACEHOLDER affixes only (toggleable + visible,
+NOT live yet).**
+
+**Landed:**
+- REALM CONSOLE (new `DATA.console`, `console` texture in textures.js): a glowing
+  terminal in the plaza. Walk up → "SPACE — use the REALM CONSOLE" → a PoE-map-device
+  style board: GAME MODE select (Realm Clear / Time Trial) + MAP AFFIX board
+  (apex / escalating / hordes from `DATA.affixes.map`, max 3 slots) + SPAWN PORTAL
+  [ENTER]. The UI is a veneer: `consoleSetMode` / `consoleToggleAffix` /
+  `consoleSpawnPortal` are headless-callable scene methods (suites drive them raw).
+- EMPTY PLAZA: `buildPlaza` now builds pedestals + "awaiting a portal" spot labels
+  only; `plazaPortals` fills when the console materializes one. Spawn = Back.Out
+  scale-in + white flash + camera shake + portal audio, label wears the slotted
+  affix names, SPACE prompt reads the whole run back before you commit.
+- ONE-SHOT + RESTART-PROOF: the spawned config lives in the game registry —
+  survives the nexus scene restarts (fullscreen/resize, overlay detours), CLEARED
+  in `enterPortal` (a portal never outlives its run); a new spawn replaces the old.
+- AFFIXES ARE A PREVIEW (user: "i dont want them in game yet"): they ride the
+  portal label, the SPACE prompt, and a new realm-HUD line ("AFFIXES: … (preview —
+  not yet active)"), and `RealmScene.mapAffixes` carries them — but NOTHING reads
+  them for gameplay until `DATA.console.live` flips at M5 (risk=reward numbers by
+  playtest then).
+- Overlay etiquette: console joins vault/graveyard in the one-overlay-at-a-time
+  ring; ESC closes it before meaning "to title"; ENTER wired per-open/off-on-close
+  (bug #2 family); portal prompts suppressed while any overlay is open.
+
+**Files:** `data.js` (console block, map-affix tints, consoleRange, sealed-pedestal
+copy), `textures.js` (console sprite), `scenes.js` (empty buildPlaza, buildConsole +
+board UI + spawn/despawn/materialize, registry one-shot, prompt readback, realm
+mapAffixes + HUD line, portalSwirl returns its timer), `index.html` (**?v= m3c →
+m3d**), suites (m3c 15→23 — console flow end-to-end; m21 empty-plaza checks; ALL
+suites' realm entry goes through the console now).
+
+**Verified (headless Chromium): 129 checks — m1 23 + m2 22 + m21 18 + m3 19 +
+m3b 24 + m3c 23 — ALL GREEN ×3 consecutive full batteries, zero console errors.**
+Screenshots: empty plaza + console prompt · board with 2/3 affixes slotted ·
+spawned portal wearing its affixes · realm HUD preview line.
+
+**Next up:** Q3/Q5 behind flags · CC0 art batch 1 · then M4 (Wizard). M5 inherits
+`DATA.console.live` as the affix go-live switch.
+
 ## 2026-07-12 (tooling) · GIT WORKFLOW — diagnosed why GitHub never got the game; bats hardened
 
 **User report: "the bat files don't seem to be working with my GitHub repository."**

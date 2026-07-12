@@ -300,6 +300,80 @@ var TEX = (function () {
       '................',
       '................'
     ]);
+    // M3.5 PORTAL WORKS: the one portal PLATFORM — a big stone ring with 8
+    // light sockets the console ignites. Drawn with canvas arcs (still lane A:
+    // procedural, pixelArt rendering keeps it crisp). Ring lights are separate
+    // 'glowdot' sprites so scenes can ignite them one by one in the mode color.
+    (function () {
+      var t = scene.textures.createCanvas('platform', 64, 64);
+      var ctx = t.getContext();
+      var ring = function (r, col) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(32, 32, r, 0, Math.PI * 2); ctx.fill(); };
+      ring(31, '#1a1c2c');            // outline
+      ring(29, '#566c86');            // outer rim
+      ring(25, '#94b0c2');            // rim highlight
+      ring(23, '#333c57');            // deck
+      ring(15, '#1a1c2c');            // inner well (the portal floats here)
+      ring(13, '#29366f');            // well glow floor
+      for (var i = 0; i < 8; i++) {   // 8 dark light-sockets on the deck
+        var a = i * Math.PI / 4;
+        ctx.fillStyle = '#1a1c2c';
+        ctx.fillRect(Math.round(32 + Math.cos(a) * 19) - 3, Math.round(32 + Math.sin(a) * 19) - 3, 6, 6);
+        ctx.fillStyle = '#29366f';
+        ctx.fillRect(Math.round(32 + Math.cos(a) * 19) - 2, Math.round(32 + Math.sin(a) * 19) - 2, 4, 4);
+      }
+      t.refresh();
+    })();
+    // conduit tile: a carved energy channel (dark groove between stone lips) —
+    // stacked vertically between console and platform; pulses travel the groove.
+    grid(scene, 'conduit', [
+      '.....kLddLk.....',
+      '.....kLddLk.....',
+      '.....kLdDLk.....',
+      '.....kLddLk.....',
+      '.....kLddLk.....',
+      '....kkLddLkk....',
+      '....kLLddLLk....',
+      '....kLdddddk....',
+      '....kLdddddk....',
+      '....kLLddLLk....',
+      '....kkLddLkk....',
+      '.....kLddLk.....',
+      '.....kLdDLk.....',
+      '.....kLddLk.....',
+      '.....kLddLk.....',
+      '.....kLddLk.....'
+    ]);
+    // glowdot: a soft round light, tinted at runtime (ring lights + pulses).
+    (function () {
+      var t = scene.textures.createCanvas('glowdot', 8, 8);
+      var ctx = t.getContext();
+      ctx.fillStyle = '#f4f4f4';
+      ctx.beginPath(); ctx.arc(4, 4, 3.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(4, 4, 2, 0, Math.PI * 2); ctx.fill();
+      t.refresh();
+    })();
+    // M3.5: the REALM CONSOLE — an arcane terminal on a stone base. The
+    // glowing blue "screen" is where runs are configured before a portal
+    // exists at all (scenes.js NexusScene console overlay).
+    grid(scene, 'console', [
+      '................',
+      '..kkkkkkkkkkkk..',
+      '.kbbbbbbbbbbbbk.',
+      '.kbBBBBBBBBBBbk.',
+      '.kbBwbBBBBwBBbk.',
+      '.kbBBBBbBBBBBbk.',
+      '.kbBBwBBBBbBBbk.',
+      '.kbbbbbbbbbbbbk.',
+      '..kkkkkkkkkkkk..',
+      '....llllllll....',
+      '....lLLLLLLl....',
+      '....lLLLLLLl....',
+      '...llllllllll...',
+      '..lLLLLLLLLLLl..',
+      '..llllllllllll..',
+      '................'
+    ]);
     // tiles
     tile(scene, 'floor_nexus', '#566c86', '#94b0c2', 0.06);
     tile(scene, 'floor_realm', '#1e3a2f', '#29584a', 0.08);

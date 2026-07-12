@@ -39,7 +39,7 @@ function check(name, ok, extra) {
   check('settings defaults (volume 0.5, autoFire true)', s0.volume === 0.5 && s0.autoFire === true);
 
   // -- 4. enter realm via portal overlap --------------------------------------
-  await page.evaluate(`(function(){var n=${scene('Nexus')}; n.player.setPosition(n.portal.x, n.portal.y);})()`);
+  await page.evaluate(`(function(){var n=${scene('Nexus')}; if(!n.portal){n.consoleSetMode('clear');n.consoleSpawnPortal(true);} n.player.setPosition(n.portal.x, n.portal.y);})()`);
   await sleep(300);
   // M3: portals are SPACE-activated (retried — headless fps can stall a frame)
   for (let sp = 0; sp < 3; sp++) {
@@ -91,7 +91,7 @@ function check(name, ok, extra) {
   check('pause → Q returns to Nexus', true);
 
   // -- 10. re-enter realm: auto-fire stayed OFF (TM-1) --------------------------
-  await page.evaluate(`(function(){var n=${scene('Nexus')}; n.player.setPosition(n.portal.x, n.portal.y);})()`);
+  await page.evaluate(`(function(){var n=${scene('Nexus')}; if(!n.portal){n.consoleSetMode('clear');n.consoleSpawnPortal(true);} n.player.setPosition(n.portal.x, n.portal.y);})()`);
   await sleep(300);
   // M3: portals are SPACE-activated (retried — headless fps can stall a frame)
   for (let sp = 0; sp < 3; sp++) {

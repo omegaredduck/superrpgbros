@@ -128,20 +128,33 @@ var DATA = {
                 lootTable: 'trial' }   // M3: the trial chest rolls pocket-change gear
   },
 
-  // --- E5 (M2.1): the nexus portal plaza — a pedestal per destination. Sealed
-  // entries are the display structure future realms (M5) plug into.
-  plaza: [
-    { mode: 'clear',    locked: false },
-    { mode: 'survival', locked: false },
-    { locked: true, label: 'SEALED REALM', sub: 'a new biome will open here (M5)' },
-    { locked: true, label: 'SEALED REALM', sub: 'map affixes will roll here (M5)' }
-  ],
+  // --- M3.5: THE PORTAL WORKS (user redesign 2026-07-12, supersedes the E5
+  // pedestal plaza). ONE platform at the heart of the nexus, hard-wired to the
+  // REALM CONSOLE by an energy conduit. No portal exists until you configure a
+  // run at the console: pick a mode, slot map affixes, SPAWN. The console then
+  // POWERS the platform — pulses race up the conduit, the ring lights ignite in
+  // the mode's color, and the portal tears open. It is ONE-SHOT — consumed on
+  // entry, the works go dark; walk back to the console for the next run.
+  // Affixes on the board are a PREVIEW: toggleable + visible on the portal/
+  // realm HUD, but INERT until M5 flips live:true (risk=reward by playtest).
+  console: {
+    name: 'REALM CONSOLE',
+    prompt: 'SPACE — use the REALM CONSOLE',
+    maxAffixes: 3,               // slots on the board
+    affixChoices: ['apex', 'escalating', 'hordes'],   // keys into affixes.map
+    modes: ['clear', 'survival'],                     // spawnable destinations
+    sealed: [                    // future realms live IN the console now (M5)
+      { label: 'SEALED REALM', sub: 'a new biome opens here (M5)' },
+      { label: 'SEALED REALM', sub: 'a new biome opens here (M5)' }
+    ],
+    live: false                  // M5: flip to make slotted affixes mutate the realm
+  },
 
   // --- Q6 (M2.1): contextual interaction — SPACE interacts when something is
   // in range, otherwise it fires the ability. One knob, tested at Fun Gate 1.
-  // portalRange (M3 polish): nexus portals are SPACE-activated too — walk up,
-  // read the pedestal, THEN commit (pre-builds the M5 map-affix moment).
-  interact: { range: 52, portalRange: 74 },
+  // portalRange (M3 polish): a SPAWNED portal is SPACE-activated too — walk up,
+  // read the pedestal (mode + slotted affixes), THEN commit.
+  interact: { range: 52, portalRange: 74, consoleRange: 80 },
 
   // --- E9 (M2.1): THE AFFIX ENGINE. An affix is a bag of multipliers/flags,
   // applied at spawn (mob) or realm entry (map). Scenes/entities only apply
@@ -165,11 +178,13 @@ var DATA = {
       // PACK LEADER: while one lives, the director skews spawns to casters.
       roles:    { name: 'PACK LEADER', tint: 0x41a6f6, hpMult: 1.5, xpMult: 2, roleSkew: 'caster' }
     },
-    // map affixes roll at the portal pedestal (M5) and mutate the realm config:
+    // map affixes are slotted at the REALM CONSOLE (M3.5 preview board) and —
+    // once DATA.console.live flips at M5 — mutate the realm config. Until then
+    // they ride along visibly (portal label, realm HUD) but change nothing.
     map: {
-      apex:       { name: 'APEX PREDATORS',    desc: 'double bosses',      bossCount: 2,        m5: true },
-      escalating: { name: 'ESCALATING THREATS', desc: 'elite spawns surge', mobRollChanceMult: 4, m5: true },
-      hordes:     { name: 'HORDES',            desc: 'high spawn density', spawnIntervalMult: 0.6, budgetMult: 1.5, m5: true }
+      apex:       { name: 'APEX PREDATORS',    desc: 'double bosses',      tint: 0xb13e53, bossCount: 2,        m5: true },
+      escalating: { name: 'ESCALATING THREATS', desc: 'elite spawns surge', tint: 0xffcd75, mobRollChanceMult: 4, m5: true },
+      hordes:     { name: 'HORDES',            desc: 'high spawn density', tint: 0xff77a8, spawnIntervalMult: 0.6, budgetMult: 1.5, m5: true }
     }
   },
 
@@ -304,7 +319,14 @@ var DATA = {
     hitstopCooldownMs: 90,    // min gap between hitstops so auto-fire can't lock the game
     deathParticles: 10,       // particles per mob death (tinted per mob.deathTint)
     levelupParticles: 16,
-    swirl: { intervalMs: 110, durationMs: 800, radius: 46 }  // portal swirl effect
+    swirl: { intervalMs: 110, durationMs: 800, radius: 46 },  // portal swirl effect
+    // M3.5 PORTAL WORKS charge-up + powered-state feel (all cosmetic):
+    // spawn = console flare → chargePulses race up the conduit → ring lights
+    // ignite one per segMs in the mode color → portal tears open (portalMs).
+    // While powered, a pulse flows console→platform every flowEveryMs.
+    conduit: { chargePulses: 3, pulseGapMs: 220, pulseTravelMs: 500,
+               segMs: 100, portalMs: 550, flowEveryMs: 400, flowTravelMs: 700,
+               ringLights: 8, ringRadius: 46 }
   },
 
   // --- M1 audio: generated chiptune SFX, no audio files (ASSET_PIPELINE §1) --

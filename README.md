@@ -17,19 +17,23 @@ Controls: **WASD** move · **mouse** aim (your Ranger and bow now FACE where you
 **ESC or P** pauses in a realm (volume control lives in the pause menu; use P while fullscreen, since ESC also
 exits fullscreen) · ESC in the nexus returns to the welcome screen · **F** fullscreen (fills the whole screen —
 you see more of the realm) · **G** in the nexus opens the graveyard & records · click a potion in the nexus
-stash to drink it · **V** (or click the vault chest) opens the **VAULT** · **F3** debug overlay · walk to a
-**plaza** portal and press **SPACE** to travel (the pedestal tells you what you're committing to) · **M** in
-the nexus opens the **MAP BUILDER** (dev tool — paint layers, drop spawn zones & a boss arena, PLAYTEST ▶).
+stash to drink it · **V** (or click the vault chest) opens the **VAULT** · **F3** debug overlay · walk to the
+**REALM CONSOLE** and press **SPACE** — pick a mode, slot map affixes (preview), **POWER THE PLATFORM** and
+watch the works charge up (pulses race the conduit, the ring ignites, the portal tears open), then step up
+and press **SPACE** to commit (the prompt reads your whole run back; the portal is one-shot — the works go
+dark behind you) · **M** in the nexus opens the **MAP BUILDER** (dev tool — paint layers, drop spawn zones
+& a boss arena, PLAYTEST ▶).
 
-Current build: **M2 "First Fun" + M2.1 scope patch + M3 nearly complete: MAP BUILDER, EQUIPMENT, VAULT
-& the full AFFIX ENGINE landed** (M2's exit gate — Fun Gate 1, an outside tester — is still pending).
+Current build: **M2 "First Fun" + M2.1 scope patch + M3 nearly complete: MAP BUILDER, EQUIPMENT, VAULT,
+the full AFFIX ENGINE & the REALM CONSOLE landed** (M2's exit gate — Fun Gate 1, an outside tester — is still pending).
 Realms run on **painted maps**: real walls that block movement and shots, spawn zones, and a boss arena
 the portal delivers you to — realm 1 ships as a builder-format map you can repaint (press **M** in the
 nexus). **GEAR IS REAL now**: 16 items across T0–T3 (weapon/ability/armor/ring — gear pushes stats PAST
 the caps), the boss chest is a true PoE2-style pick (**TAKE** equips on the spot, swap freely, ENTER grabs
 upgrades), and the nexus **VAULT (V)** holds 8 items that **SURVIVE DEATH** — bank your best find before
-you die with it. The loop: welcome screen + 3 save slots → nexus **portal plaza** (realm clear ·
-**5-minute TIME TRIAL** · sealed future realms) → escalating swarms with **champions** (each wears a
+you die with it. The loop: welcome screen + 3 save slots → the nexus **PORTAL WORKS**
+(one platform, an energy conduit, and the console that powers it: configure the run — realm clear ·
+**5-minute TIME TRIAL** — slot preview affixes, and CHARGE the platform to tear your one-shot portal open) → escalating swarms with **champions** (each wears a
 floating **nameplate** in its affix color): TANKY / SPEEDY / **SPLITTING** (bolts fork mid-flight) /
 **EVOLVING** (kill it before it turns) / **PACK LEADER** (the swarm goes caster) — every champion kill
 adds a **BOUNTY roll** to the boss chest → **150 kills → the portal's

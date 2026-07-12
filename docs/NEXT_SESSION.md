@@ -11,17 +11,22 @@ We're continuing work on my game in the connected "super rpg bros" folder
 (project memory has the standing decisions — read it, plus docs/MILESTONES.md
 and the top entry of docs/EVENT_LOG.md, before writing any code).
 
-WHERE THINGS STAND (as of 2026-07-12, build ?v=m3c):
+WHERE THINGS STAND (as of 2026-07-12, build ?v=m3e):
 - M0–M1 done. M2 + M2.1 features all landed; their gates are HUMAN gates
   (my dev self-test + an outside tester for Fun Gate 1) — don't wait on them.
-- M3 is FEATURE-COMPLETE except two boxes: the map builder shipped earlier
-  (builder.js + maps.js), and this session landed EQUIPMENT (16 items T0–T3,
-  4 slots, drop tables, chest TAKE/swap, schema v3), the NEXUS VAULT (8
-  account slots, V in nexus, survives death), AFFIX ENGINE v2 (all 5 affixes
-  live: split/evolving/pack-leader behaviors + champion bounty rolls in the
-  boss chest), CHAMPION NAMEPLATES (floating affix-name tags), and
-  SPACE-ACTIVATED plaza portals (walk up, read the pedestal, SPACE commits —
-  the M5 map-affix roll surfaces in this same prompt later). 121 headless
+- M3 features done (map builder, equipment, vault, affix engine v2,
+  champion nameplates). NEW this session — M3.5 THE PORTAL WORKS: the
+  pedestal plaza is GONE. One platform at the heart of the nexus, an
+  energy conduit, and the REALM CONSOLE that visibly POWERS it. Console
+  = mode select + sealed future-realm rows + map-affix board + POWER THE
+  PLATFORM. Spawn plays a ~2s cinematic (console flare → conduit pulses →
+  8 ring lights ignite in the mode color → portal tears open); powered
+  state keeps pulses flowing until entry; ONE-SHOT consumed on entry and
+  the works go dark. Affixes (apex/escalating/hordes) are PREVIEW-only:
+  visible everywhere (board [x], signpost label, SPACE prompt, realm HUD)
+  but INERT until DATA.console.live flips at M5. Timings in
+  DATA.juice.conduit. consoleSpawnPortal(instant=true) skips the
+  cinematic (registry rebuilds + all suites' realm entry). 132 headless
   checks green across 6 suites (m1/m2/m21/m3/m3b/m3c), ×3 batteries.
 
 THIS SESSION — close out M3, then start M4 if time:
@@ -44,15 +49,15 @@ PROCESS (non-negotiable, enforce it on yourself):
 - Headless suites for anything new + run all existing suites (NODE_PATH to
   a global playwright install; stage game/lib/phaser.min.js too if
   rebuilding the container copy).
-- Bump ?v= in game/index.html (currently m3c) on any js change.
+- Bump ?v= in game/index.html (currently m3e) on any js change.
 - Tick MILESTONES.md boxes, append an EVENT_LOG.md entry, update project
   memory, rewrite docs/NEXT_SESSION.md for the session after, and commit
   every changed file back to my disk. I run 2_SAVE_AND_UPLOAD.bat myself.
 
 Known gotchas are in project memory (Phaser scene-instance reuse, listener
-stacking — includes once() rewiring on overlay rebuilds, RESIZE scaling,
-?v= cache, bug #5: arcade collider callbacks between a dynamic and a
-static group arrive (staticChild, dynamicChild) — identify by tag, never
+stacking — includes once()/ENTER rewiring on overlay rebuilds, RESIZE
+scaling, ?v= cache, bug #5: arcade collider callbacks between a dynamic and
+a static group arrive (staticChild, dynamicChild) — identify by tag, never
 by argument order; and the headless one: software-GL runs ~2fps and Phaser
 caps frame delta, so clock timers run ~5× slow in suites — keep entry waits
 generous and reuse the Space-press retry loop pattern).
@@ -67,7 +72,10 @@ Manual items still on ME (Red), any time:
 - Dev self-test of the M2.1 flow (chest / scouter / orbs / time trial) — closes M2.1.
 - FUN GATE 1: hand the game to a friend who didn't watch it being built, 20+ min,
   log per TESTING.md §3 — closes M2/MVP.
-- M3 GATE (now humanly achievable): bank an item in the vault (V in nexus), die or
-  re-enter, confirm it survived; playtest a builder-painted map. Log it.
+- M3 GATE: bank an item in the vault (V in nexus), die or re-enter, confirm it
+  survived; playtest a builder-painted map. Log it.
+- PLAY THE PORTAL WORKS (?v=m3e): walk to the console, slot affixes, POWER THE
+  PLATFORM, watch the charge-up, step through — does it feel right? (Your redesign
+  — judge the cinematic timing especially; knobs in DATA.juice.conduit.)
 - One manual TM-8 check: IMPORT TILES in the map builder with a real image file.
-- Run 2_SAVE_AND_UPLOAD.bat to push the M3 equipment/vault/affix build (?v=m3b).
+- Run 2_SAVE_AND_UPLOAD.bat to push the M3.5 Portal Works build (?v=m3e).

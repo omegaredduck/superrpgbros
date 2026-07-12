@@ -45,7 +45,7 @@ function check(name, ok, extra) {
   // -- 2. fresh account → realm ------------------------------------------------
   await page.evaluate(`${scene('Title')}.chooseSlot(1)`);
   await page.waitForFunction(`game.scene.isActive('Nexus')`, null, { timeout: 5000 });
-  await page.evaluate(`(function(){var n=${scene('Nexus')}; n.player.setPosition(n.portal.x, n.portal.y);})()`);
+  await page.evaluate(`(function(){var n=${scene('Nexus')}; if(!n.portal){n.consoleSetMode('clear');n.consoleSpawnPortal(true);} n.player.setPosition(n.portal.x, n.portal.y);})()`);
   await sleep(300);
   // M3: portals are SPACE-activated (retried — headless fps can stall a frame)
   for (let sp = 0; sp < 3; sp++) {
@@ -160,7 +160,7 @@ function check(name, ok, extra) {
   check('G closes it again', !(await page.evaluate(`!!${scene('Nexus')}.gyUi`)));
 
   // -- 10. death path still intact after M2 (permadeath loses drunk pots) ---------
-  await page.evaluate(`(function(){var n=${scene('Nexus')}; n.player.setPosition(n.portal.x, n.portal.y);})()`);
+  await page.evaluate(`(function(){var n=${scene('Nexus')}; if(!n.portal){n.consoleSetMode('clear');n.consoleSpawnPortal(true);} n.player.setPosition(n.portal.x, n.portal.y);})()`);
   await sleep(300);
   // M3: portals are SPACE-activated (retried — headless fps can stall a frame)
   for (let sp = 0; sp < 3; sp++) {

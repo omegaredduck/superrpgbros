@@ -30,15 +30,20 @@ function check(name, ok, extra) {
   const plaza = await page.evaluate(`(function(){var n=${scene('Nexus')};
     var texts=[]; n.children.list.forEach(function(c){ if(c.text) texts.push(c.text); });
     return { portals: n.plazaPortals.length, canonical: !!n.portal,
-             modes: n.plazaPortals.map(function(p){return p.mode;}),
+             spot: !!n.portalSpot, ring: n.ringLights.length, console: !!n.consolePos,
+             modes: DATA.console.modes.slice(),
              blob: texts.join(' | ') };})()`);
-  check('E5 plaza built: 2 live portals incl. canonical clear portal', plaza.portals === 2 && plaza.canonical);
-  check('E5 plaza offers clear + survival, shows sealed pedestals',
+  // M3.5 PORTAL WORKS: the nexus boots DORMANT — one platform, no portal until
+  // the console powers it; future realms are sealed rows inside the console UI
+  check('E5/M3.5 works boot DORMANT: no portals until the console powers the platform',
+    plaza.portals === 0 && !plaza.canonical);
+  check('E5/M3.5 one platform (8 ring lights) + console; clear + survival spawnable',
+    plaza.spot && plaza.ring === 8 && plaza.console &&
     plaza.modes.indexOf('clear') >= 0 && plaza.modes.indexOf('survival') >= 0 &&
-    plaza.blob.indexOf('TIME TRIAL') >= 0 && plaza.blob.indexOf('SEALED REALM') >= 0);
+    plaza.blob.indexOf('PORTAL WORKS') >= 0 && plaza.blob.indexOf('REALM CONSOLE') >= 0);
 
   // -- 2. enter the clear realm ----------------------------------------------------
-  await page.evaluate(`(function(){var n=${scene('Nexus')}; n.player.setPosition(n.portal.x, n.portal.y);})()`);
+  await page.evaluate(`(function(){var n=${scene('Nexus')}; if(!n.portal){n.consoleSetMode('clear');n.consoleSpawnPortal(true);} n.player.setPosition(n.portal.x, n.portal.y);})()`);
   await sleep(300);
   // M3: portals are SPACE-activated (retried — headless fps can stall a frame)
   for (let sp = 0; sp < 3; sp++) {
@@ -121,6 +126,7 @@ function check(name, ok, extra) {
   await page.keyboard.press('q');
   await page.waitForFunction(`game.scene.isActive('Nexus')`, null, { timeout: 5000 });
   await page.evaluate(`(function(){var n=${scene('Nexus')};
+    n.consoleSetMode('survival'); n.consoleSpawnPortal(true);   // M3.5: console spawns it
     var p = n.plazaPortals.filter(function(e){return e.mode==='survival';})[0].sprite;
     n.player.setPosition(p.x, p.y);})()`);
   await sleep(300);

@@ -104,6 +104,8 @@ Pulled forward from M2 by user decision (2026-07-11): a proper front door before
 - [x] Affix engine v2 (E9, absorbs the old "elite mob modifier" item): SPLITTING (shooters only; bolts fork mid-flight, children never re-split) · EVOLVING (one-time mid-fight evolution on surviving a hit) · PACK LEADER (director skews to casters while one lives) · affixed mobs drop better: champion kills add capped CHAMPION BOUNTY rolls to the boss chest (2026-07-12)
 - [x] Champion nameplates (user review, 2026-07-12): affixed mobs carry a floating affix-name tag in the affix color — created at spawn, follows the mob, cleared on every kill path
 - [x] SPACE-activated plaza portals (user review, 2026-07-12): walk-in retired; a screen-clamped prompt at the nearest portal + SPACE commits — the M5 map-affix roll will surface in this same pedestal moment
+- [x] REALM CONSOLE (user decision, 2026-07-12, ?v=m3d): the plaza boots EMPTY — one central console configures the run (mode select + map-affix board), SPAWN PORTAL materializes a ONE-SHOT portal on its pedestal (consumed on entry; survives resize restarts via registry; a new spawn replaces the old). Affix board is a PREVIEW: apex/escalating/hordes toggle visibly, ride the portal label + SPACE prompt + realm HUD, but stay INERT until DATA.console.live flips at M5
+- [x] PORTAL WORKS (user redesign, 2026-07-12, ?v=m3e): pedestal plaza RETIRED — ONE platform at the heart of the nexus, an energy conduit, and the console that visibly POWERS it. Dormant / charging (~2s cinematic: console flare → conduit pulses → ring lights ignite in mode color → portal tears open) / powered (flowing pulses, breathing ring) states; sealed future realms are rows inside the console UI; timings in DATA.juice.conduit; consoleSpawnPortal(instant) for suites/registry rebuilds
 - [ ] XP gems trial behind flag (Q3) · realm-buff picks behind flag (Q5)
 - [ ] CC0 art batch 1: hero + 4 mobs + tileset (credits logged)
 
@@ -119,7 +121,7 @@ Pulled forward from M2 by user decision (2026-07-11): a proper front door before
 - [ ] Dungeons 1–2: portal drops from elites, handcrafted builder maps, dungeon bosses
 - [ ] Bosses 2–5 across realms/dungeons — scouter workup sheets (E3) data-driven per boss
 - [ ] T4–T6 gear; breakables + field chests (E1 overlay reused)
-- [ ] Map affixes (E9): rolled at the portal plaza, displayed on the pedestal before entry — Apex Predators (double boss), Escalating Threats (elite spawns), Hordes (spawn density)
+- [ ] Map affixes (E9) GO LIVE: flip DATA.console.live — the console's slotted affixes (Apex Predators / Escalating Threats / Hordes) actually mutate the realm; risk = reward loot numbers resolved by playtest (console UI + plumbing shipped at M3.5)
 - [ ] More stage objectives/modes (E6) beyond time trial, per Fun Gate 2 appetite
 - [ ] Blender MCP experiment: 1 hero or boss rendered to spritesheet (ASSET_PIPELINE.md §4)
 - [ ] FUN GATE 2 executed + logged

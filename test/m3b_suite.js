@@ -102,7 +102,7 @@ function check(name, ok, extra) {
   await sleep(400);
   await page.evaluate(`${scene('Title')}.chooseSlot(1)`);
   await page.waitForFunction(`game.scene.isActive('Nexus')`, null, { timeout: 5000 });
-  await page.evaluate(`(function(){var n=${scene('Nexus')}; n.player.setPosition(n.portal.x, n.portal.y);})()`);
+  await page.evaluate(`(function(){var n=${scene('Nexus')}; if(!n.portal){n.consoleSetMode('clear');n.consoleSpawnPortal(true);} n.player.setPosition(n.portal.x, n.portal.y);})()`);
   await sleep(300);
   // M3: portals are SPACE-activated (retried — headless fps can stall a frame)
   for (let sp = 0; sp < 3; sp++) {
@@ -259,7 +259,7 @@ function check(name, ok, extra) {
   // -- 13. the fresh character can walk back into a realm (gate clause, part 2) --------
   await page.keyboard.press('Enter');
   await page.waitForFunction(`game.scene.isActive('Nexus')`, null, { timeout: 5000 });
-  await page.evaluate(`(function(){var n=${scene('Nexus')}; n.player.setPosition(n.portal.x, n.portal.y);})()`);
+  await page.evaluate(`(function(){var n=${scene('Nexus')}; if(!n.portal){n.consoleSetMode('clear');n.consoleSpawnPortal(true);} n.player.setPosition(n.portal.x, n.portal.y);})()`);
   await sleep(300);
   // M3: portals are SPACE-activated (retried — headless fps can stall a frame)
   for (let sp = 0; sp < 3; sp++) {

@@ -46,7 +46,7 @@ function itemLabel(key) { var it = DATA.items[key]; return DATA.tiers[it.tier].n
 // Portal swirl: particles orbit inward and fade (cosmetic — Math.random OK).
 function portalSwirl(scene, x, y, tint) {
   var J = DATA.juice.swirl;
-  scene.time.addEvent({
+  return scene.time.addEvent({
     delay: J.intervalMs, loop: true, callback: function () {
       var a = Math.random() * Math.PI * 2, r = J.radius;
       var p = scene.add.image(x + Math.cos(a) * r, y + Math.sin(a) * r, 'px')
@@ -232,9 +232,10 @@ var NexusScene = new Phaser.Class({
     for (var x = 8; x < W; x += 32) { walls.create(x, 8, 'wall').setScale(2).refreshBody(); walls.create(x, H - 8, 'wall').setScale(2).refreshBody(); }
     for (var y = 8; y < H; y += 32) { walls.create(8, y, 'wall').setScale(2).refreshBody(); walls.create(W - 8, y, 'wall').setScale(2).refreshBody(); }
 
-    // E5 (M2.1): THE PORTAL PLAZA — a pedestal per destination. Sealed pedestals
-    // are the display structure future realms + map affixes (M5) plug into.
-    this.buildPlaza(W, H);
+    // M3.5: THE PORTAL WORKS — one platform at the heart of the nexus,
+    // hard-wired to the REALM CONSOLE by an energy conduit. The console
+    // powers the platform; future realms live inside the console UI.
+    this.buildPortalWorks(W, H);
     wireFullscreen(this);
 
     // M3: THE VAULT — 8 account slots that survive death (the whole point).
@@ -247,7 +248,9 @@ var NexusScene = new Phaser.Class({
     this.vaultUi = null;
     this.input.keyboard.on('keydown-V', function () { vSelf.toggleVault(); });
 
-    this.player = Entities.createPlayer(this, W / 2, H / 2, CURRENT);
+    // M3.5: you arrive just south of the console — the works are the first
+    // thing you see, and the prompt is two steps away.
+    this.player = Entities.createPlayer(this, W / 2, H / 2 + 190, CURRENT);
     this.physics.add.collider(this.player, walls);
     this.rig = makeInputRig(this);
 
@@ -266,13 +269,14 @@ var NexusScene = new Phaser.Class({
     this.add.text(W / 2, 40, 'THE NEXUS', { fontFamily: 'monospace', fontSize: 28, color: '#ffcd75' }).setOrigin(0.5);
     this.add.text(W / 2, 72, acct, { fontFamily: 'monospace', fontSize: 12, color: '#94b0c2' }).setOrigin(0.5);
     this.add.text(W / 2, H - 48,
-      'WASD move · mouse aim · T auto-fire · SPACE volley / interact · F fullscreen · V vault · G graveyard · M map builder (dev) · ESC title\nWalk to a plaza portal and press SPACE — realm clear or time trial  (ESC/P pauses in a realm)',
+      'WASD move · mouse aim · T auto-fire · SPACE volley / interact · F fullscreen · V vault · G graveyard · M map builder (dev) · ESC title\nUse the REALM CONSOLE to configure a run and spawn its portal  (ESC/P pauses in a realm)',
       { fontFamily: 'monospace', fontSize: 12, color: '#f4f4f4', align: 'center' }).setOrigin(0.5);
 
     // ESC: save and return to the welcome screen (switch slots without reloading)
-    // — unless the vault is open, in which case ESC just closes the vault.
+    // — unless an overlay is open, in which case ESC just closes the overlay.
     var esc = this;
     this.input.keyboard.on('keydown-ESC', function () {
+      if (esc.consoleUi) { esc.toggleConsole(); return; }
       if (esc.vaultUi) { esc.toggleVault(); return; }
       persist();
       esc.scene.start('Title');
@@ -287,43 +291,320 @@ var NexusScene = new Phaser.Class({
 
     // M3 polish (pre-builds the M5 pedestal-commit moment): portals are
     // SPACE-ACTIVATED, not walk-in — approach, read the pedestal, THEN commit.
-    // At M5 the rolled map affixes will show right here before you press it.
     this.entering = false;
     this.portalPrompt = null;
+    this.consolePrompt = null;
+
+    // M3.5: a portal spawned by the console survives a scene restart (resize,
+    // fullscreen toggle, vault detours) via the game registry — but it is
+    // ONE-SHOT: enterPortal clears the registry, so it never outlives a run.
+    var pending = this.registry.get('pendingPortal');
+    if (pending) this.materializePortal(pending, false);
+
     this.cameras.main.fadeIn(300);
   },
 
-  // ------------------------------------------- E5 (M2.1): PORTAL PLAZA --
-  buildPlaza: function (W, H) {
+  // -------------------------------------- M3.5: THE PORTAL WORKS --
+  // The nexus centerpiece (user redesign 2026-07-12): ONE platform, an energy
+  // CONDUIT, and the REALM CONSOLE that powers it. Three states:
+  //   DORMANT — ring lights dark, conduit dead, console screen dim-pulsing.
+  //   CHARGING (~2s) — console flares, pulses race up the conduit, the 8 ring
+  //     lights ignite one by one in the mode color, the portal tears open.
+  //   POWERED — pulses keep flowing, lights breathe, portal spins until entry.
+  buildPortalWorks: function (W, H) {
     var self = this;
-    this.plazaPortals = [];
-    var x = W - 116;
-    var n = DATA.plaza.length;
-    var gap = Math.min(132, (H - 200) / Math.max(1, n - 1));
-    var y0 = H / 2 - gap * (n - 1) / 2;
-    DATA.plaza.forEach(function (d, i) {
-      var y = y0 + i * gap;
-      self.add.sprite(x, y + 30, 'pedestal').setScale(2.6).setDepth(3);
-      if (d.locked) {
-        self.add.sprite(x, y, 'portal').setScale(2).setTint(0x333c57).setAlpha(0.45).setDepth(4);
-        self.add.text(x, y + 58, (d.label || 'SEALED') + '\n' + (d.sub || ''),
-          { fontFamily: 'monospace', fontSize: 10, color: '#566c86', align: 'center' }).setOrigin(0.5);
-        return;
+    this.plazaPortals = [];      // filled by materializePortal, not at boot
+    this.portal = null;          // canonical spawned portal (suites refer to it)
+    this.spawnedPortal = null;   // {sprite, label, swirl, mode, affixes}
+    this.charging = false;       // true during the spawn cinematic
+    var cx = W / 2;
+    var platY = H / 2 - 110, conY = H / 2 + 110;
+    this.portalSpot = { x: cx, y: platY - 6 };            // portal floats in the well
+
+    // PLATFORM — big stone ring, 8 dark light sockets the console ignites
+    this.add.sprite(cx, platY, 'platform').setScale(2.4).setDepth(2);
+    var J = DATA.juice.conduit;
+    this.ringLights = [];
+    for (var i = 0; i < J.ringLights; i++) {
+      var a = i * Math.PI * 2 / J.ringLights;
+      this.ringLights.push(this.add.sprite(
+        cx + Math.cos(a) * J.ringRadius, platY + Math.sin(a) * J.ringRadius, 'glowdot')
+        .setScale(1.4).setDepth(3).setTint(0x29366f).setAlpha(0.25));
+    }
+    this.add.text(cx, platY - 96, 'PORTAL WORKS',
+      { fontFamily: 'monospace', fontSize: 11, color: '#566c86' }).setOrigin(0.5, 1).setName('worksTitle');
+
+    // CONDUIT — carved channel from the console up to the platform
+    this.conduitTop = platY + 70; this.conduitBottom = conY - 42;
+    for (var y = this.conduitBottom; y >= this.conduitTop; y -= 30) {
+      this.add.sprite(cx, y, 'conduit').setScale(2).setDepth(2).setAlpha(0.9);
+    }
+
+    // CONSOLE — the terminal that drives it all
+    this.consolePos = { x: cx, y: conY };
+    var c = this.add.sprite(cx, conY, 'console').setScale(3).setDepth(3).setInteractive({ useHandCursor: true });
+    this.consoleSprite = c;
+    this.tweens.add({ targets: c, alpha: 0.75, yoyo: true, repeat: -1, duration: 1200 });   // dormant heartbeat
+    this.add.text(cx, conY + 36, DATA.console.name, { fontFamily: 'monospace', fontSize: 11, color: '#41a6f6' }).setOrigin(0.5);
+    c.on('pointerdown', function () { self.toggleConsole(); });
+    this.consoleUi = null;
+    this.flowTimer = null;       // powered-state pulse stream
+    // run config survives open/close within a visit; defaults are fresh per scene
+    this.consoleMode = 'clear';
+    this.consoleAffixes = [];
+  },
+
+  // one energy pulse traveling the conduit console→platform
+  conduitPulse: function (tint, ms) {
+    var self = this;
+    var p = this.add.sprite(this.consolePos.x, this.conduitBottom + 14, 'glowdot')
+      .setScale(1.2).setDepth(4).setTint(tint || 0x41a6f6);
+    this.tweens.add({ targets: p, y: this.conduitTop - 20, duration: ms,
+      ease: 'Sine.In', onComplete: function () {
+        self.tweens.add({ targets: p, scale: 2.2, alpha: 0, duration: 160,
+          onComplete: function () { p.destroy(); } });
+      } });
+  },
+
+  powerDown: function () {
+    if (this.flowTimer) { this.flowTimer.remove(); this.flowTimer = null; }
+    var self = this;
+    this.ringLights.forEach(function (l) {
+      self.tweens.killTweensOf(l);
+      l.setTint(0x29366f); l.setAlpha(0.25); l.setScale(1.4);
+    });
+  },
+
+  handleConsole: function () {
+    if (this.entering) return;
+    if (this.consoleUi || this.vaultUi || this.gyUi || this.charging) {
+      if (this.consolePrompt) { this.consolePrompt.destroy(); this.consolePrompt = null; }
+      return;
+    }
+    var p = this.player, cp = this.consolePos;
+    var near = Math.hypot(cp.x - p.x, cp.y - p.y) <= DATA.interact.consoleRange;
+    if (near) {
+      if (!this.consolePrompt) {
+        this.consolePrompt = this.add.text(0, 0, DATA.console.prompt,
+          { fontFamily: 'monospace', fontSize: 12, color: '#41a6f6' }).setOrigin(0.5).setDepth(60);
+        var hw = this.consolePrompt.width / 2 + 8;
+        this.consolePrompt.setPosition(
+          Phaser.Math.Clamp(cp.x, hw, this.scale.width - hw),
+          Math.max(96, cp.y - 64));
       }
-      var mode = DATA.modes[d.mode];
-      var tint = d.mode === 'survival' ? 0xffcd75 : 0x41a6f6;
-      var p = self.physics.add.staticSprite(x, y, 'portal').setScale(2.2).setDepth(4);
-      if (d.mode === 'survival') p.setTint(tint);
-      self.tweens.add({ targets: p, angle: 360, duration: 4000, repeat: -1 });
-      portalSwirl(self, x, y, tint);
-      var label = d.mode === 'clear'
-        ? mode.name + '\n' + DATA.realm.name + '\n' + DATA.realm.killQuota + ' ' + mode.desc
-        : mode.name + '\n' + mode.desc;
-      self.add.text(x, y + 62, label,
-        { fontFamily: 'monospace', fontSize: 10, color: d.mode === 'survival' ? '#ffcd75' : '#41a6f6',
-          align: 'center', wordWrap: { width: 200 } }).setOrigin(0.5, 0);
-      self.plazaPortals.push({ sprite: p, mode: d.mode });
-      if (d.mode === 'clear') self.portal = p;       // canonical portal (suites + docs refer to it)
+      if (Phaser.Input.Keyboard.JustDown(this.rig.keys.SPACE)) this.toggleConsole();
+    } else if (this.consolePrompt) {
+      this.consolePrompt.destroy(); this.consolePrompt = null;
+    }
+  },
+
+  toggleConsole: function () {
+    if (this.consoleUi) {
+      this.consoleUi.forEach(function (o) { o.destroy(); });
+      this.consoleUi = null;
+      this.input.keyboard.off('keydown-ENTER', this.consoleEnterFn, this);   // bug #2 family
+      return;
+    }
+    if (this.vaultUi) this.toggleVault();                // one overlay at a time
+    if (this.gyUi) this.toggleGraveyard();
+    this.buildConsoleUi();
+    AUDIO.play('ui');
+  },
+
+  // The UI is a veneer: it only calls consoleSetMode / consoleToggleAffix /
+  // consoleSpawnPortal, which are headless-callable (suites drive them raw).
+  consoleSetMode: function (mode) {
+    if (!DATA.modes[mode] || DATA.console.modes.indexOf(mode) < 0) return;
+    this.consoleMode = mode;
+    if (this.consoleUi) this.buildConsoleUi();
+  },
+
+  consoleToggleAffix: function (key) {
+    if (!DATA.affixes.map[key]) return;
+    var i = this.consoleAffixes.indexOf(key);
+    if (i >= 0) this.consoleAffixes.splice(i, 1);
+    else if (this.consoleAffixes.length < DATA.console.maxAffixes) this.consoleAffixes.push(key);
+    if (this.consoleUi) this.buildConsoleUi();
+  },
+
+  // instant=true skips the charge-up cinematic (registry rebuilds + suites).
+  consoleSpawnPortal: function (instant) {
+    if (this.charging) return;                           // one cinematic at a time
+    var cfg = { mode: this.consoleMode, affixes: this.consoleAffixes.slice() };
+    this.registry.set('pendingPortal', cfg);             // survives resize restarts
+    if (this.consoleUi) this.toggleConsole();
+    this.materializePortal(cfg, !instant);
+  },
+
+  buildConsoleUi: function () {
+    if (this.consoleUi) { this.consoleUi.forEach(function (o) { o.destroy(); }); this.consoleUi = null; }
+    var self = this;
+    var W = this.scale.width, H = this.scale.height, cx = W / 2, cy = H / 2;
+    var ui = [];
+    ui.push(this.add.rectangle(cx, cy, 640, 520, 0x0f0f1b, 0.97).setDepth(80).setStrokeStyle(2, 0x41a6f6));
+    ui.push(this.add.text(cx, cy - 232, DATA.console.name, { fontFamily: 'monospace', fontSize: 22, color: '#41a6f6' }).setOrigin(0.5).setDepth(81));
+    ui.push(this.add.text(cx, cy - 206, 'configure the run · power the platform · step through',
+      { fontFamily: 'monospace', fontSize: 11, color: '#94b0c2' }).setOrigin(0.5).setDepth(81));
+
+    // --- mode select ---
+    ui.push(this.add.text(cx - 290, cy - 180, 'GAME MODE', { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }).setDepth(81));
+    DATA.console.modes.forEach(function (m, i) {
+      var y = cy - 150 + i * 46, sel = self.consoleMode === m;
+      var md = DATA.modes[m];
+      var box = self.add.rectangle(cx, y, 580, 40, sel ? 0x29366f : 0x1a1c2c, 1).setDepth(81)
+        .setStrokeStyle(sel ? 2 : 1, sel ? 0xffcd75 : 0x333c57)
+        .setInteractive({ useHandCursor: true });
+      box.on('pointerdown', function () { self.consoleSetMode(m); });
+      ui.push(box);
+      var detail = m === 'clear'
+        ? DATA.realm.name + ' · ' + DATA.realm.killQuota + ' ' + md.desc
+        : md.desc;
+      ui.push(self.add.text(cx - 278, y - 8, (sel ? '> ' : '  ') + md.name,
+        { fontFamily: 'monospace', fontSize: 13, color: sel ? '#ffcd75' : '#94b0c2' }).setDepth(82));
+      ui.push(self.add.text(cx - 278, y + 8, '  ' + detail,
+        { fontFamily: 'monospace', fontSize: 10, color: '#566c86' }).setDepth(82));
+    });
+
+    // --- sealed destinations (M5) — future realms live in the console now ---
+    DATA.console.sealed.forEach(function (d, i) {
+      var y = cy - 66 + i * 24;
+      var box = self.add.rectangle(cx, y, 580, 20, 0x14142a, 1).setDepth(81).setStrokeStyle(1, 0x1f2440);
+      ui.push(box);
+      ui.push(self.add.text(cx - 278, y, '  ' + d.label + ' — ' + d.sub,
+        { fontFamily: 'monospace', fontSize: 10, color: '#3b4466' }).setOrigin(0, 0.5).setDepth(82));
+    });
+
+    // --- affix board (M3.5 preview: toggleable + visible, INERT until M5) ---
+    ui.push(this.add.text(cx - 290, cy - 4, 'MAP AFFIXES — ' + this.consoleAffixes.length + '/' + DATA.console.maxAffixes +
+      ' slotted  (preview: not yet active — the danger is coming at M5)',
+      { fontFamily: 'monospace', fontSize: 11, color: '#ffcd75' }).setDepth(81));
+    DATA.console.affixChoices.forEach(function (key, i) {
+      var a = DATA.affixes.map[key];
+      var on = self.consoleAffixes.indexOf(key) >= 0;
+      var y = cy + 26 + i * 42;
+      var box = self.add.rectangle(cx, y, 580, 36, on ? 0x29366f : 0x1a1c2c, 1).setDepth(81)
+        .setStrokeStyle(on ? 2 : 1, on ? a.tint : 0x333c57)
+        .setInteractive({ useHandCursor: true });
+      box.on('pointerdown', function () { self.consoleToggleAffix(key); });
+      ui.push(box);
+      var col = '#' + ('00000' + a.tint.toString(16)).slice(-6);
+      ui.push(self.add.text(cx - 278, y - 8, (on ? '[x] ' : '[ ] ') + a.name,
+        { fontFamily: 'monospace', fontSize: 12, color: on ? col : '#94b0c2' }).setDepth(82));
+      ui.push(self.add.text(cx - 278, y + 7, '    ' + a.desc,
+        { fontFamily: 'monospace', fontSize: 10, color: '#566c86' }).setDepth(82));
+    });
+
+    // --- spawn ---
+    var btn = this.add.rectangle(cx, cy + 192, 300, 42, 0x38b764, 1).setDepth(81)
+      .setStrokeStyle(2, 0xf4f4f4).setInteractive({ useHandCursor: true });
+    btn.on('pointerdown', function () { self.consoleSpawnPortal(); });
+    ui.push(btn);
+    ui.push(this.add.text(cx, cy + 192, 'POWER THE PLATFORM  [ENTER]',
+      { fontFamily: 'monospace', fontSize: 14, color: '#0f0f1b' }).setOrigin(0.5).setDepth(82));
+    ui.push(this.add.text(cx, cy + 230, 'a new spawn replaces the old portal · portals are consumed on entry · ESC closes',
+      { fontFamily: 'monospace', fontSize: 10, color: '#566c86' }).setOrigin(0.5).setDepth(81));
+    this.consoleUi = ui;
+
+    // ENTER spawns — wired per open, unwired on close (listener-stacking gotcha)
+    this.consoleEnterFn = this.consoleEnterFn || function () { if (this.consoleUi) this.consoleSpawnPortal(); };
+    this.input.keyboard.off('keydown-ENTER', this.consoleEnterFn, this);
+    this.input.keyboard.on('keydown-ENTER', this.consoleEnterFn, this);
+  },
+
+  despawnPortal: function () {
+    this.powerDown();                                    // the works go dark
+    var sp = this.spawnedPortal;
+    if (!sp) return;
+    if (sp.swirl) sp.swirl.remove();
+    if (sp.label) sp.label.destroy();
+    sp.sprite.destroy();
+    this.spawnedPortal = null;
+    this.plazaPortals = [];
+    this.portal = null;
+  },
+
+  // Light the ring + start the powered pulse stream (the steady state).
+  powerUp: function (tint) {
+    var self = this, J = DATA.juice.conduit;
+    this.ringLights.forEach(function (l, i) {
+      l.setTint(tint).setAlpha(1);
+      self.tweens.add({ targets: l, alpha: 0.55, yoyo: true, repeat: -1,
+        duration: 700, delay: i * 90 });                 // the ring breathes
+    });
+    if (this.flowTimer) this.flowTimer.remove();
+    this.flowTimer = this.time.addEvent({ delay: J.flowEveryMs, loop: true,
+      callback: function () { self.conduitPulse(tint, J.flowTravelMs); } });
+  },
+
+  // The portal itself (sprite, swirl, label) — shared by both spawn paths.
+  createPortalAt: function (cfg, tint) {
+    var spot = this.portalSpot, mode = DATA.modes[cfg.mode];
+    var p = this.physics.add.staticSprite(spot.x, spot.y, 'portal').setScale(2.2).setDepth(4);
+    if (cfg.mode === 'survival') p.setTint(tint);
+    this.tweens.add({ targets: p, angle: 360, duration: 4000, repeat: -1 });
+    var swirl = portalSwirl(this, spot.x, spot.y, tint);
+    var names = cfg.affixes.map(function (k) { return DATA.affixes.map[k].name; });
+    var text = cfg.mode === 'clear'
+      ? mode.name + ' · ' + DATA.realm.name + '\n' + DATA.realm.killQuota + ' ' + mode.desc
+      : mode.name + ' · ' + mode.desc;
+    if (names.length) text += '\n— ' + names.join(' · ') + ' —';
+    // signpost to the RIGHT of the platform (clear of the account header even
+    // in the 960×640 window; the SPACE prompt floats above the portal itself)
+    var label = this.add.text(spot.x + 104, spot.y + 6, text,
+      { fontFamily: 'monospace', fontSize: 10, color: cfg.mode === 'survival' ? '#ffcd75' : '#41a6f6',
+        align: 'left', wordWrap: { width: 260 } }).setOrigin(0, 0.5);
+    var wt = this.children.getByName('worksTitle');
+    if (wt) wt.setVisible(false);                        // the label takes its spot
+    this.spawnedPortal = { sprite: p, label: label, swirl: swirl, mode: cfg.mode, affixes: cfg.affixes.slice() };
+    this.plazaPortals = [{ sprite: p, mode: cfg.mode, affixes: cfg.affixes.slice() }];
+    this.portal = p;                                     // canonical (suites + docs)
+  },
+
+  // Materialize the configured portal on the platform. animate=false is the
+  // instant path (registry rebuild after a resize restart, headless suites);
+  // animate=true plays the full charge-up: console flare → pulses race the
+  // conduit → ring lights ignite one by one → the portal tears open.
+  materializePortal: function (cfg, animate) {
+    this.despawnPortal();                                // a new spawn replaces the old
+    var tint = cfg.mode === 'survival' ? 0xffcd75 : 0x41a6f6;
+    var self = this, J = DATA.juice.conduit;
+
+    if (!animate) { this.createPortalAt(cfg, tint); this.powerUp(tint); return; }
+
+    this.charging = true;
+    AUDIO.play('ui');
+    // 1. console flare
+    var flare = this.add.sprite(this.consolePos.x, this.consolePos.y, 'console')
+      .setScale(3).setDepth(5).setTintFill(0xf4f4f4).setAlpha(0.9);
+    this.tweens.add({ targets: flare, alpha: 0, scale: 3.6, duration: 320,
+      onComplete: function () { flare.destroy(); } });
+    // 2. pulses race up the conduit
+    for (var i = 0; i < J.chargePulses; i++) {
+      this.time.delayedCall(i * J.pulseGapMs, function () { self.conduitPulse(tint, J.pulseTravelMs); });
+    }
+    var pulsesDone = (J.chargePulses - 1) * J.pulseGapMs + J.pulseTravelMs;
+    // 3. ring lights ignite one by one (each pulse "delivers" power)
+    this.ringLights.forEach(function (l, i) {
+      self.time.delayedCall(pulsesDone + i * J.segMs, function () {
+        l.setTint(tint).setAlpha(1).setScale(2);
+        self.tweens.add({ targets: l, scale: 1.4, duration: 180 });
+        AUDIO.play('hit');
+      });
+    });
+    var ringDone = pulsesDone + this.ringLights.length * J.segMs;
+    // 4. the portal tears open
+    this.time.delayedCall(ringDone, function () {
+      AUDIO.play('portal');
+      self.createPortalAt(cfg, tint);
+      self.portal.setScale(0.2);
+      self.tweens.add({ targets: self.portal, scale: 2.2, duration: J.portalMs, ease: 'Back.Out' });
+      var flash = self.add.sprite(self.portalSpot.x, self.portalSpot.y, 'portal')
+        .setScale(0.4).setDepth(5).setTint(0xf4f4f4).setAlpha(0.9);
+      self.tweens.add({ targets: flash, scale: 3.4, alpha: 0, duration: 480,
+        onComplete: function () { flash.destroy(); } });
+      self.cameras.main.shake(120, 0.002);
+      self.powerUp(tint);
+      self.charging = false;
     });
   },
 
@@ -390,6 +671,7 @@ var NexusScene = new Phaser.Class({
       return;
     }
     if (this.gyUi) this.toggleGraveyard();               // one overlay at a time
+    if (this.consoleUi) this.toggleConsole();
     this.buildVaultUi();
     AUDIO.play('ui');
   },
@@ -514,6 +796,7 @@ var NexusScene = new Phaser.Class({
   // ------------------------------------------- M2: GRAVEYARD & RECORDS --
   toggleGraveyard: function () {
     if (this.gyUi) { this.gyUi.forEach(function (o) { o.destroy(); }); this.gyUi = null; return; }
+    if (this.consoleUi) this.toggleConsole();            // one overlay at a time
     var W = this.scale.width, H = this.scale.height, cx = W / 2, cy = H / 2;
     var ui = [], R = ACCOUNT.records;
     ui.push(this.add.rectangle(cx, cy, 620, 460, 0x0f0f1b, 0.96).setDepth(80).setStrokeStyle(2, 0x29366f));
@@ -548,14 +831,19 @@ var NexusScene = new Phaser.Class({
       var e = this.plazaPortals[i];
       if (Math.hypot(e.sprite.x - p.x, e.sprite.y - p.y) <= R) { near = e; break; }
     }
-    if (near && !this.vaultUi && !this.gyUi) {
+    if (near && !this.vaultUi && !this.gyUi && !this.consoleUi) {
       if (this.portalPrompt && this.portalPrompt.portalRef !== near) {
         this.portalPrompt.destroy(); this.portalPrompt = null;
       }
       if (!this.portalPrompt) {
-        this.portalPrompt = this.add.text(0, 0,
-          'SPACE — enter ' + DATA.modes[near.mode].name,
-          { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }).setOrigin(0.5).setDepth(60);
+        // M3.5: the pedestal-commit moment — the prompt reads back the run you
+        // configured (mode + slotted affixes) before you press SPACE.
+        var ptxt = 'SPACE — enter ' + DATA.modes[near.mode].name;
+        if (near.affixes && near.affixes.length) {
+          ptxt += '\n' + near.affixes.map(function (k) { return DATA.affixes.map[k].name; }).join(' · ');
+        }
+        this.portalPrompt = this.add.text(0, 0, ptxt,
+          { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75', align: 'center' }).setOrigin(0.5).setDepth(60);
         // plaza portals hug the screen edge — keep the prompt fully on screen
         var hw = this.portalPrompt.width / 2 + 8;
         this.portalPrompt.setPosition(
@@ -573,17 +861,23 @@ var NexusScene = new Phaser.Class({
     if (this.entering) return;
     this.entering = true;
     if (this.portalPrompt) { this.portalPrompt.destroy(); this.portalPrompt = null; }
+    if (this.consolePrompt) { this.consolePrompt.destroy(); this.consolePrompt = null; }
+    this.registry.remove('pendingPortal');               // M3.5: ONE-SHOT — consumed on entry
+    this.powerDown();                                    // the works go dark behind you
     persist();
     AUDIO.play('portal');
     this.cameras.main.fadeOut(400);
     var self = this;
-    this.time.delayedCall(450, function () { self.scene.start('Realm', { mode: entry.mode }); });
+    this.time.delayedCall(450, function () {
+      self.scene.start('Realm', { mode: entry.mode, affixes: entry.affixes || [] });
+    });
   },
 
   update: function (time, delta) {
     var intent = this.rig.collect(this.player, false);
     intent.firing = false; intent.ability = false;      // nexus is safe (Fusion Law F1)
     this.handlePortals();                               // M3: SPACE commits at a portal
+    this.handleConsole();                               // M3.5: SPACE opens the console
     Entities.updatePlayer(this, this.player, intent, time, delta);
   }
 });
@@ -637,6 +931,11 @@ var RealmScene = new Phaser.Class({
     // guards in create(): Phaser reuses scene instances (TESTING.md bug #1).
     this.mode = (data && data.mode) || 'clear';                    // E6: objective mode
     this.modeDef = DATA.modes[this.mode];
+    // M3.5: map affixes slotted at the REALM CONSOLE ride along for DISPLAY.
+    // They mutate nothing until DATA.console.live flips at M5 (risk = reward
+    // numbers land then, resolved by playtest). The HUD shows them so a run
+    // configured with affixes is visibly that run.
+    this.mapAffixes = (data && data.affixes) || [];
     this.scanning = false; this.scanUi = null;                     // E3: scouter overlay
     this.looting = false; this.lootUi = null; this.pendingLoot = null; // E1: chest overlay
     this.lootItems = [];                                           // M3: chest gear rows
@@ -1314,7 +1613,15 @@ var RealmScene = new Phaser.Class({
     this.barText = this.add.text(0, 0, '', { fontFamily: T.fontFamily, fontSize: 11, color: '#94b0c2' }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(52);
     this.lvText = this.add.text(0, 0, '', { fontFamily: T.fontFamily, fontSize: 13, color: '#ffcd75' }).setOrigin(1, 0.5).setScrollFactor(0).setDepth(52);
     this.hudText = this.add.text(12, 12, '', { fontFamily: T.fontFamily, fontSize: 12, color: '#f4f4f4' }).setScrollFactor(0).setDepth(51);
-    this.debugText = this.add.text(12, 34, '', { fontFamily: T.fontFamily, fontSize: 11, color: '#38b764' }).setScrollFactor(0).setDepth(51).setVisible(false);
+    // M3.5: slotted map affixes ride under the objective line — visibly part
+    // of the run, even while they're preview-only (inert until M5).
+    if (this.mapAffixes.length) {
+      this.affixText = this.add.text(12, 30,
+        'AFFIXES: ' + this.mapAffixes.map(function (k) { return DATA.affixes.map[k].name; }).join(' · ') +
+        (DATA.console.live ? '' : '  (preview — not yet active)'),
+        { fontFamily: T.fontFamily, fontSize: 10, color: '#ffcd75' }).setScrollFactor(0).setDepth(51);
+    } else { this.affixText = null; }
+    this.debugText = this.add.text(12, this.mapAffixes.length ? 46 : 34, '', { fontFamily: T.fontFamily, fontSize: 11, color: '#38b764' }).setScrollFactor(0).setDepth(51).setVisible(false);
     this.rig.keys.T.on('down', function () {
       this.autoFire = !this.autoFire;
       SAVE.settings().autoFire = this.autoFire;           // persists across realms (TM-1)

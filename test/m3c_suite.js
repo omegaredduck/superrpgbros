@@ -1,8 +1,9 @@
-// M3c headless verification suite — AFFIX ENGINE v2 (E9): SPLITTING/EVOLVING/
-// PACK LEADER un-gated · split only rolls on shooters · bolts fork mid-flight
-// (children never re-split) · evolution triggers once on surviving a hit ·
-// pack leader skews the director to casters · champion kills add bounty rolls
-// to the boss chest (capped). Fails on ANY console error.
+// M3c headless verification suite — AFFIX ENGINE v2 (E9) + M3.5 REALM CONSOLE:
+// plaza boots EMPTY · console prompt/board · placeholder affixes toggle VISIBLY
+// (inert until M5) · SPAWN materializes a one-shot portal wearing the affixes ·
+// SPACE gating unchanged · affixes ride into the realm HUD as preview · then
+// SPLITTING/EVOLVING/PACK LEADER behaviors · champion bounty (capped).
+// Fails on ANY console error.
 const { chromium } = require('playwright');
 const path = require('path');
 
@@ -23,11 +24,62 @@ function check(name, ok, extra) {
   const scene = (k) => `game.scene.getScene('${k}')`;
   const sleep = (ms) => page.waitForTimeout(ms);
 
-  // -- 0. boot; portals are SPACE-activated (standing on one does NOT enter) ----
+  // -- 0. boot; M3.5 REALM CONSOLE: no portal exists until you spawn one -----------
   await page.goto(GAME);
   await page.waitForFunction(`typeof game !== 'undefined' && game.scene.isActive('Title')`, null, { timeout: 15000 });
   await page.evaluate(`${scene('Title')}.chooseSlot(1)`);
   await page.waitForFunction(`game.scene.isActive('Nexus')`, null, { timeout: 5000 });
+  const empty = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    var dark = n.ringLights.every(function(l){ return l.alpha < 1; });
+    return { portals: n.plazaPortals.length, canonical: !!n.portal, console: !!n.consolePos,
+             ring: n.ringLights.length, dark: dark, flow: !!n.flowTimer };})()`);
+  check('M3.5 the works boot DORMANT — platform + console present, zero portals',
+    empty.portals === 0 && !empty.canonical && empty.console);
+  check('M3.5 dormant state: all 8 ring lights dark, no conduit flow',
+    empty.ring === 8 && empty.dark && !empty.flow);
+
+  // walk to the console → prompt; open the board and slot affixes
+  await page.evaluate(`(function(){var n=${scene('Nexus')};
+    n.player.setPosition(n.consolePos.x, n.consolePos.y);})()`);
+  await sleep(600);
+  const cprompt = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    return n.consolePrompt ? n.consolePrompt.text : null;})()`);
+  check('M3.5 console prompt appears in range', !!cprompt && cprompt.indexOf('CONSOLE') >= 0, cprompt);
+  const board = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    n.toggleConsole();
+    n.consoleToggleAffix('apex'); n.consoleToggleAffix('hordes');
+    var texts=[]; n.consoleUi.forEach(function(c){ if (c.text) texts.push(c.text); });
+    var blob = texts.join(' | ');
+    return { open: !!n.consoleUi, slotted: n.consoleAffixes.slice(),
+             showsOn: blob.indexOf('[x] APEX PREDATORS') >= 0 && blob.indexOf('[x] HORDES') >= 0,
+             showsOff: blob.indexOf('[ ] ESCALATING THREATS') >= 0,
+             counter: blob.indexOf('2/' + DATA.console.maxAffixes) >= 0,
+             sealed: blob.indexOf('SEALED REALM') >= 0 };})()`);
+  check('M3.5 console board: toggled affixes VISIBLY slotted ([x]), others [ ], counter right',
+    board.open && board.slotted.length === 2 && board.showsOn && board.showsOff && board.counter);
+  check('M3.5 future realms are SEALED rows inside the console (no pedestal furniture)', board.sealed);
+
+  // spawn → the full charge-up cinematic: console powers the platform, THEN the
+  // portal exists (headless runs ~5× slow, so the ~2.3s cinematic gets ~30s)
+  await page.evaluate(`(function(){var n=${scene('Nexus')}; n.consoleSpawnPortal();})()`);
+  const charging = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    return { closed: !n.consoleUi, charging: n.charging, noPortalYet: !n.portal,
+             pending: !!game.registry.get('pendingPortal') };})()`);
+  check('M3.5 SPAWN starts the CHARGE-UP: board closes, works charging, portal not yet born',
+    charging.closed && charging.charging && charging.noPortalYet && charging.pending);
+  await page.waitForFunction(`(function(){var n=${scene('Nexus')}; return !!n.portal && !n.charging;})()`,
+    null, { timeout: 30000 });
+  const spawned = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    var lit = n.ringLights.every(function(l){ return l.tintTopLeft !== 0x29366f; });
+    return { portal: !!n.portal,
+             label: n.spawnedPortal ? n.spawnedPortal.label.text : '',
+             lit: lit, flow: !!n.flowTimer };})()`);
+  check('M3.5 charge-up completes: portal born, all 8 ring lights lit, conduit flowing',
+    spawned.portal && spawned.lit && spawned.flow);
+  check('M3.5 the portal label wears the slotted affixes',
+    spawned.label.indexOf('APEX PREDATORS') >= 0 && spawned.label.indexOf('HORDES') >= 0, spawned.label);
+
+  // standing on it still does NOT enter (M3 gating unchanged); prompt reads the run back
   await page.evaluate(`(function(){var n=${scene('Nexus')}; n.player.setPosition(n.portal.x, n.portal.y);})()`);
   await sleep(600);                              // long enough that walk-in WOULD have fired
   const gated = await page.evaluate(`(function(){var n=${scene('Nexus')};
@@ -35,6 +87,8 @@ function check(name, ok, extra) {
              prompt: n.portalPrompt ? n.portalPrompt.text : null };})()`);
   check('standing on a portal does NOT enter — the prompt asks for SPACE',
     gated.stillNexus && gated.prompt && gated.prompt.indexOf('SPACE') >= 0, gated.prompt);
+  check('the SPACE prompt reads back the slotted affixes (pedestal-commit moment)',
+    gated.prompt && gated.prompt.indexOf('APEX PREDATORS') >= 0 && gated.prompt.indexOf('HORDES') >= 0, gated.prompt);
   // M3: portals are SPACE-activated (retried — headless fps can stall a frame)
   for (let sp = 0; sp < 3; sp++) {
     await page.keyboard.press('Space');
@@ -42,6 +96,14 @@ function check(name, ok, extra) {
     catch (e) { if (sp === 2) throw e; }
   }
   await sleep(400);
+  const carried = await page.evaluate(`(function(){var r=${scene('Realm')};
+    return { affixes: r.mapAffixes.slice(),
+             hud: r.affixText ? r.affixText.text : '',
+             consumed: !game.registry.get('pendingPortal') };})()`);
+  check('M3.5 affixes ride into the realm + HUD shows them as PREVIEW',
+    carried.affixes.length === 2 && carried.hud.indexOf('APEX PREDATORS') >= 0 &&
+    carried.hud.indexOf('preview') >= 0, carried.hud);
+  check('M3.5 the portal was ONE-SHOT — consumed on entry (registry cleared)', carried.consumed);
 
   // -- 1. all five affixes are live (no gates left in the data) -----------------
   const gates = await page.evaluate(`(function(){
