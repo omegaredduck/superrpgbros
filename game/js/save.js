@@ -128,20 +128,26 @@ var SAVE = (function () {
   // Fresh-profile defaults. musicVolume/sfxVolume both seed from the one
   // legacy defaultVolume; `binds` is built from DATA.keybinds (event.code
   // strings). `volume` is kept only so an old save can migrate its value.
-  function settingsDefaults() {
-    var seed = (typeof DATA !== 'undefined' && DATA.audio) ? DATA.audio.defaultVolume : 0.5;
+  // Default binds: each action id -> { primary, alt } of event.code strings.
+  // Only movement ships with an alt (the arrow keys) by default.
+  function defaultBinds() {
     var binds = {};
     if (typeof DATA !== 'undefined' && DATA.keybinds && DATA.keybinds.list) {
-      DATA.keybinds.list.forEach(function (b) { binds[b.id] = b.def; });
+      DATA.keybinds.list.forEach(function (b) { binds[b.id] = { primary: b.def, alt: b.alt || null }; });
     }
+    return binds;
+  }
+
+  function settingsDefaults() {
+    var seed = (typeof DATA !== 'undefined' && DATA.audio) ? DATA.audio.defaultVolume : 0.5;
     return {
       volume: seed,            // legacy master — migration seed only
       musicVolume: seed,       // 2026-07-12: split channels
       musicOn: true,
       sfxVolume: seed,
       sfxOn: true,
-      autoFire: true,          // Q2 default: ON
-      binds: binds             // action id -> event.code
+      autoFire: true,          // Q2 default: ON (now a Settings checkbox, not a key)
+      binds: defaultBinds()    // action id -> { primary, alt }
     };
   }
 
@@ -163,11 +169,19 @@ var SAVE = (function () {
               if (k === 'binds') continue;                 // merged per-key below
               if (typeof d[k] === typeof def[k]) def[k] = d[k];
             }
-            // Binds: overlay saved codes onto defaults so a NEW action added in
-            // a later version keeps its default instead of vanishing (TM-4 spirit).
+            // Binds: overlay saved onto defaults so a NEW action added later
+            // keeps its default instead of vanishing (TM-4 spirit). Accepts the
+            // OLD single-string format too (m3o) — it becomes the primary, the
+            // default alt is kept (so migrated movement still has its arrows).
             if (d.binds && typeof d.binds === 'object') {
               for (var id in def.binds) {
-                if (typeof d.binds[id] === 'string') def.binds[id] = d.binds[id];
+                var sv = d.binds[id];
+                if (typeof sv === 'string') {
+                  def.binds[id].primary = sv;                 // legacy → primary
+                } else if (sv && typeof sv === 'object') {
+                  if (typeof sv.primary === 'string') def.binds[id].primary = sv.primary;
+                  if (typeof sv.alt === 'string' || sv.alt === null) def.binds[id].alt = sv.alt;
+                }
               }
             }
           }
@@ -181,10 +195,7 @@ var SAVE = (function () {
   // Reset every keybind to its DATA default (used by the settings panel).
   function resetBinds() {
     var s = settings();
-    s.binds = {};
-    if (typeof DATA !== 'undefined' && DATA.keybinds && DATA.keybinds.list) {
-      DATA.keybinds.list.forEach(function (b) { s.binds[b.id] = b.def; });
-    }
+    s.binds = defaultBinds();
     saveSettings();
     return s.binds;
   }

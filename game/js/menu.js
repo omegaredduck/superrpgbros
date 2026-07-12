@@ -85,14 +85,12 @@ var MENU = (function () {
 
     // ---- SETTINGS PAGE ---------------------------------------------------
     function volRow(y, name, get, setV, isOn, setOn) {
-      var cx = Wd() / 2, left = cx - 250;
+      var left = Wd() / 2 - 320;
       txt(left, y, name, { size: 16, color: '#f4f4f4' });
-      // on/off toggle
       var on = isOn();
       btn(left + 92, y, on ? '[ ON ]' : '[ OFF ]', function () {
         setOn(!isOn()); render();
       }, { size: 14, ox: 0, color: on ? '#a7f070' : '#8a93a8' });
-      // minus / bar / plus
       btn(left + 176, y, '◄', function () { setV(get() - 0.1); render(); }, { size: 16, ox: 0.5 });
       var v = Math.max(0, Math.min(1, get())), n = Math.round(v * 10);
       var bar = new Array(n + 1).join('█') + new Array(10 - n + 1).join('░');
@@ -101,57 +99,70 @@ var MENU = (function () {
       btn(left + 420, y, '►', function () { setV(get() + 0.1); render(); }, { size: 16, ox: 0.5 });
     }
 
+    // one keybind row: label + primary chip + alternate chip (each clickable).
+    function chip(x, y, id, slot) {
+      var isCap = capturing && capturing.id === id && capturing.slot === slot;
+      var lbl = slot === 'primary' ? BINDS.keyLabel(id) : BINDS.altLabel(id);
+      btn(x, y, isCap ? '[ … ]' : '[ ' + lbl + ' ]',
+        function () { beginCapture(id, slot); },
+        { size: 13, ox: 0.5, color: isCap ? '#ffcd75' : (slot === 'alt' ? '#8fb7d9' : '#a7d3ff') });
+    }
     function keyRow(x, y, item) {
-      txt(x, y, item.label, { size: 14, color: '#cbd5e6' });
-      var chipX = x + 214, isCap = capturing === item.id;
-      btn(chipX, y, isCap ? '[ press a key ]' : '[ ' + BINDS.keyLabel(item.id) + ' ]',
-        function () { beginCapture(item.id); },
-        { size: 14, ox: 1, color: isCap ? '#ffcd75' : '#a7d3ff' });
+      txt(x, y, item.label, { size: 13, color: '#cbd5e6' });
+      chip(x + 168, y, item.id, 'primary');
+      chip(x + 250, y, item.id, 'alt');
     }
 
     function renderSettings() {
-      var cx = Wd() / 2, cy = Hd() / 2, w = 640, h = 512;
+      var cx = Wd() / 2, cy = Hd() / 2, w = 700, h = 544;
       box(cx, cy, w, h);
-      var top = cy - h / 2;
-      txt(cx, top + 34, 'SETTINGS', { size: 26, color: '#ffcd75', ox: 0.5, bold: true });
+      var top = cy - h / 2, L = cx - 320;
+      txt(cx, top + 30, 'SETTINGS', { size: 26, color: '#ffcd75', ox: 0.5, bold: true });
 
-      txt(cx - 250, top + 74, 'AUDIO', { size: 13, color: '#7cc7ff' });
-      volRow(top + 104, 'Music', AUDIO.musicVolume, AUDIO.setMusicVolume, AUDIO.musicOn, AUDIO.setMusicOn);
-      volRow(top + 136, 'Sound', AUDIO.sfxVolume, AUDIO.setSfxVolume, AUDIO.sfxOn, AUDIO.setSfxOn);
+      txt(L, top + 64, 'AUDIO', { size: 13, color: '#7cc7ff' });
+      volRow(top + 92, 'Music', AUDIO.musicVolume, AUDIO.setMusicVolume, AUDIO.musicOn, AUDIO.setMusicOn);
+      volRow(top + 122, 'Sound', AUDIO.sfxVolume, AUDIO.setSfxVolume, AUDIO.sfxOn, AUDIO.setSfxOn);
 
-      txt(cx - 250, top + 178, 'KEYBINDS', { size: 13, color: '#7cc7ff' });
-      txt(cx + 250, top + 178, 'click a key to rebind', { size: 11, color: '#8a93a8', ox: 1 });
+      txt(L, top + 158, 'GAMEPLAY', { size: 13, color: '#7cc7ff' });
+      var af = SAVE.settings().autoFire;
+      txt(L, top + 184, 'Auto-fire', { size: 16, color: '#f4f4f4' });
+      btn(L + 92, top + 184, af ? '[ ON ]' : '[ OFF ]', function () {
+        SAVE.settings().autoFire = !SAVE.settings().autoFire; SAVE.saveSettings(); render();
+      }, { size: 14, ox: 0, color: af ? '#a7f070' : '#8a93a8' });
+      txt(L + 176, top + 184, af ? 'fires on its own — no button held' : 'hold mouse / interact to fire',
+        { size: 11, color: '#8a93a8' });
 
-      // two columns
+      txt(L, top + 220, 'KEYBINDS', { size: 13, color: '#7cc7ff' });
+      txt(cx + 320, top + 220, 'primary · alternate — click to rebind', { size: 11, color: '#8a93a8', ox: 1 });
+
       var list = (DATA.keybinds && DATA.keybinds.list) || [];
-      var perCol = Math.ceil(list.length / 2), rowH = 30, y0 = top + 208;
+      var perCol = Math.ceil(list.length / 2), rowH = 30, y0 = top + 250;
       for (var i = 0; i < list.length; i++) {
-        var col = i < perCol ? 0 : 1;
-        var row = i - col * perCol;
-        keyRow(cx - 250 + col * 268, y0 + row * rowH, list[i]);
+        var col = i < perCol ? 0 : 1, row = i - col * perCol;
+        keyRow(L + col * 330, y0 + row * rowH, list[i]);
       }
 
-      var by = cy + h / 2 - 34;
-      btn(cx - 250, by, 'Reset keybinds', function () {
+      var by = cy + h / 2 - 30;
+      btn(L, by, 'Reset keybinds', function () {
         SAVE.resetBinds();
         if (scene.refreshBindLabels) scene.refreshBindLabels();
         if (scene.rig && scene.rig.refresh) scene.rig.refresh();
         if (typeof window !== 'undefined' && window.updateFooter) window.updateFooter();
         render();
       }, { size: 14, ox: 0, color: '#ff9e6d' });
-      btn(cx + 250, by, 'Back', function () { page = 'root'; render(); }, { size: 16, ox: 1, color: '#a7f070' });
+      btn(cx + 320, by, 'Back', function () { page = 'root'; render(); }, { size: 16, ox: 1, color: '#a7f070' });
     }
 
-    // ---- key capture -----------------------------------------------------
-    function beginCapture(id) {
+    // ---- key capture (per slot) ------------------------------------------
+    function beginCapture(id, slot) {
       if (capturing) return;
-      capturing = id;
+      capturing = { id: id, slot: slot };
       scene._bindsCapture = true;                          // suppress dispatch
       render();
       scene.input.keyboard.once('keydown', function (ev) {
         capturing = null;
         if (ev && ev.code && ev.code !== 'Escape') {
-          BINDS.rebind(id, ev.code);
+          BINDS.rebind(id, slot, ev.code);
           if (scene.refreshBindLabels) scene.refreshBindLabels();
           if (scene.rig && scene.rig.refresh) scene.rig.refresh();
           if (typeof window !== 'undefined' && window.updateFooter) window.updateFooter();

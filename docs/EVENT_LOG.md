@@ -6,6 +6,67 @@
 
 ---
 
+## 2026-07-12 (addendum) · M3.11 · HUD numbers → black (?v=m3p → m3q)
+
+**User: the combat HUD numeric readouts (health, XP, mana) should be BLACK, not
+white.** Changed hpOrbText / mpOrbText / xpText color `#f4f4f4` → `#000000` in
+buildHud (`scenes.js`) — black reads on the bright red/blue orbs and the gold XP
+fill. Objective/affix/debug HUD text unchanged. `index.html` **?v= m3p → m3q**.
+Smoke test still 21/21 green, zero console errors.
+
+---
+
+## 2026-07-12 · M3.11 · HUD XP BAR · AUTO-FIRE CHECKBOX · ALT KEYBINDS (?v=m3o → m3p)
+
+**User polish on the m3.10 work: (1) kill the bottom action box — show ONLY a
+segmented XP bar across the bottom between the health & mana orbs, split into 5
+sections by blue dividers, with a #/# readout; (2) auto-fire is NO LONGER a key
+— only a checkbox in Settings; (3) EVERY keybind gets a 2nd (alternate) binding,
+and by default only WASD has alternates (the arrow keys).** Design calls
+(AskUserQuestion): the #/# = XP-into-level / needed; drop the ability tile and
+level text entirely — just the XP bar.
+
+**Landed:**
+- HUD XP BAR (`scenes.js`): the glass action box + ability tile + auto-fire text
+  + "Lv N" are GONE. A single 16px bar spans hpOrb→mpOrb along the bottom: dark
+  track, gold progress fill, 5 equal segments cut by 4 blue (0x41a6f6) dividers,
+  blue border, centered `floor(xp) / needed` (or `MAX` at cap). New `this.xpText`
+  replaces abilityText/barText/lvText.
+- AUTO-FIRE → SETTINGS CHECKBOX (`data.js`, `menu.js`, `scenes.js`): removed the
+  `autofire` keybind action; added a GAMEPLAY section in Settings with an
+  Auto-fire [ON/OFF] toggle (writes `settings.autoFire`). The realm reads
+  `SAVE.settings().autoFire` LIVE each frame (`rig.collect`), so the toggle takes
+  effect immediately; the old `this.autoFire` field + `toggleAutoFire` + the T
+  dispatch are gone.
+- ALTERNATE BINDINGS (`data.js`, `save.js`, `binds.js`, `menu.js`, `scenes.js`):
+  binds are now `{ primary, alt }` per action (was a single event.code). Only the
+  four movement actions ship with a default alt (Arrow keys). `save.js` migrates
+  the m3o single-string format → `{primary: <old>, alt: <default>}`. `BINDS`:
+  keyLabel = primary, new `altLabel`, `actionForEvent` matches EITHER slot,
+  `rebind(id, slot, code)` de-dupes across both slots, `code(id, slot)` for the
+  rig. The rig polls primary+alt for movement AND interact (`held()`,
+  `interactJustDown()` — the 6 SPACE-in-range station checks now honour the alt).
+  Settings keybinds list = two columns, each row `label [primary] [alt]`; footer
+  drops the auto-fire hint.
+
+**Files:** `scenes.js` (HUD, rig primary/alt, interactJustDown ×6, live
+auto-fire), `menu.js` (Gameplay auto-fire + two-chip keybind rows), `binds.js`
+(two-slot model), `save.js` (`defaultBinds` + migration + resetBinds), `data.js`
+(alt defaults, autofire removed), `index.html` (footer, **?v= m3o → m3p**).
+
+**Testing:** container smoke test rewritten + green **21/21**, zero console
+errors: 12 binds seeded (no autofire), moveUp alt = arrow, non-move alt = —,
+auto-fire is a boolean setting that flips live, rebind primary + set an alt +
+dispatch matches BOTH slots, HUD has xpText and dropped bar/lv, XP text is #/#.
+Screens of the segmented XP-bar HUD + the new Settings (auto-fire + primary/alt
+keybinds) delivered. STILL: not in the numbered suites; 143 battery not re-run
+on m3p.
+
+**Next up:** re-run + extend the numbered suites for m3o/m3p; then Q3/Q5 flags →
+CC0 art. User to run `2_SAVE_AND_UPLOAD.bat`.
+
+---
+
 ## 2026-07-12 · M3.10 · SETTINGS, ESC MENU & REMAPPABLE KEYBINDS (?v=m3n → m3o)
 
 **User ask: ESC should stop dropping out of fullscreen (only F toggles it); a

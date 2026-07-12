@@ -8,6 +8,7 @@
 var BINDS = (function () {
 
   function binds() { return SAVE.settings().binds; }
+  function slotOf(id, slot) { var b = binds()[id]; return b ? b[slot] : null; }
 
   // event.code -> a short, human key label for on-screen use.
   function friendly(code) {
@@ -30,28 +31,32 @@ var BINDS = (function () {
     return special[code] || code;
   }
 
-  // Current key label for an action id (what the on-screen chips render).
-  function keyLabel(id) { return friendly(binds()[id]); }
+  // On-screen label for an action's PRIMARY key (the chips beside stations, the
+  // HUD, the footer all use this). altLabel() is the alternate; '—' when unset.
+  function keyLabel(id) { return friendly(slotOf(id, 'primary')); }
+  function altLabel(id) { return friendly(slotOf(id, 'alt')); }
 
-  // The action (if any) bound to a keydown event.
+  // The action (if any) bound to a keydown event — matches EITHER slot.
   function actionForEvent(ev) {
     var b = binds();
-    for (var id in b) if (b[id] === ev.code) return id;
+    for (var id in b) {
+      if (b[id] && (b[id].primary === ev.code || b[id].alt === ev.code)) return id;
+    }
     return null;
   }
 
-  // Rebind with SWAP: if another action already holds `code`, it inherits the
-  // key `id` was using — so two actions never silently share a key and none
-  // is left blank. Returns the (possibly) displaced action id, else null.
-  function rebind(id, code) {
+  // Rebind one SLOT ('primary'|'alt') of an action. De-dupes: the same code is
+  // cleared from any other (action, slot) it occupied, so no two bindings ever
+  // silently share a key (the displaced slot becomes null / unbound).
+  function rebind(id, slot, code) {
     var b = binds();
-    var prev = b[id], displaced = null;
     for (var other in b) {
-      if (other !== id && b[other] === code) { b[other] = prev; displaced = other; }
+      if (!b[other]) continue;
+      if ((other !== id || 'primary' !== slot) && b[other].primary === code) b[other].primary = null;
+      if ((other !== id || 'alt' !== slot)     && b[other].alt === code)     b[other].alt = null;
     }
-    b[id] = code;
+    if (b[id]) b[id][slot] = code;
     SAVE.saveSettings();
-    return displaced;
   }
 
   // event.code -> Phaser KeyCode number, for addKey() (movement + ability keys,
@@ -85,9 +90,14 @@ var BINDS = (function () {
     });
   }
 
+  // event.code for a given action + slot (null if unbound) — for the rig's
+  // polled movement / interact keys.
+  function code(id, slot) { return slotOf(id, slot); }
+
   return {
-    friendly: friendly, keyLabel: keyLabel, actionForEvent: actionForEvent,
-    rebind: rebind, phaserKeyCode: phaserKeyCode, wire: wire
+    friendly: friendly, keyLabel: keyLabel, altLabel: altLabel,
+    actionForEvent: actionForEvent, rebind: rebind, code: code,
+    phaserKeyCode: phaserKeyCode, wire: wire
   };
 })();
 if (typeof module !== 'undefined') { module.exports = BINDS; }

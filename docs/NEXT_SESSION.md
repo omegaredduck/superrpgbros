@@ -11,7 +11,7 @@ We're continuing work on my game in the connected "super rpg bros" folder
 (project memory has the standing decisions — read it, plus docs/MILESTONES.md
 and the top entry of docs/EVENT_LOG.md, before writing any code).
 
-WHERE THINGS STAND (as of 2026-07-12, build ?v=m3o):
+WHERE THINGS STAND (as of 2026-07-12, build ?v=m3q):
 - M0–M1 done. M2 + M2.1 features all landed; their gates are HUMAN gates
   (my dev self-test + an outside tester for Fun Gate 1) — don't wait on them.
 - M3 features done (map builder, equipment, vault, affix engine v2,
@@ -57,22 +57,27 @@ WHERE THINGS STAND (as of 2026-07-12, build ?v=m3o):
   final 3 batteries; if they return they cluster in timer sections.
   M3.9 CHAMBER MUSIC (?v=m3n): chiptune sequencer in audio.js + "The
   Chamber at Rest" (original 8-bit loop, plays only in the chamber).
-  M3.10 SETTINGS · ESC MENU · KEYBINDS (?v=m3o, NEW binds.js + menu.js):
-  ESC no longer exits fullscreen (main.js keyboard-locks Escape; only F
-  toggles fullscreen); split Music + SFX volume each with on/off; ONE ESC
-  menu in chamber AND realms (Resume · Settings · Exit to load screen;
-  realm also Return to chamber); Settings has the audio sliders + a
-  remappable KEYBINDS list (13 actions, event.code, live-updates the (P)/
-  (V)/(B)/(R)/(G) labels + HUD + footer). VERIFIED via a one-off container
-  smoke test 13/13, zero console errors — but NOT folded into the numbered
-  suites and the 143 battery has NOT been re-run on m3o (do that first).
+  M3.10-11 SETTINGS · ESC MENU · KEYBINDS (?v=m3p, NEW binds.js + menu.js):
+  ESC no longer exits fullscreen (main.js keyboard-locks Escape; only the
+  fullscreen key toggles it); split Music + SFX volume each with on/off;
+  ONE ESC menu in chamber AND realms (Resume · Settings · Exit to load
+  screen; realm also Return to chamber). Settings = audio sliders + a
+  GAMEPLAY auto-fire checkbox (auto-fire is NO LONGER a key; realm reads
+  settings.autoFire live) + a remappable KEYBINDS list — 12 actions, each
+  with a PRIMARY + ALTERNATE slot (binds = {primary,alt}; only WASD ships
+  arrow-key alts by default), live-updating the (P)/(V)/(B)/(R)/(G) labels
+  + HUD + footer. HUD: the bottom action box is GONE — only a segmented XP
+  bar (5 sections, blue dividers, `xp / needed`) between the orbs. VERIFIED
+  via a one-off container smoke test 21/21, zero console errors — but NOT
+  folded into the numbered suites and the 143 battery has NOT been re-run.
   CAVEAT: the fullscreen fix needs a secure context — run via
   START_SERVER.bat (localhost); file:// may not grant Keyboard Lock.
 
 THIS SESSION — close out M3, then start M4 if time:
-0. VERIFY m3o: re-run the 143-check battery (?v=m3o) + add an m3d/settings
-   suite (menu opens chamber+realm, audio split + migration, rebind
-   updates labels + persists). Then continue below.
+0. VERIFY m3q: re-run the 143-check battery (?v=m3q) + add an m3d/settings
+   suite (menu opens chamber+realm, audio split + migration, primary/alt
+   rebind updates labels + persists, auto-fire checkbox, XP-bar HUD). Then
+   continue below.
 1. Q3/Q5 BEHIND FLAGS: XP-gems trial (Q3) and realm-buff picks (Q5) as
    data.js-flagged experiments (off by default; a flag flip turns them on
    for a playtest). Small, contained — resolve by playtest, not argument.
@@ -92,7 +97,7 @@ PROCESS (non-negotiable, enforce it on yourself):
 - Headless suites for anything new + run all existing suites (NODE_PATH to
   a global playwright install; stage game/lib/phaser.min.js too if
   rebuilding the container copy).
-- Bump ?v= in game/index.html (currently m3n) on any js change.
+- Bump ?v= in game/index.html (currently m3q) on any js change.
 - Tick MILESTONES.md boxes, append an EVENT_LOG.md entry, update project
   memory, rewrite docs/NEXT_SESSION.md for the session after, and commit
   every changed file back to my disk. I run 2_SAVE_AND_UPLOAD.bat myself.
@@ -121,4 +126,4 @@ Manual items still on ME (Red), any time:
   PLATFORM, watch the charge-up, step through — does it feel right? (Your redesign
   — judge the cinematic timing especially; knobs in DATA.juice.conduit.)
 - One manual TM-8 check: IMPORT TILES in the map builder with a real image file.
-- Run 2_SAVE_AND_UPLOAD.bat to push the Portal Chamber build (?v=m3n).
+- Run 2_SAVE_AND_UPLOAD.bat to push the latest build (?v=m3q).

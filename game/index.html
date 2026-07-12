@@ -36,18 +36,18 @@
 <!-- BUMP ?v= ON EVERY SHIP (bug #4): localhost/http servers send no cache
      headers, so Chrome can serve a stale mix of old+new js — which crashes
      scenes mid-create (black screen). New query string = guaranteed fresh. -->
-<script src="js/data.js?v=m3o"></script>
-<script src="js/save.js?v=m3o"></script>
-<script src="js/binds.js?v=m3o"></script>
-<script src="js/audio.js?v=m3o"></script>
-<script src="js/sim.js?v=m3o"></script>
-<script src="js/maps.js?v=m3o"></script>
-<script src="js/textures.js?v=m3o"></script>
-<script src="js/entities.js?v=m3o"></script>
-<script src="js/menu.js?v=m3o"></script>
-<script src="js/scenes.js?v=m3o"></script>
-<script src="js/builder.js?v=m3o"></script>
-<script src="js/main.js?v=m3o"></script>
+<script src="js/data.js?v=m3q"></script>
+<script src="js/save.js?v=m3q"></script>
+<script src="js/binds.js?v=m3q"></script>
+<script src="js/audio.js?v=m3q"></script>
+<script src="js/sim.js?v=m3q"></script>
+<script src="js/maps.js?v=m3q"></script>
+<script src="js/textures.js?v=m3q"></script>
+<script src="js/entities.js?v=m3q"></script>
+<script src="js/menu.js?v=m3q"></script>
+<script src="js/scenes.js?v=m3q"></script>
+<script src="js/builder.js?v=m3q"></script>
+<script src="js/main.js?v=m3q"></script>
 <script>
   // Footer controls line is BUILT from the live keybinds so it updates the
   // moment a key is remapped (the menu calls window.updateFooter after a bind).
@@ -62,7 +62,7 @@
         '<b>' + k('interact') + ' interact</b> (stations) / volley in a realm · ' +
         'hotkeys walk you there: ' + k('portal') + ' portal machine · ' + k('vault') + ' vault · ' +
         k('bestiary') + ' bestiary · ' + k('recordsUp') + '/' + k('recordsDown') + ' wall readout · ' +
-        k('autofire') + ' auto-fire · ' + k('menu') + ' menu · ' + k('fullscreen') + ' fullscreen · ' +
+        k('menu') + ' menu · ' + k('fullscreen') + ' fullscreen · ' +
         'F3 debug · M builder (nexus) · 3 save slots · docs in <b>/docs</b> · offline';
     } catch (e) {}
   };

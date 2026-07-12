@@ -202,37 +202,43 @@ var TitleScene = new Phaser.Class({
 });
 
 // ------------------------------------------------------- SHARED INPUT RIG --
-// Movement (W/A/S/D) and the interact/ability key (SPACE) are REBINDABLE: the
-// rig keeps the same `keys.*` property names but repoints them to whatever
-// event.code the player has bound (rig.refresh(), called on load + after any
-// rebind). ENTER / T / F3 / arrows stay fixed. Because keys.SPACE is repointed
-// in place, every existing `rig.keys.SPACE` interact/confirm check follows the
-// interact binding for free.
+// Movement and the interact/ability key are REBINDABLE and each has a PRIMARY
+// + ALTERNATE binding (movement defaults to WASD + arrows). rig.refresh()
+// resolves both slots to live Phaser Keys (called on load + after any rebind);
+// held(action) = either slot down; interactJustDown() covers both interact
+// slots so station SPACE-in-range checks honour the alt too. ENTER / F3 stay
+// fixed. keys.SPACE still points at the interact PRIMARY for legacy refs.
 function makeInputRig(scene) {
   var K = scene.input.keyboard;
   var keys = K.addKeys('W,A,S,D,SPACE,T,F3,ENTER,UP,LEFT,DOWN,RIGHT');
-  function bound(action, fallback) {
-    var kc = BINDS.phaserKeyCode(SAVE.settings().binds[action]);
-    return kc != null ? K.addKey(kc) : fallback;
+  function keyFor(action, slot) {
+    var kc = BINDS.phaserKeyCode(BINDS.code(action, slot));
+    return kc != null ? K.addKey(kc) : null;
   }
   var rig = {
     keys: keys,
-    refresh: function () {                            // repoint rebindable keys
-      keys.W = bound('moveUp', keys.W);
-      keys.A = bound('moveLeft', keys.A);
-      keys.S = bound('moveDown', keys.S);
-      keys.D = bound('moveRight', keys.D);
-      keys.SPACE = bound('interact', keys.SPACE);
+    mv: {},                                          // action -> { p:Key|null, a:Key|null }
+    refresh: function () {
+      var self = this;
+      ['moveUp', 'moveLeft', 'moveDown', 'moveRight', 'interact'].forEach(function (a) {
+        self.mv[a] = { p: keyFor(a, 'primary'), a: keyFor(a, 'alt') };
+      });
+      keys.SPACE = this.mv.interact.p || keys.SPACE; // legacy rig.keys.SPACE refs
+    },
+    held: function (a) { var m = this.mv[a]; return !!(m && ((m.p && m.p.isDown) || (m.a && m.a.isDown))); },
+    interactJustDown: function () {
+      var m = this.mv.interact, JD = Phaser.Input.Keyboard.JustDown;
+      return !!(m && ((m.p && JD(m.p)) || (m.a && JD(m.a))));
     },
     collect: function (player, autoFire) {           // -> intent (seam rule 2)
       var i = SIM.makeIntent();
-      i.moveX = (keys.A.isDown || keys.LEFT.isDown ? -1 : 0) + (keys.D.isDown || keys.RIGHT.isDown ? 1 : 0);
-      i.moveY = (keys.W.isDown || keys.UP.isDown ? -1 : 0) + (keys.S.isDown || keys.DOWN.isDown ? 1 : 0);
+      i.moveX = (this.held('moveLeft') ? -1 : 0) + (this.held('moveRight') ? 1 : 0);
+      i.moveY = (this.held('moveUp') ? -1 : 0) + (this.held('moveDown') ? 1 : 0);
       var pt = scene.input.activePointer;
       pt.updateWorldPoint(scene.cameras.main);
       i.aimAngle = Math.atan2(pt.worldY - player.y, pt.worldX - player.x);
       i.firing = autoFire || pt.isDown;
-      i.ability = keys.SPACE.isDown;
+      i.ability = this.held('interact');
       return i;
     }
   };
@@ -520,7 +526,7 @@ var NexusScene = new Phaser.Class({
     var p = this.player, cp = this.consolePos;
     var near = Math.hypot(cp.x - p.x, cp.y - p.y) <= DATA.interact.consoleRange;
     this.consoleSprite.setScale(near ? 3.3 : 3);          // leans toward you
-    if (near && Phaser.Input.Keyboard.JustDown(this.rig.keys.SPACE)) this.toggleConsole();
+    if (near && this.rig.interactJustDown()) this.toggleConsole();
   },
 
   toggleConsole: function () {
@@ -923,7 +929,7 @@ var NexusScene = new Phaser.Class({
     var p = this.player, rp = this.recordsPos;
     var near = Math.hypot(rp.x - p.x, rp.y - p.y) <= DATA.interact.consoleRange;
     this.recordsSprite.setScale(near ? 3.2 : 3);         // leans toward you
-    if (near && Phaser.Input.Keyboard.JustDown(this.rig.keys.SPACE)) this.toggleGraveyard();
+    if (near && this.rig.interactJustDown()) this.toggleGraveyard();
   },
 
   // M3.8 v3: SPACE at the switch throws it, like every other station
@@ -932,7 +938,7 @@ var NexusScene = new Phaser.Class({
     var p = this.player, sp = this.switchPos;
     var near = Math.hypot(sp.x - p.x, sp.y - p.y) <= DATA.interact.consoleRange;
     this.leverSprite.setScale(near ? 3.3 : 3);           // leans toward you
-    if (near && Phaser.Input.Keyboard.JustDown(this.rig.keys.SPACE)) {
+    if (near && this.rig.interactJustDown()) {
       this.setRecordsMode(this.recordsMode === 'records' ? 'grave' : 'records');
     }
   },
@@ -1159,7 +1165,7 @@ var NexusScene = new Phaser.Class({
     var p = this.player, bp = this.bestiaryPos;
     var near = Math.hypot(bp.x - p.x, bp.y - p.y) <= DATA.interact.consoleRange;
     this.bestiarySprite.setScale(near ? 3.3 : 3);        // leans toward you
-    if (near && Phaser.Input.Keyboard.JustDown(this.rig.keys.SPACE)) this.toggleBestiary();
+    if (near && this.rig.interactJustDown()) this.toggleBestiary();
   },
 
   bestiaryEntries: function () {
@@ -1303,7 +1309,7 @@ var NexusScene = new Phaser.Class({
       if (Math.hypot(e.sprite.x - p.x, e.sprite.y - p.y) <= R) { near = e; break; }
     }
     if (near && !this.vaultUi && !this.gyUi && !this.consoleUi) {
-      if (Phaser.Input.Keyboard.JustDown(this.rig.keys.SPACE)) this.enterPortal(near);
+      if (this.rig.interactJustDown()) this.enterPortal(near);
     }
   },
 
@@ -1395,7 +1401,8 @@ var RealmScene = new Phaser.Class({
     this.player = Entities.createPlayer(this, start.x, start.y, CURRENT);
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
     this.rig = makeInputRig(this);
-    this.autoFire = SAVE.settings().autoFire;   // persists across realms (TM-1, Q2)
+    // auto-fire is read LIVE from settings (a Settings checkbox now, not a key),
+    // so toggling it in the pause menu takes effect this frame — see update().
     this.startedAt = this.time.now;
     this.deadUi = null;
     this.paused = false; this.pausedAt = 0; this.pauseUi = null;   // M1 pause
@@ -1472,11 +1479,10 @@ var RealmScene = new Phaser.Class({
     this.directorSpend(); this.directorSpend();          // opening pressure
 
     // Pause / menu key (rebindable, default ESC) — main.js keyboard-locks ESC
-    // in fullscreen so it opens the menu instead of leaving fullscreen. Volume
-    // + exits now live INSIDE the menu; auto-fire is a rebindable action too.
+    // in fullscreen so it opens the menu instead of leaving fullscreen. Volume,
+    // exits AND the auto-fire toggle all live INSIDE the menu now.
     BINDS.wire(this, {
-      menu:     function () { self.togglePause(); },
-      autofire: function () { if (!self.paused && self.player.state.alive) self.toggleAutoFire(); }
+      menu: function () { self.togglePause(); }
     });
 
     this.buildHud();
@@ -1539,14 +1545,6 @@ var RealmScene = new Phaser.Class({
     // E2 wipe, chest pending) — fixes a latent unpause-restarts-the-swarm bug
     this.spawnEvent.paused = !!(this.bossPortal || this.boss || this.pendingLoot || this.closing);
     this.tweens.resumeAll();
-    AUDIO.play('ui');
-  },
-
-  // rebindable auto-fire toggle (was the fixed T key)
-  toggleAutoFire: function () {
-    this.autoFire = !this.autoFire;
-    SAVE.settings().autoFire = this.autoFire;             // persists across realms (TM-1)
-    SAVE.saveSettings();
     AUDIO.play('ui');
   },
 
@@ -2078,11 +2076,13 @@ var RealmScene = new Phaser.Class({
   buildHud: function () {
     var T = { fontFamily: 'monospace', color: '#f4f4f4' };
     this.hudG = this.add.graphics().setScrollFactor(0).setDepth(50);
-    this.hpOrbText = this.add.text(0, 0, '', { fontFamily: T.fontFamily, fontSize: 13, color: '#f4f4f4', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
-    this.mpOrbText = this.add.text(0, 0, '', { fontFamily: T.fontFamily, fontSize: 13, color: '#f4f4f4', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
-    this.abilityText = this.add.text(0, 0, 'SPACE', { fontFamily: T.fontFamily, fontSize: 9, color: '#f4f4f4' }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
-    this.barText = this.add.text(0, 0, '', { fontFamily: T.fontFamily, fontSize: 11, color: '#94b0c2' }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(52);
-    this.lvText = this.add.text(0, 0, '', { fontFamily: T.fontFamily, fontSize: 13, color: '#ffcd75' }).setOrigin(1, 0.5).setScrollFactor(0).setDepth(52);
+    // HUD numeric readouts (HP · MP · XP) are BLACK (user, 2026-07-12) — reads
+    // on the bright orbs / gold XP fill.
+    this.hpOrbText = this.add.text(0, 0, '', { fontFamily: T.fontFamily, fontSize: 13, color: '#000000', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
+    this.mpOrbText = this.add.text(0, 0, '', { fontFamily: T.fontFamily, fontSize: 13, color: '#000000', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
+    // XP bar readout (user, 2026-07-12): the old action box is GONE — a single
+    // segmented XP bar spans the bottom between the orbs, this text = XP/needed.
+    this.xpText = this.add.text(0, 0, '', { fontFamily: T.fontFamily, fontSize: 12, color: '#000000', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
     this.hudText = this.add.text(12, 12, '', { fontFamily: T.fontFamily, fontSize: 12, color: '#f4f4f4' }).setScrollFactor(0).setDepth(51);
     // M3.5: slotted map affixes ride under the objective line — visibly part
     // of the run, even while they're preview-only (inert until M5).
@@ -2130,28 +2130,23 @@ var RealmScene = new Phaser.Class({
     this.hpOrbText.setPosition(hpX, orbY).setText(String(Math.max(0, Math.ceil(st.hp))));
     this.mpOrbText.setPosition(mpX, orbY).setText(String(Math.floor(st.mp)));
 
-    // central action bar between the orbs
-    var bw = Math.min(HUD.barW, W - 2 * (2 * r + 2 * m + 26)), bh = HUD.barH;
-    var bx = W / 2 - bw / 2, by = H - bh - 10;
-    g.fillStyle(HUD.glass, 0.9); g.fillRect(bx, by, bw, bh);
-    g.lineStyle(2, 0x566c86, 1); g.strokeRect(bx, by, bw, bh);
-    // XP strip rides the bar's top edge
+    // XP bar (user redesign, 2026-07-12): the ONLY bottom element — spans the
+    // gap between the two orbs, split into 5 equal segments by blue dividers,
+    // gold fill for progress, XP-into-level / needed centered on it.
+    var bh = 16;
+    var bx = hpX + r + 12, bxR = mpX - r - 12, bw = Math.max(40, bxR - bx);
+    var by = H - bh - 6;
+    var maxed = st.level >= DATA.xp.cap;
     var need = DATA.xp.needed(st.level);
-    var xpPct = st.level >= DATA.xp.cap ? 1 : Math.max(0, Math.min(1, st.xp / need));
-    g.fillStyle(0x29366f, 1); g.fillRect(bx, by - 6, bw, 5);
-    g.fillStyle(0xffcd75, 1); g.fillRect(bx, by - 6, bw * xpPct, 5);
-    // ability slot (dims when MP can't pay for it; M3: gear-modified cost)
-    var ab = DATA.abilities[DATA.classes[st.cls].ability];
-    var abFx = SIM.abilityFor(ab, st.equipment);
-    var ready = st.mp >= abFx.mpCost;
-    g.fillStyle(ready ? 0x29366f : 0x14162b, 1); g.fillRect(bx + 6, by + 6, bh - 12, bh - 12);
-    g.lineStyle(1, ready ? 0x41a6f6 : 0x333c57, 1); g.strokeRect(bx + 6, by + 6, bh - 12, bh - 12);
-    this.abilityText.setPosition(bx + 6 + (bh - 12) / 2, by + bh / 2)
-      .setText(BINDS.keyLabel('interact') + '\n-' + abFx.mpCost).setColor(ready ? '#f4f4f4' : '#566c86');
-    this.barText.setPosition(bx + bh + 4, by + bh / 2)
-      .setText((this.autoFire ? 'auto-fire ON' : 'MANUAL FIRE') + ' (' + BINDS.keyLabel('autofire') + ')');
-    this.lvText.setPosition(bx + bw - 8, by + bh / 2)
-      .setText('Lv ' + st.level + (st.level >= DATA.xp.cap ? ' MAX' : ''));
+    var xpPct = maxed ? 1 : Math.max(0, Math.min(1, st.xp / need));
+    g.fillStyle(HUD.glass, 0.92); g.fillRect(bx, by, bw, bh);           // dark track
+    g.fillStyle(0xffcd75, 1); g.fillRect(bx, by, bw * xpPct, bh);       // gold fill
+    // 5 segments = 4 interior blue dividers
+    g.fillStyle(0x41a6f6, 1);
+    for (var s5 = 1; s5 < 5; s5++) { g.fillRect(bx + Math.round(bw * s5 / 5) - 1, by, 2, bh); }
+    g.lineStyle(2, 0x41a6f6, 1); g.strokeRect(bx, by, bw, bh);          // blue border
+    this.xpText.setPosition(bx + bw / 2, by + bh / 2)
+      .setText(maxed ? 'MAX' : (Math.floor(st.xp) + ' / ' + need));
 
     // objective line, top-left (mode-aware — E6)
     var tSec = Math.floor((this.time.now - this.startedAt) / 1000);
@@ -2235,7 +2230,7 @@ var RealmScene = new Phaser.Class({
         this.promptText = this.add.text(near.x, near.y - 34, near.prompt,
           { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }).setOrigin(0.5).setDepth(60);
       }
-      if (Phaser.Input.Keyboard.JustDown(this.rig.keys.SPACE)) near.action();
+      if (this.rig.interactJustDown()) near.action();
     } else if (this.promptText) {
       this.promptText.destroy(); this.promptText = null;
     }
@@ -2245,7 +2240,7 @@ var RealmScene = new Phaser.Class({
     if (this.paused || this.closing) return;              // M1 pause / M2 realm-closed screen
     if (this.scanning || this.looting) return;            // M2.1: scouter scan / loot overlay hold the world
     if (this.player.state.alive) {
-      var intent = this.rig.collect(this.player, this.autoFire);
+      var intent = this.rig.collect(this.player, SAVE.settings().autoFire);
       this.handleInteract(intent);                        // Q6: may consume SPACE
       Entities.updatePlayer(this, this.player, intent, time, delta);
       // mirror progress into the bound save object (written to disk on
