@@ -16,8 +16,17 @@ game/
                       drop tables, affixes, wave director curve, XP curve, tilesets,
                       palette. Balance = edit this file only.
     save.js           versioned localStorage save slots (3 accounts) + device-level
-                      settings (volume, auto-fire — key srb_settings, M1). Scenes never
-                      touch localStorage directly — only through SAVE.
+                      settings (key srb_settings: split music/SFX volume+on-off,
+                      auto-fire checkbox, keybinds {primary,alt} — all migrated from
+                      the M1 single-volume format). Scenes never touch localStorage
+                      directly — only through SAVE.
+    binds.js          M3.10 remappable keybinds: bindings stored as event.code in
+                      settings.binds ({primary, alt} per action), BINDS.wire = one
+                      live keydown listener, keyLabel/altLabel for on-screen chips,
+                      de-duping rebind, phaserKeyCode for polled movement.
+    menu.js           M3.10 unified ESC menu (chamber + realms): Resume · Settings
+                      (music/SFX rows, auto-fire checkbox, two-chip keybind list,
+                      reset) · scene exit buttons; MENU.relayout survives resize.
     audio.js          M1 Lane-A sound: tiny Web Audio chiptune synth, zero audio files.
                       Recipes are data (DATA.audio); presentation-layer only, failure-safe.
     maps.js           M3 map system: JSON schema v1, localStorage store (srb_maps — this
@@ -63,8 +72,9 @@ WebSocket; the Phaser client keeps its render layer and sends intents. Colyseus 
 ## 5. Scene flow
 
 `Boot` (generate textures) → `Title` (welcome screen: 3 save slots — new game / continue /
-two-click delete; keyboard 1/2/3) → `Nexus` (safe, class select later, vault later, portal;
-ESC returns to Title) → `Realm` (wave director, kill quota → boss portal at M2) → on death:
+two-click delete; keyboard 1/2/3) → `Nexus` (the PORTAL CHAMBER: portal machine, vault,
+bestiary, records wall; ESC opens the unified menu — "Exit to load screen" returns to Title) →
+`Realm` (wave director, kill quota → boss portal at M2) → on death:
 permadeath is written to the save immediately, recap → `Nexus` (new character) → on realm
 close (M2+): rewards → `Nexus`.
 

@@ -50,7 +50,7 @@ WHERE THINGS STAND (as of 2026-07-12, build ?v=m3q):
   registry); WALK-TO-INTERACT — V/B/P/R/G + clicks walk the character
   to stand below the station THEN open (manual input cancels; open
   window + same hotkey = instant close). NexusScene knows its entry
-  (login/realm/none via scene.start data). 142 headless checks green
+  (login/realm/none via scene.start data). 143 headless checks green
   across 6 suites, ×3 batteries. GOTCHA added to the book: looped
   Phaser timers CATCH UP on the slow headless clock — guard callbacks
   against firing after their own cleanup. Flakes: none seen in the
@@ -78,6 +78,15 @@ THIS SESSION — close out M3, then start M4 if time:
    suite (menu opens chamber+realm, audio split + migration, primary/alt
    rebind updates labels + persists, auto-fire checkbox, XP-bar HUD). Then
    continue below.
+0.5. FIX AUDIT BUGS (2026-07-12 full-code audit — details in TESTING.md
+   bug log #7–#9): (a) P1 — drinkPotion recomputes live stats WITHOUT the
+   equipment arg (gear bonuses vanish after a nexus drink until the next
+   re-derive); (b) P2 — bestiaryUi missing from the handlePortals /
+   handleConsole one-overlay guards; (c) P2 — bestiary page-flip hardcodes
+   arrow keys instead of BINDS + the static HTML fallback footer is stale.
+   Also sweep dead code when touching those files: unused `pedestal`
+   texture, dead T in the input rig, unused DATA.console.hotkey/prompt,
+   no-op ternary in createPlayer.
 1. Q3/Q5 BEHIND FLAGS: XP-gems trial (Q3) and realm-buff picks (Q5) as
    data.js-flagged experiments (off by default; a flag flip turns them on
    for a playtest). Small, contained — resolve by playtest, not argument.

@@ -6,6 +6,42 @@
 
 ---
 
+## 2026-07-12 · AUDIT · Full code + documentation audit (?v=m3q — no code changed)
+
+**User ask: audit all code, verify every shipped feature is recorded in the docs,
+list what remains to build, and refresh the plan/NEXT_SESSION/README where needed.**
+Every game/js file, index.html, all 6 test suites, and all 8 docs were cross-read.
+
+**Verdict: docs were CURRENT through m3q** — every shipped feature (M0→M3.11 + the
+m3q black-HUD-readout addendum) is recorded in MILESTONES + EVENT_LOG. Git is
+up to date too (5 uploads on 2026-07-12, latest "bug updates and recoloring text"
+18:12 = m3q).
+
+**Fixed doc drift:**
+- `README.md`: controls rewritten for m3q reality (auto-fire = Settings checkbox
+  not T; ESC = unified menu everywhere + keyboard-lock fullscreen behavior, P-pause
+  gone; REALM CONSOLE → PORTAL MACHINE; added bestiary/records-lever/chamber-music/
+  remappable-keybinds/XP-bar HUD; file table + roadmap refreshed; build tagged m3q).
+- `ARCHITECTURE.md`: file map gained `binds.js` + `menu.js`; save.js settings note
+  updated (split audio + binds); §5 scene flow ESC note updated.
+- `TESTING.md`: TM-1 auto-fire line updated; playtest log gained the m3o (13/13) and
+  m3p (21/21) smoke-test rows + this audit; bug log gained #6 (looped-timer headless
+  gotcha, documented) and NEW OPEN findings **#7 (P1: drinkPotion recomputes live
+  stats without the equipment arg — gear bonuses drop after a nexus drink), #8 (P2:
+  bestiaryUi missing from handlePortals/handleConsole overlay guards), #9 (P2:
+  bestiary nav hardcodes arrows instead of BINDS + stale static fallback footer)**.
+- `PRODUCT_PLAN.md` → v1.4: §5 travel structure = PORTAL CHAMBER (E5 evolved).
+- `NEXT_SESSION.md`: 142→143 check-count fix + step 0.5 added (fix audit bugs #7–#9,
+  sweep dead code: unused `pedestal` texture, dead T key in the input rig, unused
+  DATA.console.hotkey/prompt, no-op ternary in createPlayer).
+
+**Still to build (roadmap unchanged — no re-plan needed):** M2 Fun Gate 1 (human) ·
+M2.1 dev self-test (human) · M3: Q3/Q5 flags, CC0 art batch 1, TM-8 manual tile-import
+check, m3d/settings suite + 143-battery re-run on m3q, M3 gate playtest (human) ·
+M4 Wizard/Knight/class-select · M5 content ramp + DATA.console.live flip · M6 polish.
+
+---
+
 ## 2026-07-12 (addendum) · M3.11 · HUD numbers → black (?v=m3p → m3q)
 
 **User: the combat HUD numeric readouts (health, XP, mana) should be BLACK, not

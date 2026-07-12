@@ -1,6 +1,6 @@
 # PRODUCT PLAN — MVP → 1.0 (wargamed)
 
-Status: v1.3 (2026-07-12 scope expansion E1–E9 folded in — MECHANICS_MANIFESTO Part 4; M2.1 opened) · Solo dev + Claude · Budget: $0 (all FOSS/CC0)
+Status: v1.4 (2026-07-12 audit pass: E5's "portal plaza" superseded by the shipped PORTAL CHAMBER — one platform + conduit + portal machine, see MILESTONES M3.5; settings/keybinds shipped early at M3.10) · previously v1.3 (2026-07-12 scope expansion E1–E9 folded in — MECHANICS_MANIFESTO Part 4; M2.1 opened) · Solo dev + Claude · Budget: $0 (all FOSS/CC0)
 
 Companion docs: [MECHANICS_MANIFESTO](MECHANICS_MANIFESTO.md) · [MILESTONES](MILESTONES.md) ·
 [ARCHITECTURE](ARCHITECTURE.md) · [ASSET_PIPELINE](ASSET_PIPELINE.md) · [TESTING](TESTING.md) · [EVENT_LOG](EVENT_LOG.md)
@@ -97,7 +97,8 @@ Exactly the user's stated slice, made concrete — DONE when all boxes tick:
 3 realm bosses + 2 dungeon bosses, each with a scouter workup sheet (E3) · **affix engine** (E9): procedural
 mob affixes (Tanky, Speedy, Projectiles Split, Evolutions, Role Distribution) + map affixes rolled at the
 portal (Apex Predators, Escalating Threats, Hordes) · breakables + SPACE-opened loot chests with a
-PoE2-style selection overlay (E1/Q6) · nexus portal plaza as the travel structure (E5) · alternative stage
+PoE2-style selection overlay (E1/Q6) · the nexus PORTAL CHAMBER as the travel structure (E5 evolved:
+platform + conduit + portal machine, shipped M3.5) · alternative stage
 objectives incl. 5-min time-trial survival (E6/Q8) · Diablo-style orb HUD (E4) · temp realm-buff picks
 (F6, if Q5 passes) · graveyard & records page · settings (volume, screenshake, casual-mode if Q1 demands) ·
 CC0 art pass + SFX pass · save export/import. **No shop. No multiplayer (but seams intact).**

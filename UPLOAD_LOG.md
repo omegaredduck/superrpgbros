@@ -6,3 +6,4 @@
   - note: only needs minor bugfixes
 - Sun 07/12/2026 17:43:22  -  "esc screen and settings"
 - Sun 07/12/2026 18:12:16  -  "bug updates and recoloring text"
+- Sun 07/12/2026 18:30:38  -  "code audited"
