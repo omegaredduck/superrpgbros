@@ -125,25 +125,68 @@ var SAVE = (function () {
   var SETTINGS_KEY = 'srb_settings';
   var _settings = null;
 
+  // Fresh-profile defaults. musicVolume/sfxVolume both seed from the one
+  // legacy defaultVolume; `binds` is built from DATA.keybinds (event.code
+  // strings). `volume` is kept only so an old save can migrate its value.
+  function settingsDefaults() {
+    var seed = (typeof DATA !== 'undefined' && DATA.audio) ? DATA.audio.defaultVolume : 0.5;
+    var binds = {};
+    if (typeof DATA !== 'undefined' && DATA.keybinds && DATA.keybinds.list) {
+      DATA.keybinds.list.forEach(function (b) { binds[b.id] = b.def; });
+    }
+    return {
+      volume: seed,            // legacy master — migration seed only
+      musicVolume: seed,       // 2026-07-12: split channels
+      musicOn: true,
+      sfxVolume: seed,
+      sfxOn: true,
+      autoFire: true,          // Q2 default: ON
+      binds: binds             // action id -> event.code
+    };
+  }
+
   function settings() {
     if (_settings) return _settings;
-    var def = {
-      volume: (typeof DATA !== 'undefined' && DATA.audio) ? DATA.audio.defaultVolume : 0.5,
-      autoFire: true                                       // Q2 default: ON
-    };
+    var def = settingsDefaults();
     if (storageOk()) {
       try {
         var raw = localStorage.getItem(SETTINGS_KEY);
         if (raw) {
           var d = JSON.parse(raw);
           if (d && typeof d === 'object') {
-            for (var k in def) if (typeof d[k] === typeof def[k]) def[k] = d[k];
+            // Migrate the pre-split single volume: seed both new channels from it.
+            if (typeof d.volume === 'number') {
+              if (typeof d.musicVolume !== 'number') d.musicVolume = d.volume;
+              if (typeof d.sfxVolume !== 'number') d.sfxVolume = d.volume;
+            }
+            for (var k in def) {
+              if (k === 'binds') continue;                 // merged per-key below
+              if (typeof d[k] === typeof def[k]) def[k] = d[k];
+            }
+            // Binds: overlay saved codes onto defaults so a NEW action added in
+            // a later version keeps its default instead of vanishing (TM-4 spirit).
+            if (d.binds && typeof d.binds === 'object') {
+              for (var id in def.binds) {
+                if (typeof d.binds[id] === 'string') def.binds[id] = d.binds[id];
+              }
+            }
           }
         }
       } catch (e) { /* garbled settings → defaults, never a crash (TM-4 spirit) */ }
     }
     _settings = def;
     return _settings;
+  }
+
+  // Reset every keybind to its DATA default (used by the settings panel).
+  function resetBinds() {
+    var s = settings();
+    s.binds = {};
+    if (typeof DATA !== 'undefined' && DATA.keybinds && DATA.keybinds.list) {
+      DATA.keybinds.list.forEach(function (b) { s.binds[b.id] = b.def; });
+    }
+    saveSettings();
+    return s.binds;
   }
 
   function saveSettings() {
@@ -154,7 +197,8 @@ var SAVE = (function () {
 
   return { VERSION: VERSION, SLOTS: SLOTS, blank: blank, load: load, save: save,
            clear: clear, peek: peek, storageOk: storageOk, zeroPots: zeroPots,
-           emptyEquip: emptyEquip, settings: settings, saveSettings: saveSettings };
+           emptyEquip: emptyEquip, settings: settings, saveSettings: saveSettings,
+           resetBinds: resetBinds };
 })();
 
 // Headless Node tests (TM-4) can stub localStorage and require this module.

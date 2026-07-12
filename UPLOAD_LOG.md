@@ -4,3 +4,4 @@
 - Sun 07/12/2026 13:57:36  -  "portal nexus"
 - Sun 07/12/2026 17:05:00  -  "portal room update"
   - note: only needs minor bugfixes
+- Sun 07/12/2026 17:43:22  -  "esc screen and settings"

@@ -406,5 +406,31 @@ var DATA = {
         ]
       }
     }
+  },
+
+  // --- SETTINGS UX (2026-07-12): music/SFX split + remappable keybinds.
+  // defaultVolume above is the seed for BOTH channels on a fresh profile.
+  // Keybinds are stored in settings as event.code strings (layout-independent,
+  // e.g. 'KeyP','Space','Escape'); this list is the ORDER + labels the settings
+  // panel renders, and the source of the default binding for each action.
+  // NOTE: menu (ESC) and fullscreen (F) live here too so they show in the list,
+  // but movement uses the four move* actions. M (builder) + F3 (debug) stay
+  // hardcoded dev keys, deliberately not remappable.
+  keybinds: {
+    list: [
+      { id: 'moveUp',      label: 'Move up',        def: 'KeyW',    group: 'Movement' },
+      { id: 'moveLeft',    label: 'Move left',      def: 'KeyA',    group: 'Movement' },
+      { id: 'moveDown',    label: 'Move down',      def: 'KeyS',    group: 'Movement' },
+      { id: 'moveRight',   label: 'Move right',     def: 'KeyD',    group: 'Movement' },
+      { id: 'interact',    label: 'Interact / cast',def: 'Space',   group: 'Combat' },
+      { id: 'autofire',    label: 'Toggle auto-fire',def:'KeyT',    group: 'Combat' },
+      { id: 'portal',      label: 'Portal machine', def: 'KeyP',    group: 'Chamber' },
+      { id: 'vault',       label: 'Vault',          def: 'KeyV',    group: 'Chamber' },
+      { id: 'bestiary',    label: 'Bestiary',       def: 'KeyB',    group: 'Chamber' },
+      { id: 'recordsUp',   label: 'Records screen', def: 'KeyR',    group: 'Chamber' },
+      { id: 'recordsDown', label: 'Graveyard screen',def:'KeyG',    group: 'Chamber' },
+      { id: 'menu',        label: 'Menu / pause',   def: 'Escape',  group: 'System' },
+      { id: 'fullscreen',  label: 'Fullscreen',     def: 'KeyF',    group: 'System' }
+    ]
   }
 };

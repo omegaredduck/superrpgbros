@@ -20,10 +20,30 @@ var game = new Phaser.Game({
   scene: [BootScene, TitleScene, NexusScene, RealmScene, BuilderScene]   // M3: map builder (dev tool)
 });
 
-// Re-layout on fullscreen enter/exit. Title and Nexus build their layout in
-// create() from the current size, so a restart is the correct re-layout (both
-// are safe scenes). The Realm needs nothing — camera + HUD adapt — except a
-// rebuild of the pause overlay if it happens to be open. Debounced because a
+// ESC-in-fullscreen fix (2026-07-12): by default the browser eats the Escape
+// key to LEAVE fullscreen, which is why P used to double as pause. The Keyboard
+// Lock API (Chrome/Edge, secure context incl. http://localhost) routes Escape
+// to the page instead — a single tap opens the ESC menu, and holding Escape
+// still exits fullscreen as a safety valve. Only the fullscreen key (F) toggles
+// fullscreen now. Failure-safe: unsupported → we simply fall back to old
+// behavior (still works via the F key + P is gone but menu opens on ESC when
+// not fullscreen).
+(function () {
+  function lock() {
+    try { if (navigator.keyboard && navigator.keyboard.lock) navigator.keyboard.lock(['Escape']); } catch (e) {}
+  }
+  function unlock() {
+    try { if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock(); } catch (e) {}
+  }
+  game.scale.on('enterfullscreen', lock);
+  game.scale.on('leavefullscreen', unlock);
+})();
+
+// Re-layout on fullscreen enter/exit / window resize. Title and Nexus build
+// their layout in create() from the current size, so a restart is the correct
+// re-layout (both are safe scenes; their create() resets the menu guards, so an
+// open menu simply closes). The Realm survives — camera + HUD adapt — so if its
+// ESC menu is open we just rebuild that overlay in place. Debounced because a
 // fullscreen toggle can fire several resize events.
 (function () {
   var t = null;
@@ -34,7 +54,7 @@ var game = new Phaser.Game({
         if (game.scene.isActive(k)) game.scene.getScene(k).scene.restart();
       });
       var r = game.scene.getScene('Realm');
-      if (game.scene.isActive('Realm') && r.paused) r.buildPauseMenu();
+      if (game.scene.isActive('Realm') && r._menuHandle) MENU.relayout(r);
     }, 120);
   });
 })();

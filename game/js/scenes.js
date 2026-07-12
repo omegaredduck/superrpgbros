@@ -64,10 +64,16 @@ function portalSwirl(scene, x, y, tint) {
   });
 }
 
-// F toggles fullscreen anywhere (guarded — some environments refuse it).
+// The fullscreen key (rebindable, default F) toggles fullscreen in any scene.
+// Reads the live binding via the dispatcher so a rebind takes effect at once;
+// guarded because some environments refuse fullscreen. ESC no longer exits
+// fullscreen — main.js keyboard-locks Escape so it reaches the menu instead.
 function wireFullscreen(scene) {
-  scene.input.keyboard.on('keydown-F', function () {
-    try { scene.scale.toggleFullscreen(); } catch (e) {}
+  scene.input.keyboard.on('keydown', function (ev) {
+    if (scene._bindsCapture) return;
+    if (BINDS.actionForEvent(ev) === 'fullscreen') {
+      try { scene.scale.toggleFullscreen(); } catch (e) {}
+    }
   });
 }
 
@@ -196,10 +202,28 @@ var TitleScene = new Phaser.Class({
 });
 
 // ------------------------------------------------------- SHARED INPUT RIG --
+// Movement (W/A/S/D) and the interact/ability key (SPACE) are REBINDABLE: the
+// rig keeps the same `keys.*` property names but repoints them to whatever
+// event.code the player has bound (rig.refresh(), called on load + after any
+// rebind). ENTER / T / F3 / arrows stay fixed. Because keys.SPACE is repointed
+// in place, every existing `rig.keys.SPACE` interact/confirm check follows the
+// interact binding for free.
 function makeInputRig(scene) {
-  var keys = scene.input.keyboard.addKeys('W,A,S,D,SPACE,T,F3,ENTER,UP,LEFT,DOWN,RIGHT');
-  return {
+  var K = scene.input.keyboard;
+  var keys = K.addKeys('W,A,S,D,SPACE,T,F3,ENTER,UP,LEFT,DOWN,RIGHT');
+  function bound(action, fallback) {
+    var kc = BINDS.phaserKeyCode(SAVE.settings().binds[action]);
+    return kc != null ? K.addKey(kc) : fallback;
+  }
+  var rig = {
     keys: keys,
+    refresh: function () {                            // repoint rebindable keys
+      keys.W = bound('moveUp', keys.W);
+      keys.A = bound('moveLeft', keys.A);
+      keys.S = bound('moveDown', keys.S);
+      keys.D = bound('moveRight', keys.D);
+      keys.SPACE = bound('interact', keys.SPACE);
+    },
     collect: function (player, autoFire) {           // -> intent (seam rule 2)
       var i = SIM.makeIntent();
       i.moveX = (keys.A.isDown || keys.LEFT.isDown ? -1 : 0) + (keys.D.isDown || keys.RIGHT.isDown ? 1 : 0);
@@ -212,6 +236,8 @@ function makeInputRig(scene) {
       return i;
     }
   };
+  rig.refresh();
+  return rig;
 }
 
 // ------------------------------------------------------------------ NEXUS --
@@ -245,13 +271,13 @@ var NexusScene = new Phaser.Class({
     // M3.6 polish (user, 2026-07-12): station labels are GREEN, ABOVE their
     // object, and minimal — no counters, no headers.
     var vc = this.add.sprite(120, H / 2 - 60, 'chest').setScale(2.5).setInteractive({ useHandCursor: true });
-    var vl = this.add.text(120, H / 2 - 100, 'VAULT (V)',
+    var vl = this.add.text(120, H / 2 - 100, 'VAULT (' + BINDS.keyLabel('vault') + ')',
       { fontFamily: 'monospace', fontSize: 11, color: '#49e83b' }).setOrigin(0.5);
     vl.setShadow(1, 2, '#1a1c2c', 2, true, true);        // readable on the light floor
+    this.vaultLabel = vl;                                // live-updates on rebind
     var vSelf = this;
     vc.on('pointerdown', function () { vSelf.requestStation('vault'); });
     this.vaultUi = null;
-    this.input.keyboard.on('keydown-V', function () { vSelf.requestStation('vault'); });
 
     // M3.6: THE BESTIARY — the vault's mirror on the right wall (same height,
     // same distance from the edge): a green terminal of field notes on every
@@ -264,16 +290,14 @@ var NexusScene = new Phaser.Class({
       .setInteractive({ useHandCursor: true });
     this.bestiarySprite = bst;
     this.tweens.add({ targets: bst, alpha: 0.78, yoyo: true, repeat: -1, duration: 1400 });
-    var bl = this.add.text(W - 120, H / 2 - 100, 'BESTIARY (B)',
+    var bl = this.add.text(W - 120, H / 2 - 100, 'BESTIARY (' + BINDS.keyLabel('bestiary') + ')',
       { fontFamily: 'monospace', fontSize: 11, color: '#49e83b' }).setOrigin(0.5);
     bl.setShadow(1, 2, '#1a1c2c', 2, true, true);
+    this.bestiaryLabel = bl;                             // live-updates on rebind
     bst.on('pointerdown', function () { vSelf.requestStation('bestiary'); });
     this.bestiaryUi = null;
     this.bestiaryIndex = 0;
-    this.input.keyboard.on('keydown-B', function () { vSelf.requestStation('bestiary'); });
-    // M3.8: R / G walk to the switch and flip the wall readout
-    this.input.keyboard.on('keydown-R', function () { vSelf.requestStation('switchRecords'); });
-    this.input.keyboard.on('keydown-G', function () { vSelf.requestStation('switchGrave'); });
+    // V / B / R / G / P + menu are dispatched centrally (rebindable) below.
 
     // M3.5: you arrive just south of the console — the works are the first
     // thing you see, and the prompt is two steps away.
@@ -335,7 +359,8 @@ var NexusScene = new Phaser.Class({
     });
     // floating hotkey chip above the lever: shows the key that flips it
     // to the OTHER page — (G) while records is up, (R) while graveyard is down
-    this.leverLabel = this.add.text(swX, swY - 46, this.recordsMode === 'records' ? '(G)' : '(R)',
+    this.leverLabel = this.add.text(swX, swY - 46,
+      '(' + BINDS.keyLabel(this.recordsMode === 'records' ? 'recordsDown' : 'recordsUp') + ')',
       { fontFamily: 'monospace', fontSize: 11, color: '#49e83b' }).setOrigin(0.5).setDepth(3);
     this.leverLabel.setShadow(1, 2, '#1a1c2c', 2, true, true);
     for (var wx = swX + 34; wx < screenLeft; wx += 24) {
@@ -353,23 +378,28 @@ var NexusScene = new Phaser.Class({
       switchRecords: { x: swX,     y: 150,        act: function () { this.setRecordsMode('records'); } }
     };
     this.autoWalk = null;                                // scene-instance guard (bug #1)
+    this._menuOpen = false; this._menuHandle = null; this._bindsCapture = false;  // reset (bug #1)
 
-    // ESC: save and return to the welcome screen (switch slots without reloading)
-    // — unless an overlay is open, in which case ESC just closes the overlay.
+    // Rebindable hotkeys are dispatched centrally from the live binds map, so a
+    // rebind takes effect instantly and needs no re-registration. Station keys
+    // are ignored while the ESC menu is open. ESC (the menu key) closes an open
+    // overlay first, then opens the menu; the exit-to-load-screen lives INSIDE
+    // the menu now (it used to be ESC's job).
     var esc = this;
-    this.input.keyboard.on('keydown-ESC', function () {
-      if (esc.consoleUi) { esc.toggleConsole(); return; }
-      if (esc.vaultUi) { esc.toggleVault(); return; }
-      if (esc.bestiaryUi) { esc.toggleBestiary(); return; }
-      if (esc.gyUi) { esc.toggleGraveyard(); return; }
-      persist();
-      AUDIO.stopMusic();                                 // M3.9
-      esc.scene.start('Title');
+    BINDS.wire(this, {
+      vault:       function () { if (!esc._menuOpen) esc.requestStation('vault'); },
+      bestiary:    function () { if (!esc._menuOpen) esc.requestStation('bestiary'); },
+      recordsUp:   function () { if (!esc._menuOpen) esc.requestStation('switchRecords'); },
+      recordsDown: function () { if (!esc._menuOpen) esc.requestStation('switchGrave'); },
+      portal:      function () { if (!esc._menuOpen) esc.requestStation('machine'); },
+      menu:        function () { esc.onMenuKey(); }
     });
 
-    // M3 (Lane C): the MAP BUILDER — a developer tool, reached from the nexus
-    // (not the player flow) so a save slot is always bound for playtests.
+    // M3 (Lane C): the MAP BUILDER — a developer tool on a FIXED dev key (M,
+    // deliberately not remappable), reached from the nexus (not the player
+    // flow) so a save slot is always bound for playtests.
     this.input.keyboard.on('keydown-M', function () {
+      if (esc._menuOpen) return;
       persist();
       AUDIO.stopMusic();                                 // M3.9
       esc.scene.start('Builder');
@@ -447,11 +477,11 @@ var NexusScene = new Phaser.Class({
     var c = this.add.sprite(cx, conY, 'console').setScale(3).setDepth(3).setInteractive({ useHandCursor: true });
     this.consoleSprite = c;
     this.tweens.add({ targets: c, alpha: 0.75, yoyo: true, repeat: -1, duration: 1200 });   // dormant heartbeat
-    var cl = this.add.text(cx, conY + 36, DATA.console.name + ' (' + DATA.console.hotkey + ')',
+    var cl = this.add.text(cx, conY + 36, DATA.console.name + ' (' + BINDS.keyLabel('portal') + ')',
       { fontFamily: 'monospace', fontSize: 11, color: '#49e83b' }).setOrigin(0.5);
     cl.setShadow(1, 2, '#1a1c2c', 2, true, true);
+    this.consoleLabel = cl;                              // live-updates on rebind
     c.on('pointerdown', function () { self.requestStation('machine'); });
-    this.input.keyboard.on('keydown-P', function () { self.requestStation('machine'); });
     this.consoleUi = null;
     this.flowTimer = null;       // powered-state pulse stream
     // run config survives open/close within a visit; defaults are fresh per scene
@@ -799,13 +829,46 @@ var NexusScene = new Phaser.Class({
   updateRecordsScreen: function () { this.showRecords('none'); },
 
   // the lever: flips the page, kicks a pulse down the wire, re-TYPES the glass
+  // ------- ESC MENU (2026-07-12): unified chamber/realm pop-up ------------
+  onMenuKey: function () {
+    if (this._menuHandle) { this._menuHandle.close(); return; }   // menu open → close it
+    if (this.consoleUi) { this.toggleConsole(); return; }         // else close an overlay first
+    if (this.vaultUi) { this.toggleVault(); return; }
+    if (this.bestiaryUi) { this.toggleBestiary(); return; }
+    if (this.gyUi) { this.toggleGraveyard(); return; }
+    this.openMenu();
+  },
+
+  openMenu: function () {
+    var self = this;
+    this.physics.world.pause();                          // freeze the room while open
+    AUDIO.play('ui');
+    MENU.open(this, {
+      title: 'MENU',
+      extraButtons: [
+        { label: 'Exit to load screen', color: '#ff9e6d', onClick: function () {
+            persist(); AUDIO.stopMusic(); self.scene.start('Title');
+        } }
+      ],
+      onResume: function () { self.physics.world.resume(); AUDIO.play('ui'); }
+    });
+  },
+
+  // Rewrite every station chip from the live binds (called after a rebind).
+  refreshBindLabels: function () {
+    if (this.vaultLabel)    this.vaultLabel.setText('VAULT (' + BINDS.keyLabel('vault') + ')');
+    if (this.bestiaryLabel) this.bestiaryLabel.setText('BESTIARY (' + BINDS.keyLabel('bestiary') + ')');
+    if (this.consoleLabel)  this.consoleLabel.setText(DATA.console.name + ' (' + BINDS.keyLabel('portal') + ')');
+    if (this.leverLabel)    this.leverLabel.setText('(' + BINDS.keyLabel(this.recordsMode === 'records' ? 'recordsDown' : 'recordsUp') + ')');
+  },
+
   setRecordsMode: function (mode) {
     if (mode !== 'records' && mode !== 'grave') return;
     if (this.recordsMode === mode) return;
     this.recordsMode = mode;
     this.registry.set('recordsMode', mode);              // survives resize restarts
     this.leverSprite.setTexture(mode === 'records' ? 'lever_up' : 'lever_down');
-    this.leverLabel.setText(mode === 'records' ? '(G)' : '(R)');   // the OTHER page's key
+    this.leverLabel.setText('(' + BINDS.keyLabel(mode === 'records' ? 'recordsDown' : 'recordsUp') + ')');   // the OTHER page's key
     AUDIO.play('ui');
     // v2: the wire only carries energy when the lever is THROWN — a burst
     // of three pulses races to the screen, then it goes quiet again
@@ -1260,6 +1323,7 @@ var NexusScene = new Phaser.Class({
   },
 
   update: function (time, delta) {
+    if (this._menuOpen) { this.player.body.setVelocity(0, 0); return; }   // menu freezes the room
     var intent = this.rig.collect(this.player, false);
     intent.firing = false; intent.ability = false;      // nexus is safe (Fusion Law F1)
     // M3.8: walk-to-interact — a straight line to the station, then act.
@@ -1335,6 +1399,7 @@ var RealmScene = new Phaser.Class({
     this.startedAt = this.time.now;
     this.deadUi = null;
     this.paused = false; this.pausedAt = 0; this.pauseUi = null;   // M1 pause
+    this._menuOpen = false; this._menuHandle = null; this._bindsCapture = false;  // ESC menu (bug #1)
     this.hitstopReadyAt = 0; this.hitstopActive = false;           // M1 hitstop
     this.bossPortal = null; this.boss = null; this.closing = false; // M2 boss flow
     // M2.1 scope patch (MECHANICS_MANIFESTO Part 4) — reset ALL instance-field
@@ -1406,19 +1471,12 @@ var RealmScene = new Phaser.Class({
     this.spawnEvent = this.time.addEvent({ delay: DATA.waves.spawnIntervalMs, loop: true, callback: this.directorSpend, callbackScope: this });
     this.directorSpend(); this.directorSpend();          // opening pressure
 
-    // M1 pause: ESC or P toggles (only while alive — the death screen owns the
-    // end). P exists because in fullscreen the browser grabs the real ESC key
-    // to exit fullscreen at the same time.
-    this.input.keyboard.on('keydown-ESC', function () { self.togglePause(); });
-    this.input.keyboard.on('keydown-P', function () { self.togglePause(); });
-    // volume control lives in the pause menu (LEFT/RIGHT)
-    this.input.keyboard.on('keydown-LEFT',  function () { if (self.paused) self.adjustVolume(-0.1); });
-    this.input.keyboard.on('keydown-RIGHT', function () { if (self.paused) self.adjustVolume(0.1); });
-    this.input.keyboard.on('keydown-Q', function () {     // paused → save & return to nexus
-      if (!self.paused) return;
-      AUDIO.play('ui');
-      persist();
-      self.scene.start('Nexus', { entry: 'realm' });      // M3.8: numbers ramp on return
+    // Pause / menu key (rebindable, default ESC) — main.js keyboard-locks ESC
+    // in fullscreen so it opens the menu instead of leaving fullscreen. Volume
+    // + exits now live INSIDE the menu; auto-fire is a rebindable action too.
+    BINDS.wire(this, {
+      menu:     function () { self.togglePause(); },
+      autofire: function () { if (!self.paused && self.player.state.alive) self.toggleAutoFire(); }
     });
 
     this.buildHud();
@@ -1428,10 +1486,15 @@ var RealmScene = new Phaser.Class({
   },
 
   // ------------------------------------------------------------ M1: PAUSE --
+  // The pause overlay is now the shared ESC menu (MENU): Resume · Settings
+  // (music/SFX + keybinds) · Return to chamber · Exit to load screen. The
+  // freeze/unfreeze logic stays here; MENU owns the UI and calls unfreeze()
+  // back through onResume.
   togglePause: function () {
     if (!this.player.state.alive) return;
     if (this.scanning || this.looting) return;            // M2.1: overlays own the freeze
-    if (this.paused) this.resumeGame(); else this.pauseGame();
+    if (this._menuHandle) { this._menuHandle.close(); return; }   // close → unfreeze via onResume
+    this.pauseGame();
   },
 
   pauseGame: function () {
@@ -1441,26 +1504,31 @@ var RealmScene = new Phaser.Class({
     this.spawnEvent.paused = true;
     this.tweens.pauseAll();
     AUDIO.play('ui');
-    this.buildPauseMenu();
+    var self = this;
+    MENU.open(this, {
+      title: 'PAUSED',
+      extraButtons: [
+        { label: 'Return to chamber', color: '#a7d3ff', onClick: function () {
+            persist(); self.scene.start('Nexus', { entry: 'realm' });   // M3.8: numbers ramp on return
+        } },
+        { label: 'Exit to load screen', color: '#ff9e6d', onClick: function () {
+            persist(); AUDIO.stopMusic(); self.scene.start('Title');
+        } }
+      ],
+      onResume: function () { self.unfreeze(); }
+    });
   },
 
-  // Separate so a fullscreen toggle (canvas resize) can rebuild it while open.
-  buildPauseMenu: function () {
-    if (this.pauseUi) { this.pauseUi.forEach(function (o) { o.destroy(); }); }
-    var W = this.scale.width, H = this.scale.height, cx = W / 2, cy = H / 2;
-    var ui = [];
-    ui.push(this.add.rectangle(cx, cy, W, H, 0x000000, 0.66).setScrollFactor(0).setDepth(80));
-    ui.push(this.add.text(cx, cy - 100, 'PAUSED', { fontFamily: 'monospace', fontSize: 40, color: '#ffcd75' }).setScrollFactor(0).setOrigin(0.5).setDepth(81));
-    this.volText = this.add.text(cx, cy - 20, '', { fontFamily: 'monospace', fontSize: 17, color: '#f4f4f4' }).setScrollFactor(0).setOrigin(0.5).setDepth(81);
-    ui.push(this.volText);
-    ui.push(this.add.text(cx, cy + 60,
-      'ESC/P resume · LEFT/RIGHT volume · T auto-fire (' + (this.autoFire ? 'ON' : 'OFF') + ')\nF fullscreen · Q save & return to nexus',
-      { fontFamily: 'monospace', fontSize: 14, color: '#94b0c2', align: 'center' }).setScrollFactor(0).setOrigin(0.5).setDepth(81));
-    this.pauseUi = ui;
-    this.renderVolume();
-  },
-
+  // resumeGame is the single "leave pause" path (death screen calls it too):
+  // closing the menu triggers unfreeze via onResume; if it's already gone,
+  // unfreeze directly.
   resumeGame: function () {
+    if (this._menuHandle) { this._menuHandle.close(); return; }
+    this.unfreeze();
+  },
+
+  unfreeze: function () {
+    if (!this.paused) return;
     this.paused = false;
     var dt = this.time.now - this.pausedAt;
     this.startedAt += dt;                        // realm clock ignores paused time
@@ -1471,22 +1539,15 @@ var RealmScene = new Phaser.Class({
     // E2 wipe, chest pending) — fixes a latent unpause-restarts-the-swarm bug
     this.spawnEvent.paused = !!(this.bossPortal || this.boss || this.pendingLoot || this.closing);
     this.tweens.resumeAll();
-    if (this.pauseUi) { this.pauseUi.forEach(function (o) { o.destroy(); }); this.pauseUi = null; }
-    this.volText = null;
     AUDIO.play('ui');
   },
 
-  adjustVolume: function (d) {
-    AUDIO.setVolume(AUDIO.volume() + d);
-    this.renderVolume();
+  // rebindable auto-fire toggle (was the fixed T key)
+  toggleAutoFire: function () {
+    this.autoFire = !this.autoFire;
+    SAVE.settings().autoFire = this.autoFire;             // persists across realms (TM-1)
+    SAVE.saveSettings();
     AUDIO.play('ui');
-  },
-
-  renderVolume: function () {
-    if (!this.volText) return;
-    var v = AUDIO.volume(), n = Math.round(v * 10);
-    var bar = new Array(n + 1).join('█') + new Array(10 - n + 1).join('░');
-    this.volText.setText('VOLUME  ◄ ' + bar + ' ► ' + Math.round(v * 100) + '%');
   },
 
   // ------------------------------------------------- M2: BOSS FLOW (F8) --
@@ -2032,11 +2093,8 @@ var RealmScene = new Phaser.Class({
         { fontFamily: T.fontFamily, fontSize: 10, color: '#ffcd75' }).setScrollFactor(0).setDepth(51);
     } else { this.affixText = null; }
     this.debugText = this.add.text(12, this.mapAffixes.length ? 46 : 34, '', { fontFamily: T.fontFamily, fontSize: 11, color: '#38b764' }).setScrollFactor(0).setDepth(51).setVisible(false);
-    this.rig.keys.T.on('down', function () {
-      this.autoFire = !this.autoFire;
-      SAVE.settings().autoFire = this.autoFire;           // persists across realms (TM-1)
-      SAVE.saveSettings();
-    }, this);
+    // auto-fire is dispatched as a rebindable action now (see BINDS.wire in
+    // create); F3 debug stays a fixed dev key.
     this.rig.keys.F3.on('down', function () { this.debugText.setVisible(!this.debugText.visible); }, this);
   },
 
@@ -2089,9 +2147,9 @@ var RealmScene = new Phaser.Class({
     g.fillStyle(ready ? 0x29366f : 0x14162b, 1); g.fillRect(bx + 6, by + 6, bh - 12, bh - 12);
     g.lineStyle(1, ready ? 0x41a6f6 : 0x333c57, 1); g.strokeRect(bx + 6, by + 6, bh - 12, bh - 12);
     this.abilityText.setPosition(bx + 6 + (bh - 12) / 2, by + bh / 2)
-      .setText('SPACE\n-' + abFx.mpCost).setColor(ready ? '#f4f4f4' : '#566c86');
+      .setText(BINDS.keyLabel('interact') + '\n-' + abFx.mpCost).setColor(ready ? '#f4f4f4' : '#566c86');
     this.barText.setPosition(bx + bh + 4, by + bh / 2)
-      .setText((this.autoFire ? 'auto-fire ON' : 'MANUAL FIRE') + ' (T)');
+      .setText((this.autoFire ? 'auto-fire ON' : 'MANUAL FIRE') + ' (' + BINDS.keyLabel('autofire') + ')');
     this.lvText.setPosition(bx + bw - 8, by + bh / 2)
       .setText('Lv ' + st.level + (st.level >= DATA.xp.cap ? ' MAX' : ''));
 

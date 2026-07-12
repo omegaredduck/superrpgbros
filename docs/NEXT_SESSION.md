@@ -11,7 +11,7 @@ We're continuing work on my game in the connected "super rpg bros" folder
 (project memory has the standing decisions — read it, plus docs/MILESTONES.md
 and the top entry of docs/EVENT_LOG.md, before writing any code).
 
-WHERE THINGS STAND (as of 2026-07-12, build ?v=m3n):
+WHERE THINGS STAND (as of 2026-07-12, build ?v=m3o):
 - M0–M1 done. M2 + M2.1 features all landed; their gates are HUMAN gates
   (my dev self-test + an outside tester for Fun Gate 1) — don't wait on them.
 - M3 features done (map builder, equipment, vault, affix engine v2,
@@ -55,8 +55,24 @@ WHERE THINGS STAND (as of 2026-07-12, build ?v=m3n):
   Phaser timers CATCH UP on the slow headless clock — guard callbacks
   against firing after their own cleanup. Flakes: none seen in the
   final 3 batteries; if they return they cluster in timer sections.
+  M3.9 CHAMBER MUSIC (?v=m3n): chiptune sequencer in audio.js + "The
+  Chamber at Rest" (original 8-bit loop, plays only in the chamber).
+  M3.10 SETTINGS · ESC MENU · KEYBINDS (?v=m3o, NEW binds.js + menu.js):
+  ESC no longer exits fullscreen (main.js keyboard-locks Escape; only F
+  toggles fullscreen); split Music + SFX volume each with on/off; ONE ESC
+  menu in chamber AND realms (Resume · Settings · Exit to load screen;
+  realm also Return to chamber); Settings has the audio sliders + a
+  remappable KEYBINDS list (13 actions, event.code, live-updates the (P)/
+  (V)/(B)/(R)/(G) labels + HUD + footer). VERIFIED via a one-off container
+  smoke test 13/13, zero console errors — but NOT folded into the numbered
+  suites and the 143 battery has NOT been re-run on m3o (do that first).
+  CAVEAT: the fullscreen fix needs a secure context — run via
+  START_SERVER.bat (localhost); file:// may not grant Keyboard Lock.
 
 THIS SESSION — close out M3, then start M4 if time:
+0. VERIFY m3o: re-run the 143-check battery (?v=m3o) + add an m3d/settings
+   suite (menu opens chamber+realm, audio split + migration, rebind
+   updates labels + persists). Then continue below.
 1. Q3/Q5 BEHIND FLAGS: XP-gems trial (Q3) and realm-buff picks (Q5) as
    data.js-flagged experiments (off by default; a flag flip turns them on
    for a playtest). Small, contained — resolve by playtest, not argument.

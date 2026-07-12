@@ -111,6 +111,7 @@ Pulled forward from M2 by user decision (2026-07-11): a proper front door before
 - [x] Rename + hotkeys (user, 2026-07-12, ?v=m3j): REALM CONSOLE → PORTAL MACHINE with P hotkey; station labels advertise hotkeys — VAULT (V) · BESTIARY (B) · PORTAL MACHINE (P)
 - [x] M3.8 chamber-alive pass (user spec, 2026-07-12, ?v=m3k): records glass BOOTS (login = empty → letters type out; realm return = numbers ramp slow-then-fast); unlabeled LEVER + live wire swaps records (R) / graveyard stats (G) readouts, re-typing on flip; WALK-TO-INTERACT — hotkeys/clicks walk the character to stand below the station, then open (manual input cancels); v2 (?v=m3l): wider glass + font 12, giant riveted metal lever, wire pulses ONLY on flip, R/G always walk to the switch; v3 (?v=m3m): SPACE throws the switch in range, floating (R)/(G) hotkey chip above it, click-to-walk confirmed
 - [x] M3.9 CHAMBER MUSIC (user ask, 2026-07-12, ?v=m3n): chiptune sequencer in audio.js (songs = data, looped, failure-safe) + "The Chamber at Rest" — ORIGINAL calming 8-bit composition (Balamb Garden is copyrighted; user approved original fallback); plays only in the chamber, stops on portal/title/builder
+- [x] M3.10 SETTINGS · ESC MENU · REMAPPABLE KEYBINDS (user ask, 2026-07-12, ?v=m3o; NEW `binds.js` + `menu.js`): (1) ESC no longer exits fullscreen — `main.js` keyboard-locks Escape (Keyboard Lock API, failure-safe; hold-Esc still exits), ONLY the fullscreen key (default F) toggles it; (2) split audio — separate Music + SFX buses each with volume + on/off (the on/off toggles are the "checkboxes"), old single volume migrated; (3) ONE ESC menu shared by chamber + realms (Resume · Settings · Exit to load screen; realm also Return to chamber); (4) Settings holds the audio sliders + a two-column KEYBINDS list (click a key → press to rebind → live-updates the (P)/(V)/(B)/(R)/(G) station labels, realm HUD, and footer; Reset keybinds). 13 rebindable actions stored as event.code; M + F3 fixed. VERIFIED headless 13/13, zero console errors — NOT yet in the numbered suites (m3d/settings TODO) and the 143 battery not re-run on m3o
 - [ ] XP gems trial behind flag (Q3) · realm-buff picks behind flag (Q5)
 - [ ] CC0 art batch 1: hero + 4 mobs + tileset (credits logged)
 
@@ -133,7 +134,7 @@ Pulled forward from M2 by user decision (2026-07-11): a proper front door before
 
 ## M6 — 1.0 polish ⬜
 
-- [ ] Settings: volume, screenshake, casual-mode (if Q1 demanded it)
+- [~] Settings: volume, screenshake, casual-mode (if Q1 demanded it) — PARTIAL: a Settings panel shipped early at M3.10 (?v=m3o) with split Music/SFX volume + on/off and remappable keybinds; screenshake toggle + casual-mode still open
 - [ ] Save export/import as file
 - [ ] Records page: graveyard, bests, totals
 - [ ] Audio pass, perf gate (300 mobs/200 projectiles @60fps), cross-browser sweep

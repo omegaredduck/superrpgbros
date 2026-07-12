@@ -6,6 +6,71 @@
 
 ---
 
+## 2026-07-12 · M3.10 · SETTINGS, ESC MENU & REMAPPABLE KEYBINDS (?v=m3n → m3o)
+
+**User ask: ESC should stop dropping out of fullscreen (only F toggles it); a
+menu on ESC with a fullscreen/audio checkbox, an "exit to load screen" option
+to portal out (like when in a map), and a settings button to adjust/enable/
+disable music AND sound-effect volumes separately. Follow-up: add a KEYBINDS
+section — remapping a key must live-update its on-screen label (e.g. the (P)
+beside the portal machine) and every other key label that shows a key.**
+Design calls taken via AskUserQuestion: split into Music + SFX each with on/off
+(those toggles ARE the "checkboxes"); ONE menu shared by chamber + realms.
+
+**Landed:**
+- FULLSCREEN FIX (`main.js`): on `enterfullscreen`, `navigator.keyboard.lock
+  (['Escape'])` (Keyboard Lock API, Chrome/Edge, secure context) routes ESC to
+  the page — a single tap opens the menu; HOLD-Esc still exits fullscreen.
+  Failure-safe (unsupported → no throw). Only the fullscreen key (rebindable,
+  default F) toggles fullscreen now; P-as-pause is retired.
+- SPLIT AUDIO (`audio.js`, `save.js`, `data.js`): a dedicated `sfxBus` + a
+  `musicBus` under master; new settings `musicVolume/musicOn/sfxVolume/sfxOn`
+  (old single `volume` migrates into both). API: `AUDIO.setMusicVolume/
+  setSfxVolume/setMusicOn/setSfxOn` + getters. On/off folds a hard 0 into the
+  bus gain so flipping it back restores the exact slider value.
+- UNIFIED ESC MENU (`menu.js`, new): `MENU.open(scene,cfg)` — same pop-up in
+  the chamber AND realms. Root = Resume · Settings · scene exits (chamber:
+  "Exit to load screen"→Title; realm: "Return to chamber"→Nexus + "Exit to
+  load screen"→Title). Settings page = Music/Sound rows (◄ bar ► + ON/OFF)
+  and a two-column KEYBINDS list; click a chip → "press a key" → next keydown
+  rebinds (Esc cancels); + "Reset keybinds".
+- REMAPPABLE KEYBINDS (`binds.js`, new): `DATA.keybinds.list` = 13 actions
+  (4 move, interact, autofire, portal, vault, bestiary, recordsUp/Down, menu,
+  fullscreen; M + F3 stay fixed dev keys). Bindings stored as layout-independent
+  `event.code` strings in `settings.binds`. `BINDS.wire(scene,actions)` adds ONE
+  `keydown` listener that reads the binds map LIVE → a rebind takes effect with
+  zero re-registration. `BINDS.rebind` swaps on conflict. Movement + interact
+  repoint through `rig.refresh()` (keys.SPACE repointed IN PLACE, so every
+  existing `rig.keys.SPACE` interact/confirm check follows the interact bind).
+- LIVE LABELS: station chips (vault/bestiary/portal-machine/lever) store refs +
+  `refreshBindLabels()`; realm HUD ability/auto-fire text reads BINDS each
+  frame; the page footer is BUILT from BINDS via `window.updateFooter` and
+  refreshed on every rebind.
+
+**Files:** NEW `game/js/binds.js`, `game/js/menu.js`; edited `game/js/audio.js`
+(split buses), `game/js/save.js` (settings + `resetBinds` + migration),
+`game/js/data.js` (`keybinds.list`), `game/js/scenes.js` (central dispatch,
+rig repoint, live labels, realm pause → shared menu, nexus openMenu/
+refreshBindLabels), `game/js/main.js` (keyboard lock + resize→MENU.relayout),
+`game/index.html` (loads binds.js + menu.js, dynamic footer, **?v= m3n → m3o**).
+
+**Testing:** VERIFIED via a one-off container smoke test — 13/13 green, zero
+console errors: audio split API + on/off + migration; all 13 binds seeded;
+rebind updates label + persists (event.code); chamber menu opens/closes; the
+vault chip live-updates on rebind; realm pause opens the shared menu. Screens
+of the chamber menu, settings/keybinds panel, and realm pause delivered to the
+user. NOTE: not yet folded into the numbered suites (m3d/settings TODO), and
+the 143-check battery has NOT been re-run against m3o.
+
+**Caveat surfaced to user:** the ESC-in-fullscreen fix needs a secure context —
+run via `START_SERVER.bat` (http://localhost); a plain `file://` double-click
+may not grant Keyboard Lock, so ESC could still leave fullscreen there.
+
+**Next up:** re-run the 143 battery on m3o + add a settings/keybinds suite;
+then back to Q3/Q5 flags → CC0 art. User still to run `2_SAVE_AND_UPLOAD.bat`.
+
+---
+
 ## 2026-07-12 · M3.9 · "THE CHAMBER AT REST" — the portal room gets music
 
 **User ask: an 8-bit Balamb Garden (FFVIII) for the chamber. That melody is

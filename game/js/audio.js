@@ -8,9 +8,18 @@
 var AUDIO = (function () {
 
   var ctx = null;         // AudioContext, created lazily (needs a user gesture)
-  var master = null;      // master gain — the volume control
+  var master = null;      // master gain — always 1; the seam to the speakers
+  var sfxBus = null;      // 2026-07-12: SFX channel (its own volume + mute)
+  var musicBus = null;    // 2026-07-12: MUSIC channel (its own volume + mute)
   var lastPlayed = {};    // name -> ms timestamp, for per-sound rate limiting
   var failed = false;     // Web Audio unavailable — stay silent forever
+
+  function set() { return SAVE.settings(); }
+  function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+  // Effective bus gains fold the on/off toggle in: OFF = a hard 0, so flipping
+  // it back restores the exact slider value with no state to remember.
+  function musicGain() { var s = set(); return s.musicOn ? clamp01(s.musicVolume) : 0; }
+  function sfxGain()   { var s = set(); return s.sfxOn   ? clamp01(s.sfxVolume)   : 0; }
 
   function ensure() {
     if (ctx) return true;
@@ -20,8 +29,10 @@ var AUDIO = (function () {
       if (!AC) { failed = true; return false; }
       ctx = new AC();
       master = ctx.createGain();
-      master.gain.value = volume();
+      master.gain.value = 1;
       master.connect(ctx.destination);
+      sfxBus = ctx.createGain();   sfxBus.gain.value   = sfxGain();   sfxBus.connect(master);
+      musicBus = ctx.createGain(); musicBus.gain.value = musicGain(); musicBus.connect(master);
       return true;
     } catch (e) { failed = true; ctx = null; return false; }
   }
@@ -35,19 +46,37 @@ var AUDIO = (function () {
     window.addEventListener('keydown', unlock);
   }
 
-  function volume() { return SAVE.settings().volume; }
+  // ---- Split volume API (2026-07-12). Sliders step in tenths. ----
+  function snap(v) { return Math.max(0, Math.min(1, Math.round(v * 10) / 10)); }
 
-  function setVolume(v) {
-    v = Math.max(0, Math.min(1, Math.round(v * 10) / 10));   // 0.0 .. 1.0 in tenths
-    SAVE.settings().volume = v;
-    SAVE.saveSettings();
-    if (master) master.gain.value = v;
+  function setMusicVolume(v) {
+    v = snap(v); set().musicVolume = v; SAVE.saveSettings();
+    if (musicBus) musicBus.gain.value = musicGain();
     return v;
   }
+  function setSfxVolume(v) {
+    v = snap(v); set().sfxVolume = v; SAVE.saveSettings();
+    if (sfxBus) sfxBus.gain.value = sfxGain();
+    return v;
+  }
+  function setMusicOn(b) {
+    set().musicOn = !!b; SAVE.saveSettings();
+    if (musicBus) musicBus.gain.value = musicGain();
+    return set().musicOn;
+  }
+  function setSfxOn(b) {
+    set().sfxOn = !!b; SAVE.saveSettings();
+    if (sfxBus) sfxBus.gain.value = sfxGain();
+    return set().sfxOn;
+  }
+  function musicVolume() { return set().musicVolume; }
+  function sfxVolume()   { return set().sfxVolume; }
+  function musicOn()     { return set().musicOn; }
+  function sfxOn()       { return set().sfxOn; }
 
   function play(name) {
     var d = DATA.audio.sounds[name];
-    if (!d || volume() <= 0 || !ensure()) return;
+    if (!d || sfxGain() <= 0 || !ensure()) return;
     try {
       if (ctx.state !== 'running') return;                   // still locked — skip
       var now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
@@ -66,7 +95,7 @@ var AUDIO = (function () {
     for (var i = 0; i < notes.length; i++) {
       var st = t0 + i * per, en = st + per;
       var g = ctx.createGain();
-      g.connect(master);
+      g.connect(sfxBus);
       g.gain.setValueAtTime(0.0001, st);
       g.gain.exponentialRampToValueAtTime(Math.max(0.001, d.vol), st + 0.008);
       g.gain.exponentialRampToValueAtTime(0.0001, en);
@@ -104,7 +133,7 @@ var AUDIO = (function () {
     g.gain.setValueAtTime(0.0001, t0);
     g.gain.exponentialRampToValueAtTime(Math.max(0.001, d.noise.vol), t0 + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + len);
-    src.connect(filt); filt.connect(g); g.connect(master);
+    src.connect(filt); filt.connect(g); g.connect(sfxBus);
     src.start(t0);
     src.stop(t0 + len + 0.02);
   }
@@ -159,7 +188,7 @@ var AUDIO = (function () {
       music.name = name;
       music.gain = ctx.createGain();
       music.gain.gain.value = 1;
-      music.gain.connect(master);
+      music.gain.connect(musicBus);
       var spb = 60 / d.bpm;
       var beats = 0;
       d.tracks[0].notes.forEach(function (n) { beats += n[1]; });
@@ -197,6 +226,10 @@ var AUDIO = (function () {
     window.addEventListener('keydown', function () { setTimeout(unlockMusic, 60); });
   }
 
-  return { play: play, unlock: unlock, setVolume: setVolume, volume: volume,
+  return { play: play, unlock: unlock,
+           setMusicVolume: setMusicVolume, setSfxVolume: setSfxVolume,
+           setMusicOn: setMusicOn, setSfxOn: setSfxOn,
+           musicVolume: musicVolume, sfxVolume: sfxVolume,
+           musicOn: musicOn, sfxOn: sfxOn,
            playMusic: playMusic, stopMusic: stopMusic };
 })();
