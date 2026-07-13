@@ -11,15 +11,23 @@ var Entities = (function () {
     var cls = DATA.classes[character.cls];
     var stats = SIM.statsFor(cls, character.level, character.potionsDrunk,
                              character.equipment);  // M2: potions · M3: gear
-    var p = scene.physics.add.sprite(x, y, cls.weapon === 'bow' ? 'ranger' : 'ranger');
+    // M4: the sprite is the CLASS's texture (Ranger vs Wizard); the held
+    // weapon sprite below is the class weapon's heldTexture (bow vs staff).
+    var p = scene.physics.add.sprite(x, y, cls.texture || 'ranger');
     p.setScale(2).setDepth(10);
     p.body.setSize(10, 12).setOffset(3, 3);
     p.id = nextId++;
     p.state = {                                  // plain-data state (seam rule 1)
       cls: character.cls, level: character.level, xp: character.xp,
       equipment: character.equipment,            // M3: same ref as the save — one truth
-      stats: stats, hp: stats.hp, mp: stats.mp,
-      lastHitAt: -9999, lastShotAt: 0, lastAbilityAt: 0, alive: true, kills: 0
+      stats: stats, hp: stats.hp,
+      // M4 berserker rework: a `startsEmpty` resource (the Knight's RAGE) opens
+      // at 0 — it's earned by connecting the cleave, never given.
+      mp: (cls.resource && cls.resource.startsEmpty) ? 0 : stats.mp,
+      lastHitAt: -9999, lastShotAt: 0, lastAbilityAt: 0, alive: true, kills: 0,
+      whirling: false, lastWhirlTickAt: 0,       // M4: Knight whirlwind channel state
+      swingAt: 0, swingArc: 0,                    // M4: Knight melee swing animation
+      lastBarrageAt: 0                            // M4: Wizard machine-gun cadence
     };
     // E8 (M2.1): the held weapon sprite — presentation only (seam rule 3);
     // aligned to the aim direction every frame in updatePlayer.
@@ -44,45 +52,134 @@ var Entities = (function () {
     p.setFlipX(Math.cos(intent.aimAngle) < 0);
     if (p.held) {
       var weap = DATA.weapons[DATA.classes[st.cls].weapon];
-      p.held.setVisible(true)
-        .setPosition(p.x + Math.cos(intent.aimAngle) * weap.holdOffset,
-                     p.y + Math.sin(intent.aimAngle) * weap.holdOffset)
-        .setRotation(intent.aimAngle);   // rotation alone fully orients the bow
+      if (weap.upright) {
+        // M4 (user, 2026-07-13): a WALKING-STAFF carry — the weapon stands
+        // upright at the hand on the facing side with a slight lean, instead
+        // of pointing out along the aim like a bow arm. (Texture points RIGHT,
+        // so -90° stands it head-up.)
+        var side = Math.cos(intent.aimAngle) < 0 ? -1 : 1;
+        p.held.setVisible(true)
+          .setPosition(p.x + side * weap.holdOffset * 0.6, p.y + 3)
+          .setRotation(-Math.PI / 2 + side * 0.12);
+      } else {
+        // M4: a MELEE weapon SWINGS — during the swing window the held sword
+        // sweeps through the arc (windup at -arc → follow-through at +arc,
+        // eased) so the attack reads as a real chop, not a static point.
+        // Other ranged weapons (the bow) track the aim as before.
+        var ang = intent.aimAngle;
+        if (weap.melee && st.swingAt && time - st.swingAt < (weap.swingMs || 160)) {
+          var pr = (time - st.swingAt) / (weap.swingMs || 160);   // 0..1
+          var eased = pr * pr * (3 - 2 * pr);                     // smoothstep
+          ang += (-1 + 2 * eased) * (st.swingArc || 0);          // -arc → +arc
+        }
+        p.held.setVisible(true)
+          .setPosition(p.x + Math.cos(ang) * weap.holdOffset, p.y + Math.sin(ang) * weap.holdOffset)
+          .setRotation(ang);   // rotation alone fully orients the weapon
+      }
     }
 
     // MP regen
     st.mp = Math.min(st.stats.mp, st.mp + DATA.classes[st.cls].mpRegenPerSec * dt / 1000);
 
     // firing (M3: the equipped weapon item adds flat damage — SIM.weaponMod)
+    // M4: the projectile texture + pierce come from the weapon (bow arrow vs
+    // frost bolt); a frost weapon also carries a SLOW rider that the realm's
+    // shot→mob overlap applies via Entities.applySlow.
     var weapon = DATA.weapons[DATA.classes[st.cls].weapon];
     var wDmg = weapon.dmg + SIM.weaponMod(st.equipment).dmg;
     var interval = 1000 / SIM.fireRate(weapon, st.stats.dex);
     if (intent.firing && time - st.lastShotAt >= interval) {
       st.lastShotAt = time;
-      fireProjectile(scene, scene.playerShots, p.x, p.y, intent.aimAngle,
-        weapon.projSpeed, SIM.damage(wDmg, st.stats.att, 0), weapon.lifeMs, 'arrow', false);
+      // M4: a MELEE weapon (the Knight's sword) swings an ARC instead of firing
+      // a projectile — RealmScene.meleeSwing owns the hit test + crescent VFX
+      // (it needs the mobs + boss). Projectile weapons (bow/frost) fire as before.
+      if (weapon.melee) {
+        if (scene.meleeSwing) scene.meleeSwing(p, intent, st, weapon, wDmg);
+        st.swingAt = time;                                       // M4: start the sword-swing animation
+        st.swingArc = Phaser.Math.DegToRad(weapon.arcDeg || 100) * 0.6;
+      } else {
+        var shot = fireProjectile(scene, scene.playerShots, p.x, p.y, intent.aimAngle,
+          weapon.projSpeed, SIM.damage(wDmg, st.stats.att, 0), weapon.lifeMs,
+          weapon.texture || 'arrow', !!weapon.pierce);
+        if (shot && weapon.slow) shot.proj.slow = weapon.slow;   // M4: frost rider
+      }
       scene.events.emit('player-shot');
     }
 
-    // SPACE ability: volley (Fusion Law F2/F7). M3: the equipped ability item
-    // modifies cost + arrow count (SIM.abilityFor).
+    // SPACE ability (Fusion Law F2/F7). M3: the equipped ability item modifies
+    // cost + count (SIM.abilityFor — one-shot casts only). M4: the ability
+    // BRANCHES on its type — 'volley' (Ranger fan of arrows, one-shot),
+    // 'barrage' (Wizard machine gun, held channel), 'whirlwind' (Knight spin,
+    // held channel).
     var ab = DATA.abilities[DATA.classes[st.cls].ability];
-    var abFx = SIM.abilityFor(ab, st.equipment);
-    if (intent.ability && st.mp >= abFx.mpCost && time - st.lastAbilityAt >= ab.cooldownMs) {
-      st.lastAbilityAt = time; st.mp -= abFx.mpCost;
-      var half = (abFx.count - 1) / 2;
-      for (var i = 0; i < abFx.count; i++) {
-        var a = intent.aimAngle + Phaser.Math.DegToRad(ab.spreadDeg) * ((i - half) / half || 0) / 2;
-        fireProjectile(scene, scene.playerShots, p.x, p.y, a, ab.projSpeed,
-          SIM.damage(wDmg * ab.dmgMult, st.stats.att, 0), ab.lifeMs, 'arrow', ab.pierce);
+    // M4: HELD CHANNELS run on their own paths — the KNIGHT's WHIRLWIND (drain
+    // rage over time + per-tick damage via the scene) and the WIZARD's ARCANE
+    // BARRAGE (machine-gun bolts, paid per shot). One-shot casts (volley) stay
+    // on the cost+cooldown block below.
+    if (ab.type === 'whirlwind') {
+      channelWhirlwind(scene, p, st, ab, intent, time, dt);
+    } else if (ab.type === 'barrage') {
+      channelBarrage(scene, p, st, ab, intent, time);
+    } else {
+      var abFx = SIM.abilityFor(ab, st.equipment);
+      if (intent.ability && st.mp >= abFx.mpCost && time - st.lastAbilityAt >= ab.cooldownMs) {
+        var half = (abFx.count - 1) / 2;
+        for (var i = 0; i < abFx.count; i++) {
+          var a = intent.aimAngle + Phaser.Math.DegToRad(ab.spreadDeg) * ((i - half) / half || 0) / 2;
+          fireProjectile(scene, scene.playerShots, p.x, p.y, a, ab.projSpeed,
+            SIM.damage(wDmg * ab.dmgMult, st.stats.att, 0), ab.lifeMs, 'arrow', ab.pierce);
+        }
+        st.lastAbilityAt = time; st.mp -= abFx.mpCost; scene.events.emit('player-ability', ab);
       }
-      scene.events.emit('player-ability');
     }
 
     // i-frame blink
     var a = time - st.lastHitAt < DATA.combat.iframesMs ? (Math.floor(time / 60) % 2 ? 0.4 : 1) : 1;
     p.setAlpha(a);
     if (p.held) p.held.setAlpha(a);
+  }
+
+  // M4 (KNIGHT): the WHIRLWIND channel. While the ability key is held AND MP
+  // remains, the Knight spins: drain mpDrainPerSec each second and, every
+  // tickMs, hand off to the realm (RealmScene.whirlwindTick owns the mobs, the
+  // boss, the tornado procs, and the ring VFX). st.whirling drives the spinning
+  // ring in the scene. It costs nothing when it can't spin — the nexus has no
+  // whirlwindTick and forces intent.ability false, so no drain in the chamber.
+  function channelWhirlwind(scene, p, st, ab, intent, time, dt) {
+    var canSpin = intent.ability && st.mp > 0 && !!scene.whirlwindTick;
+    if (canSpin) {
+      st.mp = Math.max(0, st.mp - ab.mpDrainPerSec * dt / 1000);
+      st.whirling = true;
+      if (time - (st.lastWhirlTickAt || 0) >= ab.tickMs) {
+        st.lastWhirlTickAt = time;
+        scene.whirlwindTick(p, st, ab);
+      }
+    } else {
+      st.whirling = false;
+    }
+  }
+
+  // M4 (WIZARD, user redesign 2026-07-13): the STORM BARRAGE channel — a
+  // machine gun of LIGHTNING BALLS. While the ability key is held, a ball
+  // fires every fireEveryMs DEAD STRAIGHT down the aim line (no spread, no
+  // pierce), each paid for with mpPerShot; the gun goes quiet the instant MP
+  // can't cover the next round. Each ball carries the STRIKE PROC rider
+  // (proj.strike) — when it connects, the realm's overlap can SUMMON A
+  // LIGHTNING BOLT onto the victim (scene.lightningStrike). Realm-only in
+  // practice (nexus forces intent.ability false, and it needs playerShots).
+  function channelBarrage(scene, p, st, ab, intent, time) {
+    if (!intent.ability || !scene.playerShots) return;
+    if (st.mp < ab.mpPerShot) return;
+    if (time - (st.lastBarrageAt || 0) < ab.fireEveryMs) return;
+    st.lastBarrageAt = time;
+    st.mp -= ab.mpPerShot;
+    var shot = fireProjectile(scene, scene.playerShots, p.x, p.y, intent.aimAngle, ab.projSpeed,
+      SIM.damage(ab.dmg, st.stats.att, 0), ab.lifeMs, ab.texture || 'bolt', false);
+    if (shot) {
+      if (ab.strike) shot.proj.strike = ab.strike;         // lightning-bolt proc rider
+      shot.body.setSize(8, 8).setOffset(1, 1);             // the BIG ball hits like it looks
+    }
+    scene.events.emit('player-ability', ab);
   }
 
   function hurtPlayer(scene, p, dmg, time, sourceName) {
@@ -120,7 +217,8 @@ var Entities = (function () {
     m.body.setSize(11, 11).setOffset(2.5, 2.5);
     m.id = nextId++;
     m.mob = { key: key, def: def, hp: def.hp, xp: def.xp, spd: def.spd,
-              affix: null, evolved: false, lastShotAt: 0, lastContactAt: 0 };
+              affix: null, evolved: false, lastShotAt: 0, lastContactAt: 0,
+              slowUntil: 0, slowMult: 1, frosted: false };   // M4: frost slow (pooled — reset)
     m.clearTint(); m.setAlpha(1);
     clearNameTag(m);                                       // pooled sprite may carry a stale tag
     // E9: the affix engine (v2 at M3 — all five affixes live). Rolled at spawn
@@ -160,12 +258,30 @@ var Entities = (function () {
     if (m.nameTag) { m.nameTag.destroy(); m.nameTag = null; }
   }
 
+  // M4 (WIZARD): apply a FROST SLOW to a mob — spd × slow.mult for slow.ms.
+  // Called from the realm's shot→mob overlap when a frost bolt lands. Refreshes
+  // the timer on re-hit; updateMob reads slowUntil/slowMult + paints the tint.
+  function applySlow(m, slow, time) {
+    if (!m || !m.mob || !slow) return;
+    m.mob.slowUntil = time + slow.ms;
+    m.mob.slowMult = slow.mult;
+  }
+
   function updateMob(scene, m, player, time) {
     var def = m.mob.def;
     var dx = player.x - m.x, dy = player.y - m.y;
     var dist = Math.hypot(dx, dy) || 1;
 
     var spd = m.mob.spd;                        // E9: affix-adjusted speed
+    // M4: FROST SLOW — a frostbolt-hit mob crawls at spd×slowMult until it
+    // wears off. A non-champion wears a frost tint while slowed (champions keep
+    // their affix tint); cleared here the frame the slow expires.
+    var slowed = m.mob.slowUntil && time < m.mob.slowUntil;
+    if (slowed) spd = Math.round(spd * (m.mob.slowMult || 1));
+    if (!m.mob.affix) {
+      if (slowed && !m.mob.frosted) { m.setTint(0x8fd6ff); m.mob.frosted = true; }
+      else if (!slowed && m.mob.frosted) { m.clearTint(); m.mob.frosted = false; }
+    } else { m.mob.frosted = false; }
     if (def.shoot) {
       // shooter verb: hold preferred range, fire patterns (F9)
       var want = def.shoot.range * 0.85;
@@ -217,6 +333,9 @@ var Entities = (function () {
       if (!m.active) return;
       m.clearTint();
       if (m.mob.affix) m.setTint(m.mob.affix.tint);   // E9: champions keep their tint
+      else if (m.mob.slowUntil && scene.time.now < m.mob.slowUntil) {
+        m.setTint(0x8fd6ff); m.mob.frosted = true;    // M4: keep the frost tint under a hit flash
+      }
     });
     // knockback
     var p = scene.player;
@@ -327,7 +446,7 @@ var Entities = (function () {
   return {
     createPlayer: createPlayer, updatePlayer: updatePlayer, hurtPlayer: hurtPlayer,
     grantXp: grantXp, spawnMob: spawnMob, updateMob: updateMob, hurtMob: hurtMob,
-    clearNameTag: clearNameTag,
+    clearNameTag: clearNameTag, applySlow: applySlow,
     spawnBoss: spawnBoss, updateBoss: updateBoss, hurtBoss: hurtBoss,
     fireProjectile: fireProjectile, killProjectile: killProjectile,
     updateProjectiles: updateProjectiles

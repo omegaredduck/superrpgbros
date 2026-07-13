@@ -4,33 +4,139 @@
 // ============================================================================
 var DATA = {
 
-  // --- Classes (Fusion Law F7). Only Ranger exists at M0. -------------------
+  // --- Classes (Fusion Law F7). M0: Ranger only. M4 (2026-07-12): + Wizard.
+  // Every class carries its own base/growth/caps + a weapon + an ability key;
+  // the sprite is `texture` (Entities.createPlayer reads it). Both are OPEN
+  // from the start (chosen per save slot at NEW GAME); a slot keeps its class
+  // across permadeath (a fresh character of the SAME class is born on death).
   // M1 tuning sweep (2026-07-11): spd 170→180 (dodging is the skill — F2;
   // player must feel faster than the swarm), baseRate 1.5→1.7 (punchier).
   classes: {
     ranger: {
-      name: 'Ranger',
+      name: 'Ranger', texture: 'ranger', accent: 0x38b764,
+      blurb: 'Fast single-target archer. Kites the swarm and picks it apart.',
       base:   { hp: 100, mp: 100, att: 12, def: 0, spd: 180, dex: 12 },
       growth: { hp: 12,  mp: 6,   att: 1,  def: 0.34, spd: 1.4, dex: 0.8 }, // per level
       caps:   { hp: 700, mp: 300, att: 60, def: 25, spd: 260, dex: 55 },
       mpRegenPerSec: 4,
       weapon: 'bow',
       ability: 'volley'
+    },
+    // M4 (user design 2026-07-12, special reworked 2026-07-13): the WIZARD — a
+    // crowd-control caster. Frost-bolt basic PIERCES every enemy in a line and
+    // SLOWS them; the ability is the ARCANE BARRAGE — a held machine gun of
+    // straight-line bolts (see weapons.frost + abilities.barrage). Squishier +
+    // slower than the Ranger, but higher spell power and a deep MP pool + regen.
+    wizard: {
+      name: 'Wizard', texture: 'wizard', accent: 0x41a6f6,
+      blurb: 'Frost-bolt caster. Pierces + slows the swarm; unloads an arcane machine gun.',
+      base:   { hp: 85, mp: 130, att: 14, def: 0, spd: 165, dex: 10 },
+      growth: { hp: 10, mp: 9,   att: 1.2, def: 0.3, spd: 1.2, dex: 0.7 },
+      caps:   { hp: 560, mp: 420, att: 70, def: 22, spd: 240, dex: 48 },
+      mpRegenPerSec: 6,
+      weapon: 'frost',
+      ability: 'barrage'   // user redesign 2026-07-13: machine gun replaced the storm orbs
+    },
+    // M4 (user design 2026-07-13): the KNIGHT — an armored MELEE bruiser (the
+    // roster's first non-projectile class). Basic = a curved CRESCENT CLEAVE
+    // that sweeps forward toward the aim and carves every mob in a frontal arc
+    // (weapons.sword, melee:true — a new verb: RealmScene.meleeSwing). Ability =
+    // WHIRLWIND, a HELD CHANNEL: he spins, draining MP every second while held,
+    // shredding anything inside the ring on a fast tick (abilities.whirlwind,
+    // type:'whirlwind' — RealmScene.whirlwindTick). Tanky juggernaut: the most
+    // HP + DEF, the slowest SPD, high ATT, a shallow MP pool the whirlwind burns
+    // through (so it's a burst tool, not a permanent state). Squishy classes
+    // kite; the Knight wades in and out-trades the pack face-to-face.
+    // BERSERKER REWORK (user, 2026-07-13, ?v=m4d): the Knight now TAKES A LOT
+    // MORE DAMAGE (hp/def cut hard) — his survival tool is the whirlwind's
+    // LIFESTEAL. His resource is RAGE, not mana: it STARTS EMPTY, never regens
+    // on its own (mpRegenPerSec 0), and FILLS as the cleave connects
+    // (weapons.sword.rageGain per enemy hit). The whirlwind drains it and heals
+    // him per enemy it damages (abilities.whirlwind.hpPerHit); at 0 rage the
+    // channel refuses. The HUD draws his right orb as MOLTEN LAVA (resource).
+    knight: {
+      name: 'Knight', texture: 'knight', accent: 0xef7d57,
+      blurb: 'Rage-fueled bruiser. Cleaves build rage; the whirlwind spends it and mends him.',
+      base:   { hp: 115, mp: 80,  att: 16,  def: 1,    spd: 150, dex: 8 },
+      growth: { hp: 12,  mp: 3,   att: 1.3, def: 0.35, spd: 1.0, dex: 0.5 },
+      caps:   { hp: 720, mp: 160, att: 66,  def: 26,   spd: 220, dex: 40 },
+      mpRegenPerSec: 0,
+      resource: { name: 'RAGE', color: 0xff5a1f, glow: 0xff8c2e, startsEmpty: true },
+      weapon: 'sword',
+      ability: 'whirlwind'
     }
   },
 
   weapons: {
     bow: { dmg: 14, projSpeed: 560, lifeMs: 700, texture: 'arrow',
            // shots per second = 1.7 + dex * 0.055  (see sim.fireRate)
-           baseRate: 1.7, dexRate: 0.055,
+           baseRate: 1.7, dexRate: 0.055, sound: 'shoot',
            // E8 (2026-07-12): the weapon is now VISIBLY held — a sprite that
            // dynamically aligns to the aim direction (F2: mouse aims).
-           heldTexture: 'bow', holdOffset: 15 }
+           heldTexture: 'bow', holdOffset: 15 },
+    // M4: the Wizard's FROST STAFF. Slower cadence + harder hit than the bow,
+    // and every bolt PIERCES the whole line (pierce:true) and SLOWS what it
+    // touches (slow: mob spd × mult for ms — applied in the realm's shot→mob
+    // overlap via Entities.applySlow). shots/sec = 1.15 + dex*0.045.
+    // upright (user, 2026-07-13): the staff is CARRIED like a walking staff —
+    // held vertical at the Wizard's side — instead of aimed out like a bow arm.
+    frost: { dmg: 22, projSpeed: 470, lifeMs: 820, texture: 'frostbolt',
+             baseRate: 1.15, dexRate: 0.045, sound: 'frost',
+             pierce: true, slow: { mult: 0.55, ms: 1300 },
+             heldTexture: 'staff', holdOffset: 14, upright: true },
+    // M4: the Knight's SWORD — a MELEE weapon (melee:true, no projectile). Each
+    // "shot" is a CRESCENT CLEAVE: RealmScene.meleeSwing hits every mob/boss
+    // within `range` px whose bearing is inside `arcDeg`/2 of the aim. Hard
+    // single hit, but you have to be in the mob's face. swings/sec = 1.25 +
+    // dex*0.05 (the Knight's low dex → a heavier, slower cadence than the bow).
+    // range = whirlwind radius (94) so the cleave reaches AS FAR as the whirlwind
+    // extends (user, 2026-07-13); swingMs = the sword's on-screen swing duration.
+    // rageGain (berserker rework): RAGE gained PER ENEMY the cleave connects
+    // with — carving a pack of 4 banks ~32 rage toward the whirlwind.
+    sword: { melee: true, dmg: 30, range: 94, arcDeg: 115, swingMs: 160,
+             baseRate: 1.25, dexRate: 0.05, sound: 'slash', rageGain: 8,
+             heldTexture: 'sword', holdOffset: 16 }
   },
 
   abilities: {
-    volley: { mpCost: 22, count: 5, spreadDeg: 26, dmgMult: 1.1,
-              projSpeed: 620, lifeMs: 800, pierce: true, cooldownMs: 600 }
+    // Ranger — a piercing fan of arrows in the aim direction (type:'volley').
+    volley: { type: 'volley', mpCost: 22, count: 5, spreadDeg: 26, dmgMult: 1.1,
+              projSpeed: 620, lifeMs: 800, pierce: true, cooldownMs: 600,
+              sound: 'volley' },
+    // Wizard — STORM BARRAGE (type:'barrage'; user redesign 2026-07-13,
+    // REPLACES the storm orbs): a MACHINE GUN of LIGHTNING BALLS. A HELD
+    // CHANNEL — while the ability key is held, a ball fires every `fireEveryMs`
+    // DEAD STRAIGHT down the aim line (no spread, no pierce — the piercing/
+    // slowing frost bolt stays the crowd tool). Each ball costs `mpPerShot`;
+    // the channel refuses when MP can't cover the next round. THE PROC (user
+    // spec): every ball that CONNECTS has `strike.chance` to SUMMON A LIGHTNING
+    // BOLT down onto that enemy — an area strike (RealmScene.lightningStrike,
+    // SIM.damage) with the full sky-bolt VFX. Rolled through SIM.rng at the
+    // hit site (the shot→mob / shot→boss overlaps read proj.strike).
+    barrage: { type: 'barrage', mpPerShot: 2.5, fireEveryMs: 90,
+               dmg: 8, projSpeed: 640, lifeMs: 700,
+               texture: 'zapball', sound: 'zap',
+               strike: { chance: 0.22, radius: 56, dmg: 20, sound: 'thunder' } },
+    // Knight — WHIRLWIND (type:'whirlwind'). NOT a one-shot cast: it's a HELD
+    // CHANNEL. While the ability key is held AND mp > 0 the Knight spins —
+    // Entities.updatePlayer drains `mpDrainPerSec` MP each second and, every
+    // `tickMs`, calls RealmScene.whirlwindTick which deals SIM.damage(dmg,att)
+    // to every enemy within `radius`. No cooldown, no per-cast cost — the MP
+    // pool IS the fuel (drain > regen, so it can't spin forever). Realm-only
+    // (the nexus forces intent.ability false, so it never drains in the chamber).
+    // TORNADO PROC (user add 2026-07-13): every whirlwind tick has a `chance`
+    // (SIM.rng — seam rule 4) to fling out a TORNADO — a funnel that shoots
+    // outward in a random direction, plows across the field, and grinds any
+    // enemy it passes through (`dmg` per `reHitMs`, hits each mob repeatedly
+    // while overlapping). RealmScene owns the pool: spawnTornado/updateTornadoes.
+    // BERSERKER REWORK: hpPerHit — the whirlwind LIFESTEALS, healing the Knight
+    // per enemy each tick damages (spin deep in the pack = drink deep). The
+    // drain empties the rage pool in ~4s; at 0 the spin stops until the cleave
+    // refills it. TUNE hpPerHit/mpDrainPerSec by playtest.
+    whirlwind: { type: 'whirlwind', mpDrainPerSec: 20, tickMs: 150,
+                 dmg: 15, radius: 94, knockback: 30, sound: 'whirl', hpPerHit: 2,
+                 tornado: { chance: 0.18, speed: 205, lifeMs: 1500, radius: 40,
+                            dmg: 18, reHitMs: 260, sound: 'whirl' } }
   },
 
   // --- XP curve (Fusion Law F4): xp needed to go from level L to L+1 --------
@@ -142,8 +248,8 @@ var DATA = {
   // realm HUD, but INERT until M5 flips live:true (risk=reward by playtest).
   console: {
     name: 'PORTAL MACHINE',      // renamed from REALM CONSOLE (user, 2026-07-12)
-    hotkey: 'P',
-    prompt: 'SPACE — use the PORTAL MACHINE',
+    // (dead `hotkey`/`prompt` removed 2026-07-13 — the P hotkey is the rebindable
+    //  'portal' action in DATA.keybinds; the footer prompt is built from BINDS.)
     maxAffixes: 3,               // slots on the board
     affixChoices: ['apex', 'escalating', 'hordes'],   // keys into affixes.map
     modes: ['clear', 'survival'],                     // spawnable destinations
@@ -365,7 +471,26 @@ var DATA = {
       // ...and the PHASER for the portal tearing open — a bright descending
       // zap with a short spark tail.
       spawn:   { type: 'square',   freq: 1500, freqEnd: 140, len: 0.45, vol: 0.26, limitMs: 400,
-                 noise: { vol: 0.06, hp: 2400 } }
+                 noise: { vol: 0.06, hp: 2400 } },
+      // M4 WIZARD: FROST — an icy descending shimmer with a faint airy hiss
+      // (the Wizard's basic frostbolt). ZAP — a short bright snap for each
+      // machine-gun lightning ball (limitMs sits under the barrage cadence so
+      // the stream reads as a rattle, not a wall). THUNDER — the low boom +
+      // crackle of the lightning-bolt PROC striking down.
+      frost:   { type: 'sine',     freq: 780, freqEnd: 300, len: 0.12, vol: 0.13, limitMs: 70,
+                 noise: { vol: 0.04, hp: 3200 } },
+      zap:     { type: 'square',   freq: 1150, freqEnd: 520, len: 0.05, vol: 0.10, limitMs: 60,
+                 noise: { vol: 0.03, hp: 3400 } },
+      thunder: { type: 'sawtooth', freq: 150, freqEnd: 42,  len: 0.5,  vol: 0.30, limitMs: 110,
+                 noise: { vol: 0.18, hp: 700 } },
+      // M4 KNIGHT: SLASH — a short metallic swipe (bright square down-sweep with
+      // an airy edge) for the sword cleave. WHIRL — a low airy whoosh under a
+      // gritty bed for the whirlwind channel (played every damage tick, so its
+      // limitMs sits just under the ability's tickMs to read as a steady spin).
+      slash:   { type: 'square',   freq: 540, freqEnd: 190, len: 0.10, vol: 0.14, limitMs: 60,
+                 noise: { vol: 0.05, hp: 2000 } },
+      whirl:   { type: 'sawtooth', freq: 300, freqEnd: 250, len: 0.13, vol: 0.11, limitMs: 120,
+                 noise: { vol: 0.09, hp: 1100 } }
     },
 
     // --- M3.9: MUSIC — "The Chamber at Rest" (ORIGINAL composition, 2026).
@@ -376,6 +501,90 @@ var DATA = {
     // triangle bass · soft square arpeggios · lyrical square lead.
     // Notes are [name, beats]; null = rest. All tracks must sum to equal beats.
     music: {
+      // --- M4.5: "SWARMFRONT" (ORIGINAL composition, 2026-07-13) — the realm
+      // BATTLE theme. The user asked for the feel of FF8's "Don't Be Afraid"
+      // (Uematsu/Square Enix — copyrighted, so no melody borrowed); this is an
+      // original piece chasing the same ENGAGEMENT CURVE: a relentless driving
+      // bass ostinato (A, beats 0–16) → a two-step RISING BUILD (B, 16–32:
+      // the whole engine shifts up C→D, phrases climb + shorten) → the FRANTIC
+      // PEAK (C, 32–48: high eighth-note runs, 16th bursts in the pulse) → a
+      // TURNAROUND (D, 48–64) that winds down just enough to re-arm the next
+      // loop's build. A minor, 172bpm, ~22s loop. Three chip voices: driving
+      // triangle bass 8ths · urgent square pulse (off-voice, 16th climbs at the
+      // build points) · lyrical-but-panicked square lead.
+      battle: {
+        bpm: 172,
+        tracks: [
+          { type: 'triangle', vol: 0.095, notes: [   // bass — the engine, all 8ths
+            // A: dig in on Am
+            ['A2',.5],['A2',.5],['E2',.5],['A2',.5],['A2',.5],['A2',.5],['G2',.5],['A2',.5],
+            ['A2',.5],['A2',.5],['E2',.5],['A2',.5],['A2',.5],['A2',.5],['G2',.5],['A2',.5],
+            ['A2',.5],['A2',.5],['E2',.5],['A2',.5],['A2',.5],['A2',.5],['G2',.5],['A2',.5],
+            ['A2',.5],['A2',.5],['E2',.5],['A2',.5],['A2',.5],['A2',.5],['G2',.5],['A2',.5],
+            // B: the build — everything shifts UP (C, then D)
+            ['C3',.5],['C3',.5],['G2',.5],['C3',.5],['C3',.5],['C3',.5],['B2',.5],['C3',.5],
+            ['C3',.5],['C3',.5],['G2',.5],['C3',.5],['C3',.5],['C3',.5],['B2',.5],['C3',.5],
+            ['D3',.5],['D3',.5],['A2',.5],['D3',.5],['D3',.5],['D3',.5],['C3',.5],['D3',.5],
+            ['D3',.5],['D3',.5],['A2',.5],['D3',.5],['D3',.5],['D3',.5],['C3',.5],['D3',.5],
+            // C: the peak — E then F, hammering
+            ['E3',.5],['E3',.5],['B2',.5],['E3',.5],['E3',.5],['E3',.5],['D3',.5],['E3',.5],
+            ['E3',.5],['E3',.5],['B2',.5],['E3',.5],['E3',.5],['E3',.5],['D3',.5],['E3',.5],
+            ['F3',.5],['F3',.5],['C3',.5],['F3',.5],['F3',.5],['F3',.5],['E3',.5],['F3',.5],
+            ['E3',.5],['E3',.5],['B2',.5],['E3',.5],['E3',.5],['E3',.5],['D3',.5],['E3',.5],
+            // D: turnaround — step back down, then walk up into the next loop
+            ['D3',.5],['D3',.5],['A2',.5],['D3',.5],['C3',.5],['C3',.5],['G2',.5],['C3',.5],
+            ['B2',.5],['B2',.5],['G2',.5],['B2',.5],['A2',.5],['A2',.5],['E2',.5],['A2',.5],
+            ['A2',.5],['A2',.5],['E2',.5],['A2',.5],['A2',.5],['A2',.5],['G2',.5],['A2',.5],
+            ['E2',.5],['E2',.5],['G2',.5],['G2',.5],['A2',.5],['A2',.5],['B2',.5],['B2',.5]
+          ] },
+          { type: 'square', vol: 0.030, notes: [     // pulse — urgency, climbs at the builds
+            // A: tense two-note rocking
+            ['A3',.5],['E4',.5],['A3',.5],['E4',.5],['A3',.5],['E4',.5],['A3',.5],['E4',.5],
+            ['A3',.5],['E4',.5],['A3',.5],['E4',.5],['A3',.5],['E4',.5],['A3',.5],['E4',.5],
+            ['A3',.5],['E4',.5],['A3',.5],['E4',.5],['A3',.5],['E4',.5],['A3',.5],['E4',.5],
+            ['A3',.5],['E4',.5],['A3',.5],['E4',.5],['A3',.5],['E4',.5],['A3',.5],['E4',.5],
+            // B: rocking shifts up with the bass
+            ['C4',.5],['G4',.5],['C4',.5],['G4',.5],['C4',.5],['G4',.5],['C4',.5],['G4',.5],
+            ['C4',.5],['G4',.5],['C4',.5],['G4',.5],['C4',.5],['G4',.5],['C4',.5],['G4',.5],
+            ['D4',.5],['A4',.5],['D4',.5],['A4',.5],['D4',.5],['A4',.5],['D4',.5],['A4',.5],
+            ['D4',.5],['A4',.5],['D4',.5],['A4',.5],['D4',.5],['A4',.5],['D4',.5],['A4',.5],
+            // C: peak rocking + a 16th-note LADDER into the last bar
+            ['E4',.5],['B4',.5],['E4',.5],['B4',.5],['E4',.5],['B4',.5],['E4',.5],['B4',.5],
+            ['E4',.5],['B4',.5],['E4',.5],['B4',.5],['E4',.5],['B4',.5],['E4',.5],['B4',.5],
+            ['F4',.5],['C5',.5],['F4',.5],['C5',.5],['F4',.5],['C5',.5],['F4',.5],['C5',.5],
+            ['F4',.5],['C5',.5],['F4',.5],['C5',.5],
+            ['B4',.25],['C5',.25],['D5',.25],['E5',.25],['B4',.25],['C5',.25],['D5',.25],['E5',.25],
+            // D: wind down, then a 16th CLIMB re-arms the loop
+            ['D4',.5],['A4',.5],['D4',.5],['A4',.5],['D4',.5],['A4',.5],['D4',.5],['A4',.5],
+            ['C4',.5],['G4',.5],['C4',.5],['G4',.5],['C4',.5],['G4',.5],['C4',.5],['G4',.5],
+            ['B3',.5],['G4',.5],['B3',.5],['G4',.5],['B3',.5],['G4',.5],['B3',.5],['G4',.5],
+            ['A3',.5],['E4',.5],['A3',.5],['E4',.5],
+            ['E4',.25],['G4',.25],['A4',.25],['B4',.25],['C5',.25],['D5',.25],['E5',.25],['E5',.25]
+          ] },
+          { type: 'square', vol: 0.055, notes: [     // lead — panicked, but it SINGS
+            // A: the hook — short, urgent, keeps landing back on A
+            ['A4',.5],[null,.5],['A4',.5],['B4',.5],['C5',1],['B4',.5],['A4',.5],
+            ['E5',1.5],['D5',.5],['C5',.5],['B4',.5],['A4',1],
+            ['A4',.5],[null,.5],['A4',.5],['B4',.5],['C5',1],['D5',.5],['E5',.5],
+            ['E5',.5],['D5',.5],['C5',.5],['D5',.5],['B4',2],
+            // B: THE BUILD — rising sequences, phrases shorten, then a 16th sprint to the top
+            ['C5',1],['D5',1],['E5',1],[null,1],
+            ['D5',1],['E5',1],['F5',1],[null,1],
+            ['E5',.5],['F5',.5],['G5',.5],[null,.5],['F5',.5],['G5',.5],['A5',.5],[null,.5],
+            ['G5',.25],['A5',.25],['B5',.25],['A5',.25],['G5',.25],['A5',.25],['B5',.25],['A5',.25],['B5',1],[null,1],
+            // C: the peak — frantic eighth runs off the top
+            ['E5',.5],['E5',.5],['D5',.5],['E5',.5],['C5',.5],['E5',.5],['B4',.5],['E5',.5],
+            ['F5',.5],['E5',.5],['D5',.5],['C5',.5],['D5',.5],['C5',.5],['B4',.5],['A4',.5],
+            ['E5',.5],['E5',.5],['D5',.5],['E5',.5],['F5',.5],['E5',.5],['D5',.5],['C5',.5],
+            ['B4',.5],['C5',.5],['D5',.5],['E5',.5],['F5',1],['E5',1],
+            // D: turnaround — falls, breathes ONE beat, then charges the pickup
+            ['D5',1],['C5',.5],['B4',.5],['C5',1],['B4',.5],['A4',.5],
+            ['B4',1],['A4',.5],['G4',.5],['A4',2],
+            [null,1],['E4',.5],['G4',.5],['A4',.5],['B4',.5],['C5',.5],['D5',.5],
+            ['E5',1],['D5',.5],['B4',.5],['A4',.5],['G4',.5],['E4',.5],['G4',.5]
+          ] }
+        ]
+      },
       chamber: {
         bpm: 72,
         tracks: [

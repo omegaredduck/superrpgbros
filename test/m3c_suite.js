@@ -27,7 +27,7 @@ function check(name, ok, extra) {
   // -- 0. boot; M3.5 REALM CONSOLE: no portal exists until you spawn one -----------
   await page.goto(GAME);
   await page.waitForFunction(`typeof game !== 'undefined' && game.scene.isActive('Title')`, null, { timeout: 15000 });
-  await page.evaluate(`${scene('Title')}.chooseSlot(1)`);
+  await page.evaluate(`${scene('Title')}.createNewGame(1, 'ranger')`);
   await page.waitForFunction(`game.scene.isActive('Nexus')`, null, { timeout: 5000 });
   const empty = await page.evaluate(`(function(){var n=${scene('Nexus')};
     var dark = n.ringLights.every(function(l){ return l.alpha < 1; });

@@ -6,6 +6,196 @@
 
 ---
 
+## 2026-07-13 · M4 · KNIGHT BERSERKER REWORK · WIZARD STORM BARRAGE · BATTLE MUSIC (?v=m4c → m4d)
+
+Three user directives in one push, all landed and suite-verified:
+
+**1. KNIGHT = BERSERKER (user redesign).** He now TAKES A LOT MORE DAMAGE —
+hp 145/17/920 → **115/12/720**, def 4/0.6/40 → **1/0.35/26** — and his survival
+tool is the whirlwind's **LIFESTEAL** (`abilities.whirlwind.hpPerHit`: heals per
+enemy each tick damages — spin deep in the pack, drink deep). Mana is REPLACED
+BY **RAGE** (`classes.knight.resource` = MOLTEN LAVA orb in the HUD — lava fill +
+a breathing glow that burns brighter as it fills + a molten sheen on the surface):
+STARTS EMPTY every realm, has ZERO passive regen (`mpRegenPerSec: 0`), and FILLS
+as the cleave connects (`weapons.sword.rageGain` per enemy hit — `meleeSwing`
+counts hits and banks it). At 0 rage the channel REFUSES (nothing to spend —
+`channelWhirlwind`'s mp>0 gate is now the only fuel gauge). The loop: wade in →
+cleave to build rage → spin to shred + heal → rage runs dry → cleave again.
+
+**2. WIZARD SPECIAL = STORM BARRAGE (user redesign, replaces the storm orbs).**
+A machine gun of **LIGHTNING BALLS**: held channel, a ball every `fireEveryMs`
+(90ms) DEAD STRAIGHT down the aim line, `mpPerShot` (2.5) each, no pierce, goes
+quiet below the per-shot cost (`Entities.channelBarrage`). **THE PROC:** every
+ball that CONNECTS has `strike.chance` (22%) to SUMMON A LIGHTNING BOLT down
+onto that enemy — the old `lightningStrike`/`strikeVfx` system survives as the
+proc payoff (area SIM.damage + jagged sky-bolt + flash + ring + shake), rolled
+via SIM.rng in the shot→mob and shot→boss overlaps reading `proj.strike`. The
+homing storm-orb system itself (spawnStormOrbs/updateStormOrbs/detonateOrb +
+stormOrbs pool + `stormorb` texture) is REMOVED; new `zapball` art + `zap` SFX
+(thunder stays for the strike). Also: the **staff is now CARRIED UPRIGHT like a
+walking staff** (`weapons.frost.upright` — held vertical at the hand on the
+facing side with a slight lean, instead of aiming out like a bow arm; the class
+card stands it up too).
+
+**3. "SWARMFRONT" — ORIGINAL 8-bit BATTLE MUSIC (M4.5).** The user asked for
+battle music with the feel of FF8's *Don't Be Afraid* — that melody is
+copyrighted (Uematsu/Square Enix), so this is an ORIGINAL composition chasing
+the same engagement curve: A minor, 172bpm, 64-beat (~22s) loop in four acts —
+relentless bass-ostinato DRIVE → two-step RISING BUILD (the whole engine shifts
+C→D, phrases climb + shorten, 16th sprint to the top) → FRANTIC PEAK (high
+eighth runs, 16th-ladder pulse) → TURNAROUND that re-arms the loop. Plays in
+EVERY realm (`RealmScene.create`); CUTS TO SILENCE the moment the fight is
+decided — boss down, survival horn, or death — so the silence is the release.
+WAV preview rendered + delivered in chat.
+
+**Tests:** m4_suite rewritten for the barrage (18 checks: data + strike proc +
+cadence + straight/no-pierce/rider + per-shot cost + dry-fire refusal + direct
+strike AoE + upright staff). m4b_suite extended for the berserker (26 checks:
+rage data + starts-empty + cleave banks rage + lifesteal + zero-rage refusal).
+Full battery GREEN on m4d: m4 18 · m4b 26 · m2 22 · m3b 24 · m3c 37.
+
+**Files:** data.js, entities.js, scenes.js, textures.js, index.html (?v=m4d),
+test/m4_suite.js, test/m4b_suite.js, docs. Balance knobs to watch (playtest):
+knight hp/def cuts vs hpPerHit=2 · rageGain=8 vs mpDrainPerSec=20 ·
+barrage mpPerShot=2.5/dmg=8/strike 22%·20dmg — all in data.js, all "TUNE ME".
+
+---
+
+## 2026-07-13 · M4 · Knight cleave resize + swing anim · Wizard Storm Orbs −20% (?v=m4b → m4c)
+
+Same-session follow-up tweaks after seeing the Knight in motion (user calls):
+- **Cleave was too small → now reaches as far as the whirlwind.** `weapons.sword.range`
+  82→94 (= `abilities.whirlwind.radius`, so the hit reaches the same distance the
+  whirlwind extends). The `slash` VFX was redrawn as ONE THICK COMMA (user call)
+  — a single filled crescent tapering to a point — that PIVOTS at the Knight
+  (origin 0.03,0.5) and scales `range/54` so the blade tip lands at the reach;
+  `meleeVfx` sweeps it across the arc.
+- **Knight now has a SWING animation.** The held sword sweeps through the arc on
+  each attack (windup −arc → follow-through +arc, smoothstep-eased over
+  `weapons.sword.swingMs`=160ms) instead of statically tracking the aim — driven
+  by new `st.swingAt`/`st.swingArc` read in `Entities.updatePlayer` (melee weapons
+  only; ranged still point at the aim).
+- **Wizard Storm Orbs too strong → −20%.** `abilities.stormorbs.dmg` 30→24.
+- Files: data.js, entities.js, scenes.js, textures.js, index.html (?v=m4c).
+  Re-verified: m4b 21/21 + m4 16/16 still green.
+
+---
+
+## 2026-07-13 · M4 · THE KNIGHT — 3rd class (melee cleave + whirlwind + tornados) · audit bugs #7–#9 (?v=m4a → m4b)
+
+**User design (answered live): the Knight is an armored MELEE bruiser** — the
+roster's first non-projectile class. Basic attack = a curved CRESCENT CLEAVE
+that sweeps forward toward the mouse and carves every mob in a frontal arc.
+Ability (held) = WHIRLWIND, a channel: he spins, draining MP while held,
+shredding anything inside the ring on a fast tick. **Mid-build user add:** the
+whirlwind has a chance each tick to fling out a TORNADO that shoots outward and
+grinds any enemy it laps. Tanky juggernaut: most HP + DEF, slowest, shallow MP
+pool the whirlwind burns through. Both classes were already open; the Knight
+auto-appears as a 3rd class card (no picker code — it's data-driven).
+
+**What landed:**
+- `data.js`: `classes.knight` (own base/growth/caps — top HP + DEF, slowest SPD,
+  shallow MP; `texture:'knight'`, `accent`). New `weapons.sword` (`melee:true` +
+  `range`/`arcDeg`, held sword art, no projectile). New `abilities.whirlwind`
+  (`type:'whirlwind'` channel: `mpDrainPerSec`/`tickMs`/`dmg`/`radius` + a
+  nested `tornado` proc block). New `slash` + `whirl` SFX. `ranger`/`wizard`
+  gained an `accent` (picker reads `cls.accent`). Dead `console.hotkey`/`prompt`
+  removed (audit dead-code).
+- `entities.js`: basic fire BRANCHES on `weapon.melee` → `scene.meleeSwing`
+  (projectile weapons unchanged). Ability BRANCHES on `type:'whirlwind'` →
+  new `channelWhirlwind()` (held channel: drains MP over time + per-tick
+  `scene.whirlwindTick`; sets `st.whirling`; costs nothing when it can't spin).
+  Player state gained `whirling` + `lastWhirlTickAt`.
+- `scenes.js` RealmScene: `meleeSwing` (frontal-arc hit on mobs + boss via SIM,
+  `meleeVfx` crescent sweep) · `whirlwindTick` (AoE damage in radius + `whirl`
+  SFX + rolls the tornado proc via SIM.rng) · `tornadoes` pool +
+  `spawnTornado`/`updateTornadoes` (funnel shoots out, re-hits each overlapped
+  mob every `reHitMs`) · `updateWhirlwind` (spinning ring VFX lifecycle). Class
+  picker: reads `cls.accent`, adapts card width to 3+ cards, dynamic number hint.
+- `textures.js`: `knight`, `sword`, `slash`, `whirl` (canvas), `tornado`
+  procedural art. Removed the retired `pedestal` texture (audit dead-code).
+- **AUDIT BUGS FIXED (2026-07-12 audit #7–#9):** #7 P1 — `drinkPotion` now
+  passes `CURRENT.equipment` to `statsFor` (gear bonuses no longer vanish after
+  a nexus drink). #8 P2 — `bestiaryUi` added to the `handleConsole` +
+  `handlePortals` one-overlay guards. #9 P2 — bestiary paging now reads the
+  moveLeft/moveRight actions LIVE from `BINDS.actionForEvent` (follows a rebind;
+  default A/◄ + D/►) and its footer is built from `BINDS.keyLabel`. Dead-code
+  sweep: `pedestal` texture, `console.hotkey`/`prompt`, the dead `T` key in the
+  input rig — all removed.
+
+**Testing:** NEW `test/m4b_suite.js` = 21 checks ALL GREEN (knight data/tanky
+stats + caps/art/save+fresh/class-select/melee arc hits front-only + fires no
+projectile/whirlwind drains MP + AoE ticks + stops on release/tornado spawns +
+grinds/permadeath keeps knight/3-card picker/zero errors). Regression-clean:
+m2 22 · m4 16 · m3b 24 · m3c 37 all still green on m4b. (The m1/m21/m3 suites
+remain on the pre-m3o menu model — deferred this session, unchanged.)
+
+**Files:** data.js, entities.js, scenes.js, textures.js, index.html (?v=m4b),
+NEW test/m4b_suite.js, docs (this log + MILESTONES + NEXT_SESSION + TESTING).
+
+**Still open for M4:** balance the Knight by playtest (all knobs in data.js —
+`classes.knight`, `weapons.sword`, `abilities.whirlwind` incl. `.tornado`); the
+M4 human gate (all 3 classes clear realm-1 + testers disagree on the best class).
+
+---
+
+## 2026-07-13 · M4 · THE WIZARD — 2nd class, class-select, frost + storm-orb lightning (?v=m3q → m4a)
+
+**User design (answered live): the Wizard is a crowd-control caster.** Basic
+attack = a FROST BOLT that pierces the whole line AND slows what it touches;
+ability = STORM ORBS — a ring of lightning balls that home to enemies and call
+down a LIGHTNING STRIKE (area damage) where they hit. Class is chosen ON THE
+TITLE SCREEN at New Game (per slot); both classes open from the start; a slot
+keeps its class through permadeath.
+
+**What landed:**
+- `data.js`: `classes.wizard` (own base/growth/caps — squishier + slower than
+  the Ranger but deeper MP pool + regen and higher spell power; `texture:'wizard'`).
+  New `weapons.frost` (pierce:true + `slow:{mult,ms}`, staff held art, frostbolt
+  projectile). New `abilities.stormorbs` (`type:'stormorbs'` + orb/strike knobs).
+  New `frost` + `thunder` SFX recipes. `ranger` gained `texture` + `blurb`; both
+  classes gained a `blurb` for the picker.
+- `entities.js`: `createPlayer` draws the CLASS texture (fixed the dead no-op
+  ternary the audit flagged). Basic fire reads `weapon.texture`/`pierce` and
+  attaches the frost `slow` rider to the shot. The ability BRANCHES on type
+  (`volley` fan of arrows vs `stormorbs` hand-off to the realm; MP/cooldown only
+  spent when the cast actually happens). New MOB SLOW status: `updateMob` moves a
+  slowed mob at spd×mult + paints a frost tint (champions keep their affix tint);
+  `applySlow()` helper; `spawnMob` resets the slow fields (pooled).
+- `scenes.js` RealmScene: `stormOrbs` pool + `spawnStormOrbs` / `updateStormOrbs`
+  (orbs launch outward then HOME to the nearest mob/boss) / `detonateOrb` /
+  `lightningStrike` (SIM.damage area hit to mobs + boss) / `strikeVfx` (jagged
+  bolt + flash + ring + shake). Frost slow applied in the shot→mob overlap.
+  Class-aware shot/ability SFX. TitleScene: class-select overlay on NEW GAME
+  (`promptClass`/`pickClass`/`createNewGame`/`enterSlot`; number keys + ESC).
+  `freshCharacter(cls)` + `onDeath` keep the slot's class on permadeath.
+- `save.js`: `blank(cls)` seeds the chosen class + unlocks both; guards a bad key.
+- `textures.js`: `wizard`, `staff`, `frostbolt`, `stormorb` procedural art.
+- `index.html`: ?v= m3q → **m4a**.
+
+**Tests:** NEW `test/m4_suite.js` — **16/16 GREEN** (class data, per-class stats,
+textures, SAVE.blank(cls)/freshCharacter(cls), title class-select builds a Wizard
+slot, Wizard sprite+staff in the nexus, frostbolt pierces+slows, mob slow cuts
+speed, storm orbs spawn+home+detonate, lightning area damage, permadeath keeps
+class, zero console errors). The six existing suites had their new-game entry
+updated `Title.chooseSlot(1)` → `Title.createNewGame(1,'ranger')` (the class-
+select step changed the entry point). **m2 / m3b / m3c GREEN; the M4 build is
+regression-clean** (verified identical pass-counts vs pristine m3q before any
+divergence).
+
+**Found during the battery re-run (PRE-EXISTING, not M4):** `m1` / `m21` / `m3`
+crash on retired flows — the old PAUSE-MENU volume slider (ArrowLeft) and the
+`q`-returns-to-nexus key, both replaced by the unified ESC menu at m3o. They
+crash IDENTICALLY on pristine m3q, so this is m3o menu-overhaul drift, not the
+Wizard. Logged in TESTING.md; these three suites need porting to the m3o menu
+model (part of the still-open "m3d/settings suite" work).
+
+**Still open (unchanged by this session):** audit bugs #7 (P1 drinkPotion) /
+#8 / #9; M3 Q3/Q5 flags + CC0 art; M4 Knight + class unlock chain + the M4 gate
+playtest; the m1/m21/m3 suite port above.
+
+---
+
 ## 2026-07-12 · AUDIT · Full code + documentation audit (?v=m3q — no code changed)
 
 **User ask: audit all code, verify every shipped feature is recorded in the docs,

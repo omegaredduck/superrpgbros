@@ -14,18 +14,31 @@ var SAVE = (function () {
   function zeroPots() { return { hp: 0, mp: 0, att: 0, def: 0, spd: 0, dex: 0 }; }
   function emptyEquip() { return { weapon: null, ability: null, armor: null, ring: null }; }
 
+  // Every class defined in data (M4: ranger + wizard) — all OPEN from the start
+  // (unlock chain deferred). Falls back to ['ranger'] if DATA isn't loaded yet.
+  function allClasses() {
+    return (typeof DATA !== 'undefined' && DATA.classes) ? Object.keys(DATA.classes) : ['ranger'];
+  }
+  // A valid class key or the default. Guards a hand-edited / stale cls string.
+  function normClass(cls) {
+    return (typeof DATA !== 'undefined' && DATA.classes && DATA.classes[cls]) ? cls : 'ranger';
+  }
+
   // A brand-new account (schema v3 — M3 added equipment + the live vault).
-  function blank() {
+  // M4: `cls` is the class chosen for this slot at NEW GAME (title screen);
+  // it seeds the first character. The slot keeps this class across permadeath.
+  function blank(cls) {
+    cls = normClass(cls);
     return {
       v: VERSION,
       account: {
-        unlockedClasses: ['ranger'],
+        unlockedClasses: allClasses(),                   // M4: both classes open
         graveyard: [],                                   // {cls, level, kills, killer}
         potions: zeroPots(),                             // v2: unclaimed stash — SURVIVES death (Pillar 3)
         records: { bestLevel: 1, deaths: 0, totalKills: 0, realmsEntered: 0, realmsClosed: 0 }
       },
       vault: [],                                         // v3: item keys, ≤ DATA.vault.slots — SURVIVES death
-      character: { cls: 'ranger', level: 1, xp: 0,
+      character: { cls: cls, level: 1, xp: 0,
                    potionsDrunk: zeroPots(),             // v2: drunk pots DIE with the character (R5)
                    equipment: emptyEquip() },            // v3: gear DIES with the character too
       meta: { createdAt: Date.now(), savedAt: Date.now() }

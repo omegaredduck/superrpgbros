@@ -27,7 +27,7 @@ function check(name, ok, extra) {
   // -- 1. boot → new game → nexus → M opens the builder ------------------------------
   await page.goto(GAME);
   await page.waitForFunction(`typeof game !== 'undefined' && game.scene.isActive('Title')`, null, { timeout: 15000 });
-  await page.evaluate(`${scene('Title')}.chooseSlot(1)`);
+  await page.evaluate(`${scene('Title')}.createNewGame(1, 'ranger')`);
   await page.waitForFunction(`game.scene.isActive('Nexus')`, null, { timeout: 5000 });
   await page.keyboard.press('m');
   await page.waitForFunction(`game.scene.isActive('Builder')`, null, { timeout: 5000 });

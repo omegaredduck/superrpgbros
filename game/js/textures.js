@@ -63,6 +63,47 @@ var TEX = (function () {
       '.kKKk..kKKk.....',
       '................'
     ]);
+    // M4: the WIZARD — a pointed-hat caster in a blue robe (mirrors the ranger
+    // build). Body faces aim in-game; the staff is a separate held sprite.
+    grid(scene, 'wizard', [
+      '......kk........',
+      '.....kbbk.......',
+      '....kbBBbk......',
+      '...kbBBBBbk.....',
+      '..kbBBBBBBbk....',
+      '..kkkkkkkkkk....',
+      '...kssssssk.....',
+      '...kskssksk.....',
+      '...kssssssk.....',
+      '..kBBBBBBBBk....',
+      '.kBBbBBBBbBBk...',
+      '.kBBBBBBBBBBk...',
+      '.kBBbBBBBbBBk...',
+      '..kBBBBBBBBk....',
+      '...kk....kk.....',
+      '................'
+    ]);
+    // M4: the KNIGHT — an armored melee bruiser in steel plate with an orange
+    // crest + belt accent (its class accent color). Visored helm, breastplate
+    // sheen, greaves. Body faces aim in-game; the sword is a separate held sprite.
+    grid(scene, 'knight', [
+      '.......o........',
+      '......ook.......',
+      '.....klllk......',
+      '....kllllk......',
+      '....kl..lk......',
+      '....kllllk......',
+      '.....kkkk.......',
+      '...kklLLlkk.....',
+      '..klLLwwLLlk....',
+      '..klLwwwwLlk....',
+      '..klLLwwLLlk....',
+      '..klLLLLLLlk....',
+      '...kL.oo.Lk.....',
+      '...kL....Lk.....',
+      '..kkl....lkk....',
+      '................'
+    ]);
     grid(scene, 'slime', [
       '................',
       '................',
@@ -167,6 +208,100 @@ var TEX = (function () {
       '.kmmk.',
       '..kk..'
     ]);
+    // M4: the Wizard's STAFF — drawn POINTING RIGHT (rotation 0 = aim 0) like
+    // the bow, a wooden shaft with a blue crystal head at the aim end.
+    grid(scene, 'staff', [
+      '..........k.',
+      '.........kbk',
+      'kwwwwwwwkbBk',
+      'kKwwwwwwkbBk',
+      'kwwwwwwwkbk.',
+      '..........k.'
+    ]);
+    // M4: the FROSTBOLT — the Wizard's piercing basic, icy blue with a white
+    // shaft (mirrors the arrow shape so it flies point-first).
+    grid(scene, 'frostbolt', [
+      '............',
+      '.....kk.....',
+      'kbbbbkwk....',
+      'kwwwwwwwk...',
+      'kbbbbkwk....',
+      '.....kk.....'
+    ]);
+    // M4 (user redesign 2026-07-13, replaces the storm orb): the ZAPBALL — the
+    // Wizard's machine-gun round, a BIG crackling LIGHTNING BALL (gold core,
+    // white heart, blue rim + spark nubs) — sized at least HALF THE WIZARD
+    // (10px grid × scale 2 = 20px vs his 32px). Fired dead straight; on
+    // connecting it can PROC a lightning bolt down (RealmScene.lightningStrike).
+    grid(scene, 'zapball', [
+      '....bb....',
+      '..kbbybk..',
+      '.kbyyyybk.',
+      '.kbywwyybk',
+      'bkbywwwyb.',
+      '.kbywwwybb',
+      'bkbyywwybk',
+      '.kbyyyyybk',
+      '..kbbyybk.',
+      '....bb....'
+    ]);
+    // M4: the Knight's SWORD — a held MELEE weapon drawn POINTING RIGHT
+    // (rotation 0 = aim 0) like the bow/staff: dark pommel + grip on the left
+    // (the hand end), a gold crossguard, then a steel blade to a white tip.
+    grid(scene, 'sword', [
+      '................',
+      '..k.............',
+      'kKyyllllllllllww',
+      'kKyyllllllllllw.',
+      '..k.............',
+      '................'
+    ]);
+    // M4 (user add): the TORNADO — the whirlwind's proc funnel. Wide swirling
+    // top tapering to a point, banded light/white for a spin read; drawn
+    // greyscale so RealmScene tints it steel and sways it as it travels.
+    grid(scene, 'tornado', [
+      'llllllllllll',
+      '.wwwwwwwwww.',
+      '.lllllllll..',
+      '..wwwwwww...',
+      '..llllll....',
+      '...wwwww....',
+      '...llll.....',
+      '...wwww.....',
+      '....lll.....',
+      '....www.....',
+      '....ll......',
+      '.....ww.....',
+      '.....l......',
+      '.....w......',
+      '.....l......',
+      '.....w......'
+    ]);
+    // M4: the SLASH — the sword-cleave VFX (user 2026-07-13: ONE thick COMMA
+    // that reaches as far as the whirlwind). A single filled comma: an outer
+    // blade edge at radius 54 with an inner edge that tapers from a thick head
+    // to a point, so it reads as one bold curved slash. PIVOT at left-center
+    // (2,32) → RealmScene.meleeSwing sets origin (0.03,0.5) = the Knight,
+    // scale = range/54 (blade tip lands at the reach), rotate to the aim. Neutral
+    // white → tinted at draw.
+    (function () {
+      var t = scene.textures.createCanvas('slash', 64, 64);
+      var ctx = t.getContext();
+      var cx = 2, cy = 32, R = 54, a0 = -1.02, a1 = 1.02, N = 30;
+      ctx.beginPath();
+      for (var i = 0; i <= N; i++) {                 // outer edge, head → tail
+        var th = a0 + (a1 - a0) * i / N;
+        ctx.lineTo(cx + Math.cos(th) * R, cy + Math.sin(th) * R);
+      }
+      for (var j = N; j >= 0; j--) {                 // inner edge back, tapering to a point
+        var th2 = a0 + (a1 - a0) * j / N;
+        var w = 2 + 15 * (1 - j / N);                // thick head (a0) → sharp tail (a1)
+        ctx.lineTo(cx + Math.cos(th2) * (R - w), cy + Math.sin(th2) * (R - w));
+      }
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill();
+      t.refresh();
+    })();
     // M3.5 color pass: the portal is NEUTRAL greyscale and always tinted by
     // purpose — PORTAL GREEN for realm clear (DATA.modes.clear.color; user
     // call: blue-on-blue was unreadable), gold for the trial, red for the
@@ -285,25 +420,7 @@ var TEX = (function () {
       '................',
       '................'
     ]);
-    // E5 (M2.1): portal pedestal for the nexus plaza.
-    grid(scene, 'pedestal', [
-      '................',
-      '................',
-      '................',
-      '................',
-      '..llllllllllll..',
-      '..lLLLLLLLLLLl..',
-      '...lLLLLLLLLl...',
-      '...lLLLLLLLLl...',
-      '...lLLLLLLLLl...',
-      '...lLLLLLLLLl...',
-      '..lLLLLLLLLLLl..',
-      '.llllllllllllll.',
-      '.lLLLLLLLLLLLLl.',
-      '.llllllllllllll.',
-      '................',
-      '................'
-    ]);
+    // (the E5 'pedestal' texture was retired with the plaza — removed 2026-07-13)
     // M3.5 PORTAL WORKS: the one portal PLATFORM — a big stone ring with 8
     // light sockets the console ignites. Drawn with canvas arcs (still lane A:
     // procedural, pixelArt rendering keeps it crisp). Ring lights are separate
@@ -368,6 +485,23 @@ var TEX = (function () {
       ctx.beginPath(); ctx.arc(4, 4, 3.5, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#ffffff';
       ctx.beginPath(); ctx.arc(4, 4, 2, 0, Math.PI * 2); ctx.fill();
+      t.refresh();
+    })();
+    // M4: the WHIRL — the Knight's whirlwind ring. Two bright blade-arcs on
+    // opposite sides of a faint ring (plus an inner swirl); RealmScene spins it
+    // around the Knight while he channels. Neutral white → tinted steel at draw.
+    (function () {
+      var t = scene.textures.createCanvas('whirl', 96, 96);
+      var ctx = t.getContext();
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(48, 48, 40, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.arc(48, 48, 38, -0.5, 1.1); ctx.stroke();
+      ctx.beginPath(); ctx.arc(48, 48, 38, Math.PI - 0.5, Math.PI + 1.1); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(48, 48, 25, 0.4, 2.2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(48, 48, 25, Math.PI + 0.4, Math.PI + 2.2); ctx.stroke();
       t.refresh();
     })();
     // M3.7: the RECORDS wall screen — a wide monitor mounted under the chamber

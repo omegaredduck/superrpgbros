@@ -28,7 +28,7 @@ function check(name, ok, extra) {
   check('boots to Title scene', true);
 
   // -- 2. new game in slot 1 → nexus -----------------------------------------
-  await page.evaluate(`${scene('Title')}.chooseSlot(1)`);
+  await page.evaluate(`${scene('Title')}.createNewGame(1, 'ranger')`);
   await page.waitForFunction(`game.scene.isActive('Nexus')`, null, { timeout: 5000 });
   const save1 = await page.evaluate(`JSON.parse(localStorage.getItem('srb_save_1'))`);
   const CURV = await page.evaluate(`SAVE.VERSION`);

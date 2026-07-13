@@ -14,7 +14,7 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started · 🧊 icebox
 | M2 | First Fun (MVP) | 🔨 2026-07-11 | FUN GATE 1: outside tester, 20+ min unprompted, asks a progression question | all feature boxes landed + 19-check headless suite green; GATE PENDING — needs an outside tester |
 | M2.1 | Emergent scope patch (user directive 2026-07-12) | 🔨 2026-07-12 | Headless suites green incl. new checks; dev self-test of chest/scouter/orbs/time-trial flow | ALL phase-1 features landed same day; suites green (M1 23 + M2 22 + M2.1 18 checks); DEV SELF-TEST PENDING |
 | M3 | World, loot & MAP BUILDER | 🔨 2026-07-12 | Tester banks an item in the vault and returns to a realm; a realm map painted in the in-game builder is playable | Map-builder half LANDED · equipment/vault/affix-v2 half LANDED same day (118 headless checks green across 6 suites) — BOTH gate clauses now humanly achievable; gate itself needs the human playtest |
-| M4 | Roster (3 classes) | ⬜ | All classes clear realm-1 boss; testers disagree on the best class | — |
+| M4 | Roster (3 classes) | 🔨 2026-07-13 | All classes clear realm-1 boss; testers disagree on the best class | ALL 3 CLASSES LANDED + same-day user reworks (?v=m4d) — Ranger · Wizard (frost pierce+slow · STORM BARRAGE lightning-ball machine gun w/ strike proc) · KNIGHT (BERSERKER: cleave builds molten RAGE, lifesteal whirlwind + tornados, takes real damage). Title class-select + per-class caps + original realm BATTLE MUSIC. m4 18/18 + m4b 26/26 green. Only the HUMAN GATE + balance pass remain |
 | M5 | Content ramp | ⬜ | FUN GATE 2: 3 testers, median session ≥30 min, a death that causes "one more run" | — |
 | M6 | 1.0 polish | ⬜ | 1.0 checklist 100%, zero P0 bugs for 7 days of play | — |
 
@@ -116,11 +116,43 @@ Pulled forward from M2 by user decision (2026-07-11): a proper front door before
 - [ ] XP gems trial behind flag (Q3) · realm-buff picks behind flag (Q5)
 - [ ] CC0 art batch 1: hero + 4 mobs + tileset (credits logged)
 
-## M4 — Roster ⬜
+## M4 — Roster 🔨 (Wizard + class-select landed 2026-07-13)
 
-- [ ] Wizard (staff pierce-shot, AoE nova ability), Knight (short-range high-dmg, shield ability)
-- [ ] Class unlock chain + class-select UI in nexus
-- [ ] Per-class stat caps in data.js; balance pass
+- [x] WIZARD (user design 2026-07-13, ?v=m4a; special REWORKED same day, ?v=m4d):
+      crowd-control caster. FROST BOLT basic — slower + harder than the bow,
+      PIERCES the whole line and SLOWS what it touches (mob spd×mult for ms).
+      STORM BARRAGE ability (replaced the homing storm orbs, user redesign) — a
+      held MACHINE GUN of lightning balls: one every 90ms dead straight down the
+      aim line, mpPerShot each, no pierce; every ball that CONNECTS can PROC a
+      summoned LIGHTNING BOLT onto its victim (22% — area SIM.damage + sky-bolt
+      VFX via lightningStrike). Staff carried UPRIGHT like a walking staff. Deep
+      MP + regen, higher spell power, less HP than the Ranger. `wizard`/`staff`/
+      `frostbolt`/`zapball` art. m4_suite 18/18 green.
+- [x] KNIGHT (user design 2026-07-13, ?v=m4b; BERSERKER rework same day, ?v=m4d):
+      MELEE bruiser — the roster's first non-projectile class. Basic = a curved
+      CRESCENT CLEAVE (weapons.sword, `melee:true`, reach = the whirlwind radius,
+      one-thick-comma VFX + sword swing anim) that carves a frontal arc AND BANKS
+      RAGE per enemy hit (rageGain). Ability = WHIRLWIND, a HELD CHANNEL: spins
+      draining RAGE, ticking AoE damage in a ring, HEALING per enemy damaged
+      (hpPerHit lifesteal) and rolling a TORNADO proc that shoots outward +
+      grinds enemies it laps. RAGE replaces mana: molten-lava HUD orb (glow scales
+      with fill), STARTS EMPTY, zero passive regen, refuses the channel at 0.
+      He takes REAL damage now (hp/def cut hard) — the lifesteal loop is the
+      survival plan. `knight`/`sword`/`slash`/`whirl`/`tornado` art. m4b 26/26 green.
+- [x] M4.5 — "SWARMFRONT" realm BATTLE MUSIC (user ask 2026-07-13, ?v=m4d):
+      ORIGINAL frantic 8-bit composition (user wanted the FEEL of FF8's Don't Be
+      Afraid — copyrighted, so original melody): A minor 172bpm, 64-beat loop,
+      drive → rising build → frantic peak → turnaround. Plays in every realm;
+      CUTS TO SILENCE when the fight is decided (boss down / horn / death).
+      WAV preview delivered in chat.
+- [x] Class-select UI (user call 2026-07-13): chosen ON THE TITLE SCREEN at NEW
+      GAME (per save slot; the slot card shows the class; a slot keeps its class
+      through permadeath — a fresh same-class character is born on death). BOTH
+      classes open from the start. `SAVE.blank(cls)` + `freshCharacter(cls)` +
+      `TitleScene.promptClass/pickClass/createNewGame`.
+- [ ] Class unlock chain (deferred — both classes open until there are more to gate)
+- [x] Per-class stat caps in data.js (Wizard caps distinct from the Ranger)
+- [ ] Balance pass (by playtest — the M4 human gate)
 
 ## M5 — Content ramp ⬜
 

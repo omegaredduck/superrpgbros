@@ -18,8 +18,9 @@ function bindSave(slot, data) {
   CURRENT = data.character;
 }
 function persist() { if (SAVE_SLOT && GAME_SAVE) SAVE.save(SAVE_SLOT, GAME_SAVE); }
-function freshCharacter() {
-  return { cls: 'ranger', level: 1, xp: 0, potionsDrunk: SAVE.zeroPots(),
+function freshCharacter(cls) {
+  cls = (DATA.classes[cls]) ? cls : 'ranger';             // M4: keep the slot's class on death
+  return { cls: cls, level: 1, xp: 0, potionsDrunk: SAVE.zeroPots(),
            equipment: SAVE.emptyEquip() };               // M3: gear dies with the character
 }
 
@@ -97,6 +98,7 @@ var TitleScene = new Phaser.Class({
 
   create: function () {
     this.starting = false;                 // scene objects persist across visits — reset the guard
+    this.classPicking = false; this.classUi = null;   // M4: class-select overlay state (reset on re-entry)
     // RESIZE mode: read the real canvas size; center the 640-tall layout vertically
     var W = this.scale.width, H = this.scale.height;
     var oy = Math.max(0, (H - 640) / 2);
@@ -130,9 +132,9 @@ var TitleScene = new Phaser.Class({
 
     // keyboard slot select
     var self = this;
-    this.input.keyboard.on('keydown-ONE', function () { self.chooseSlot(1); });
-    this.input.keyboard.on('keydown-TWO', function () { self.chooseSlot(2); });
-    this.input.keyboard.on('keydown-THREE', function () { self.chooseSlot(3); });
+    this.input.keyboard.on('keydown-ONE', function () { if (!self.classPicking) self.chooseSlot(1); });
+    this.input.keyboard.on('keydown-TWO', function () { if (!self.classPicking) self.chooseSlot(2); });
+    this.input.keyboard.on('keydown-THREE', function () { if (!self.classPicking) self.chooseSlot(3); });
 
     this.cameras.main.fadeIn(300);
   },
@@ -185,12 +187,82 @@ var TitleScene = new Phaser.Class({
   },
 
   chooseSlot: function (slot) {
-    if (this.starting) return;
+    if (this.starting || this.classPicking) return;
     var r = SAVE.load(slot);
-    var data;
-    if (r.ok) data = r.data;
-    else if (r.reason === 'corrupt') return;               // must delete first
-    else { data = SAVE.blank(); SAVE.save(slot, data); }   // new game in empty slot
+    if (r.ok) { this.enterSlot(slot, r.data); return; }
+    if (r.reason === 'corrupt') return;                    // must delete first
+    this.promptClass(slot);                                // M4: empty slot → choose a class first
+  },
+
+  // M4: the class-select overlay shown when starting a NEW GAME in an empty
+  // slot. One card per class (data-driven from DATA.classes — a new class adds
+  // a card, no code); click a card or press its number to pick; ESC cancels.
+  promptClass: function (slot) {
+    if (this.classPicking) return;
+    this.classPicking = true;
+    var self = this, W = this.scale.width, H = this.scale.height, cx = W / 2, cy = H / 2;
+    var ui = [];
+    ui.push(this.add.rectangle(cx, cy, W, H, 0x000000, 0.78).setDepth(80).setInteractive());
+    ui.push(this.add.text(cx, cy - 150, 'CHOOSE YOUR CLASS', { fontFamily: 'monospace', fontSize: 30, color: '#ffcd75', fontStyle: 'bold' }).setOrigin(0.5).setDepth(81));
+    ui.push(this.add.text(cx, cy - 116, 'SLOT ' + slot + ' — new game · this slot keeps its class through permadeath', { fontFamily: 'monospace', fontSize: 12, color: '#94b0c2' }).setOrigin(0.5).setDepth(81));
+    var keys = Object.keys(DATA.classes), n = keys.length;
+    // adaptive card width so 3+ class cards still fit the min 960-wide screen
+    var gap = 24, cardW = Math.min(300, Math.floor((W - 40 - (n - 1) * gap) / n));
+    var totalW = n * cardW + (n - 1) * gap, x0 = cx - totalW / 2 + cardW / 2;
+    keys.forEach(function (key, i) {
+      var cls = DATA.classes[key], ccx = x0 + i * (cardW + gap), ccy = cy + 6;
+      var accent = cls.accent || 0x38b764;          // per-class accent (data-driven)
+      var card = self.add.rectangle(ccx, ccy, cardW, 190, 0x1a1c2c, 0.96).setStrokeStyle(2, accent).setDepth(81).setInteractive({ useHandCursor: true });
+      ui.push(card);
+      ui.push(self.add.sprite(ccx, ccy - 54, cls.texture || 'ranger').setScale(3.4).setDepth(82));
+      if (cls.weapon && DATA.weapons[cls.weapon] && DATA.weapons[cls.weapon].heldTexture) {
+        var hw = DATA.weapons[cls.weapon];
+        ui.push(self.add.sprite(ccx + 26, ccy - 54, hw.heldTexture).setScale(2.2).setDepth(82)
+          .setRotation(hw.upright ? -Math.PI / 2 : 0));   // walking staffs stand up on the card too
+      }
+      ui.push(self.add.text(ccx, ccy + 6, (i + 1) + '.  ' + cls.name.toUpperCase(), { fontFamily: 'monospace', fontSize: 18, color: '#f4f4f4', fontStyle: 'bold' }).setOrigin(0.5).setDepth(82));
+      ui.push(self.add.text(ccx, ccy + 44, cls.blurb || '', { fontFamily: 'monospace', fontSize: 11, color: '#94b0c2', align: 'center', wordWrap: { width: cardW - 30 } }).setOrigin(0.5).setDepth(82));
+      ui.push(self.add.text(ccx, ccy + 82, 'SELECT ▶', { fontFamily: 'monospace', fontSize: 13, color: '#38b764' }).setOrigin(0.5).setDepth(82));
+      card.on('pointerover', function () { card.setFillStyle(0x29366f, 0.96); });
+      card.on('pointerout', function () { card.setFillStyle(0x1a1c2c, 0.96); });
+      card.on('pointerdown', function () { self.pickClass(slot, key); });
+    });
+    var numHint = keys.map(function (_, i) { return i + 1; }).join(' / ');
+    ui.push(this.add.text(cx, cy + 150, 'press ' + numHint + ' · or ESC to go back', { fontFamily: 'monospace', fontSize: 12, color: '#566c86' }).setOrigin(0.5).setDepth(81));
+    this.classUi = ui;
+    // number keys pick the class; ESC cancels
+    this._classKeys = function (e) {
+      if (!self.classPicking) return;
+      if (e.code === 'Escape') { self.closeClassPick(); return; }
+      var idx = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3 }[e.code];
+      if (idx != null && keys[idx]) self.pickClass(slot, keys[idx]);
+    };
+    this.input.keyboard.on('keydown', this._classKeys);
+  },
+
+  closeClassPick: function () {
+    if (this._classKeys) { this.input.keyboard.off('keydown', this._classKeys); this._classKeys = null; }
+    if (this.classUi) { this.classUi.forEach(function (o) { o.destroy(); }); this.classUi = null; }
+    this.classPicking = false;
+  },
+
+  // Commit a class choice → create the save and enter the slot.
+  pickClass: function (slot, cls) {
+    if (!this.classPicking) return;
+    this.closeClassPick();
+    this.createNewGame(slot, cls);
+  },
+
+  // Create a fresh account in `slot` with the chosen class, then enter it.
+  // (Also the headless-test entry point for a new game of a given class.)
+  createNewGame: function (slot, cls) {
+    var data = SAVE.blank(cls);
+    SAVE.save(slot, data);
+    this.enterSlot(slot, data);
+  },
+
+  enterSlot: function (slot, data) {
+    if (this.starting) return;
     bindSave(slot, data);
     this.starting = true;
     AUDIO.play('ui');
@@ -210,7 +282,7 @@ var TitleScene = new Phaser.Class({
 // fixed. keys.SPACE still points at the interact PRIMARY for legacy refs.
 function makeInputRig(scene) {
   var K = scene.input.keyboard;
-  var keys = K.addKeys('W,A,S,D,SPACE,T,F3,ENTER,UP,LEFT,DOWN,RIGHT');
+  var keys = K.addKeys('W,A,S,D,SPACE,F3,ENTER,UP,LEFT,DOWN,RIGHT');   // (dead 'T' auto-fire key removed — it's a Settings checkbox now)
   function keyFor(action, slot) {
     var kc = BINDS.phaserKeyCode(BINDS.code(action, slot));
     return kc != null ? K.addKey(kc) : null;
@@ -522,7 +594,7 @@ var NexusScene = new Phaser.Class({
   // footer says "SPACE to interact". In range, the console just brightens
   // (diegetic invitation); SPACE opens it.
   handleConsole: function () {
-    if (this.entering || this.consoleUi || this.vaultUi || this.gyUi || this.charging) return;
+    if (this.entering || this.consoleUi || this.vaultUi || this.gyUi || this.bestiaryUi || this.charging) return;   // AUDIT #8: bestiary guard
     var p = this.player, cp = this.consolePos;
     var near = Math.hypot(cp.x - p.x, cp.y - p.y) <= DATA.interact.consoleRange;
     this.consoleSprite.setScale(near ? 3.3 : 3);          // leans toward you
@@ -978,7 +1050,10 @@ var NexusScene = new Phaser.Class({
     persist();                                           // a drink is permanent (Pillar 3)
     AUDIO.play('drink');
     var st = this.player.state, before = st.stats;
-    st.stats = SIM.statsFor(cls, st.level, CURRENT.potionsDrunk);
+    // AUDIT #7 fix (2026-07-13): pass CURRENT.equipment so a nexus drink re-
+    // derives stats WITH gear bonuses (they were silently dropping until the
+    // next re-derive — R5/§6: one truth = class + level + pots + equipment).
+    st.stats = SIM.statsFor(cls, st.level, CURRENT.potionsDrunk, CURRENT.equipment);
     st.hp = Math.min(st.stats.hp, st.hp + Math.max(0, st.stats.hp - before.hp));
     st.mp = Math.min(st.stats.mp, st.mp + Math.max(0, st.stats.mp - before.mp));
     this.toast('+' + DATA.potions.boost + ' ' + stat.toUpperCase() + ' — yours until this character falls');
@@ -1179,20 +1254,24 @@ var NexusScene = new Phaser.Class({
     if (this.bestiaryUi) {
       this.bestiaryUi.forEach(function (o) { o.destroy(); });
       this.bestiaryUi = null;
-      this.input.keyboard.off('keydown-LEFT', this.bestiaryNavL, this);   // bug #2 family
-      this.input.keyboard.off('keydown-RIGHT', this.bestiaryNavR, this);
+      if (this._bestiaryKeys) { this.input.keyboard.off('keydown', this._bestiaryKeys); this._bestiaryKeys = null; }
       return;
     }
     if (this.vaultUi) this.toggleVault();                // one overlay at a time
     if (this.gyUi) this.toggleGraveyard();
     if (this.consoleUi) this.toggleConsole();
     this.buildBestiaryUi();
-    this.bestiaryNavL = this.bestiaryNavL || function () { this.bestiaryNav(-1); };
-    this.bestiaryNavR = this.bestiaryNavR || function () { this.bestiaryNav(1); };
-    this.input.keyboard.off('keydown-LEFT', this.bestiaryNavL, this);
-    this.input.keyboard.off('keydown-RIGHT', this.bestiaryNavR, this);
-    this.input.keyboard.on('keydown-LEFT', this.bestiaryNavL, this);
-    this.input.keyboard.on('keydown-RIGHT', this.bestiaryNavR, this);
+    // AUDIT #9 fix (2026-07-13): page with the LEFT/RIGHT *actions* (moveLeft/
+    // moveRight, either slot) read LIVE from BINDS — paging follows a rebind
+    // instead of being nailed to the arrow keys. Default A/◄ back · D/► next.
+    var self = this;
+    this._bestiaryKeys = function (ev) {
+      if (!self.bestiaryUi) return;
+      var id = BINDS.actionForEvent(ev);
+      if (id === 'moveLeft') self.bestiaryNav(-1);
+      else if (id === 'moveRight') self.bestiaryNav(1);
+    };
+    this.input.keyboard.on('keydown', this._bestiaryKeys);
     AUDIO.play('ui');
   },
 
@@ -1291,7 +1370,9 @@ var NexusScene = new Phaser.Class({
       ui.push(t);
     });
 
-    ui.push(this.add.text(cx, cy + 236, '[ ◀ ▶ browse · B or ESC to close ]',
+    ui.push(this.add.text(cx, cy + 236,
+      '[ ' + BINDS.keyLabel('moveLeft') + ' ' + BINDS.keyLabel('moveRight') + ' browse · ' +
+      BINDS.keyLabel('bestiary') + ' / ESC close ]',
       { fontFamily: 'monospace', fontSize: 11, color: GREEN }).setOrigin(0.5).setDepth(81));
     this.bestiaryUi = ui;
   },
@@ -1308,7 +1389,7 @@ var NexusScene = new Phaser.Class({
       var e = this.plazaPortals[i];
       if (Math.hypot(e.sprite.x - p.x, e.sprite.y - p.y) <= R) { near = e; break; }
     }
-    if (near && !this.vaultUi && !this.gyUi && !this.consoleUi) {
+    if (near && !this.vaultUi && !this.gyUi && !this.consoleUi && !this.bestiaryUi) {   // AUDIT #8: bestiary guard
       if (this.rig.interactJustDown()) this.enterPortal(near);
     }
   },
@@ -1429,6 +1510,10 @@ var RealmScene = new Phaser.Class({
     this.mobs = this.physics.add.group({ maxSize: DATA.waves.maxAlive + 10 });
     this.playerShots = this.physics.add.group({ maxSize: 220 });
     this.enemyShots = this.physics.add.group({ maxSize: 300 });
+    this.tornadoes = this.physics.add.group({ maxSize: 24 });   // M4: Knight whirlwind tornado pool
+    // (the Wizard's storm-orb pool retired 2026-07-13 — the ARCANE BARRAGE
+    //  machine gun fires plain playerShots; see Entities.channelBarrage)
+    this.whirlFx = null;                                        // M4: Knight whirlwind ring VFX
 
     this.physics.add.collider(this.mobs, this.mobs);
     var self = this;
@@ -1449,12 +1534,19 @@ var RealmScene = new Phaser.Class({
       this.physics.add.collider(this.enemyShots, this.wallBodies, eatShot(this.enemyShots));
     }
 
-    // player shots hit mobs (pierce tracks per-mob hits)
+    // player shots hit mobs (pierce tracks per-mob hits). M4: a frost bolt
+    // (shot.proj.slow) also SLOWS what it pierces (Entities.applySlow); a
+    // barrage lightning ball (shot.proj.strike) can PROC A LIGHTNING BOLT
+    // down onto its victim (SIM.rng — seam rule 4).
     this.physics.add.overlap(this.playerShots, this.mobs, function (shot, mob) {
       if (!shot.active || !mob.active) return;
       if (shot.proj.hits[mob.id]) return;
       shot.proj.hits[mob.id] = true;
       Entities.hurtMob(self, mob, shot.proj.dmg, self.time.now);
+      if (shot.proj.slow) Entities.applySlow(mob, shot.proj.slow, self.time.now);
+      if (shot.proj.strike && SIM.rng() < shot.proj.strike.chance) {
+        self.lightningStrike(mob.x, mob.y, shot.proj.strike);
+      }
       if (!shot.proj.pierce) Entities.killProjectile(self.playerShots, shot);
     });
 
@@ -1488,6 +1580,10 @@ var RealmScene = new Phaser.Class({
     this.buildHud();
     this.wireEvents();
     AUDIO.play('portal');
+    // M4.5: BATTLE MUSIC — "Swarmfront" (original) drives the whole realm; it
+    // cuts out the moment the fight is decided (boss down / horn / death), so
+    // the silence itself is the release. playMusic is idempotent (resize-safe).
+    AUDIO.playMusic('battle');
     this.cameras.main.fadeIn(300);
   },
 
@@ -1630,12 +1726,16 @@ var RealmScene = new Phaser.Class({
     this.bossBar = this.add.rectangle(W / 2 - 159, 19, 318, 12, 0xb13e53).setOrigin(0, 0.5).setScrollFactor(0).setDepth(53);
     this.bossName = this.add.text(W / 2, 34, def.name, { fontFamily: 'monospace', fontSize: 11, color: '#b13e53' }).setScrollFactor(0).setOrigin(0.5, 0).setDepth(53);
 
-    // player shots hurt the boss (pierce tracked like mobs)
+    // player shots hurt the boss (pierce tracked like mobs; the barrage's
+    // lightning-bolt proc lands on bosses too — M4 storm barrage)
     this.physics.add.overlap(this.playerShots, this.boss, function (boss, shot) {
       if (!shot.active || !boss.active) return;
       if (shot.proj.hits[boss.id]) return;
       shot.proj.hits[boss.id] = true;
       Entities.hurtBoss(self, boss, shot.proj.dmg);
+      if (shot.proj.strike && SIM.rng() < shot.proj.strike.chance) {
+        self.lightningStrike(boss.x, boss.y, shot.proj.strike);
+      }
       if (!shot.proj.pierce) Entities.killProjectile(self.playerShots, shot);
     });
     // boss contact damage (ticked, i-frames still apply)
@@ -1718,6 +1818,7 @@ var RealmScene = new Phaser.Class({
     this.burst(bx, by, 40, def.deathTint);
     boss.destroy(); this.boss = null;
     if (this.bossBar) { this.bossBar.destroy(); this.bossBarBg.destroy(); this.bossName.destroy(); this.bossBar = null; }
+    AUDIO.stopMusic();                                   // M4.5: the battle is decided — silence is the release
     AUDIO.play('victory');
     var stat = DATA.potions.stats[Math.floor(SIM.rng() * DATA.potions.stats.length)];  // seam rule 4
     // M3: the chest also rolls GEAR from the boss's drop table (E1 phase 2 —
@@ -1904,6 +2005,7 @@ var RealmScene = new Phaser.Class({
   survivalComplete: function () {
     this.annihilateSwarm();
     this.banner('YOU SURVIVED\nthe horn sounds — the swarm is annihilated', '#ffcd75');
+    AUDIO.stopMusic();                                   // M4.5: the horn ends the music too
     AUDIO.play('victory');
     var stat = this.modeDef.potionReward
       ? DATA.potions.stats[Math.floor(SIM.rng() * DATA.potions.stats.length)] : null;
@@ -1999,8 +2101,13 @@ var RealmScene = new Phaser.Class({
     ['player-shot', 'player-ability', 'mob-hurt', 'mob-died', 'mob-evolved',
      'player-hurt', 'player-levelup', 'player-died', 'boss-hurt', 'boss-died',
      'boss-pattern'].forEach(function (e) { self.events.off(e); });
-    this.events.on('player-shot', function () { AUDIO.play('shoot'); });
-    this.events.on('player-ability', function () { AUDIO.play('volley'); });
+    // M4: the shot / ability SFX come from the class's weapon / ability data
+    // (bow→'shoot' + volley→'volley'; frost→'frost' + barrage→'zap'; sword→'slash').
+    this.events.on('player-shot', function () {
+      var w = DATA.weapons[DATA.classes[CURRENT.cls].weapon];
+      AUDIO.play((w && w.sound) || 'shoot');
+    });
+    this.events.on('player-ability', function (ab) { AUDIO.play((ab && ab.sound) || 'volley'); });
     this.events.on('mob-hurt', function (mob, dmg) {
       self.damageNumber(mob.x, mob.y - 14, dmg, '#f4f4f4');
       self.hitstop(self.time.now);                        // M1: impact freeze
@@ -2076,6 +2183,10 @@ var RealmScene = new Phaser.Class({
   buildHud: function () {
     var T = { fontFamily: 'monospace', color: '#f4f4f4' };
     this.hudG = this.add.graphics().setScrollFactor(0).setDepth(50);
+    // M4 berserker rework: a class with a `resource` (the Knight's RAGE) gets a
+    // MOLTEN glow behind its right orb — it breathes, and burns brighter the
+    // fuller the pool (alpha driven in updateHud). Hidden for mana classes.
+    this.mpGlow = this.add.sprite(0, 0, 'softglow').setScrollFactor(0).setDepth(49).setVisible(false);
     // HUD numeric readouts (HP · MP · XP) are BLACK (user, 2026-07-12) — reads
     // on the bright orbs / gold XP fill.
     this.hpOrbText = this.add.text(0, 0, '', { fontFamily: T.fontFamily, fontSize: 13, color: '#000000', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
@@ -2126,7 +2237,23 @@ var RealmScene = new Phaser.Class({
     var hpX = m + r + 4,       orbY = H - m - r - 4;
     var mpX = W - m - r - 4;
     this.drawOrb(g, hpX, orbY, r, st.hp / st.stats.hp, HUD.hpColor);   // life orb
-    this.drawOrb(g, mpX, orbY, r, st.mp / st.stats.mp, HUD.mpColor);   // mana orb
+    // M4 berserker rework: the right orb is the class RESOURCE — molten RAGE
+    // for the Knight (lava fill + a breathing glow that burns brighter as the
+    // pool fills), classic blue mana for everyone else.
+    var res = DATA.classes[st.cls].resource;
+    var mpPct = st.mp / st.stats.mp;
+    this.drawOrb(g, mpX, orbY, r, mpPct, res ? res.color : HUD.mpColor);
+    if (res) {
+      var breathe = 0.85 + 0.15 * Math.sin(this.time.now / 260);
+      this.mpGlow.setVisible(true).setPosition(mpX, orbY)
+        .setTint(res.glow || res.color)
+        .setScale(0.9 + 0.5 * mpPct)
+        .setAlpha((0.12 + 0.5 * mpPct) * breathe);
+      if (mpPct > 0.15) {                                  // molten sheen on the lava surface
+        g.fillStyle(res.glow || 0xffcd75, 0.35);
+        g.fillEllipse(mpX, orbY + r * (1 - mpPct * 0.9), r * 0.8 * Math.min(1, mpPct * 2.2), 4);
+      }
+    } else { this.mpGlow.setVisible(false); }
     this.hpOrbText.setPosition(hpX, orbY).setText(String(Math.max(0, Math.ceil(st.hp))));
     this.mpOrbText.setPosition(mpX, orbY).setText(String(Math.floor(st.mp)));
 
@@ -2179,12 +2306,14 @@ var RealmScene = new Phaser.Class({
     ACCOUNT.records.deaths++;
     ACCOUNT.records.totalKills += st.kills;
     // Permadeath (Q1): reset the SAVED character immediately, so closing the
-    // tab on the death screen can't resurrect them.
-    GAME_SAVE.character = freshCharacter();
+    // tab on the death screen can't resurrect them. M4: the new character is
+    // the SAME class as the one that just fell (a slot keeps its class).
+    GAME_SAVE.character = freshCharacter(st.cls);
     CURRENT = GAME_SAVE.character;
     persist();
     // M1 upgraded recap: cause of death, time survived, kills + account context.
     if (this.paused) this.resumeGame();                   // death screen owns the end
+    AUDIO.stopMusic();                                    // M4.5: the music dies with you
     AUDIO.play('death');
     var tSec = Math.floor((this.time.now - this.startedAt) / 1000);
     var mmss = Math.floor(tSec / 60) + ':' + ('0' + tSec % 60).slice(-2);
@@ -2207,7 +2336,7 @@ var RealmScene = new Phaser.Class({
       '   ·   total kills ' + ACCOUNT.records.totalKills + '   ·   graveyard ' + ACCOUNT.graveyard.length,
       { fontFamily: 'monospace', fontSize: 14, color: '#94b0c2', align: 'center' }).setScrollFactor(0).setOrigin(0.5).setDepth(91);
     this.add.text(cx, cy + 96,
-      'Death is permanent (Fusion Law F4 / Q1). A new ' + DATA.classes[freshCharacter().cls].name + ' awaits in the Nexus.',
+      'Death is permanent (Fusion Law F4 / Q1). A new ' + DATA.classes[st.cls].name + ' awaits in the Nexus.',
       { fontFamily: 'monospace', fontSize: 13, color: '#f4f4f4' }).setScrollFactor(0).setOrigin(0.5).setDepth(91);
     this.add.text(cx, cy + 140, '[ ENTER or CLICK to return ]', { fontFamily: 'monospace', fontSize: 14, color: '#ffcd75' }).setScrollFactor(0).setOrigin(0.5).setDepth(91);
     var self = this, back = function () { self.scene.start('Nexus', { entry: 'realm' }); };
@@ -2236,6 +2365,168 @@ var RealmScene = new Phaser.Class({
     }
   },
 
+  // ---- M4: STORM BARRAGE LIGHTNING PROC (user redesign 2026-07-13) ---------
+  // The homing storm-orb system is retired; the Wizard's special is now the
+  // STORM BARRAGE machine gun (Entities.channelBarrage fires the lightning
+  // balls as ordinary playerShots). What SURVIVES from the old design is the
+  // payoff: a connecting ball can PROC these — a LIGHTNING BOLT summoned down
+  // onto the victim. Area damage through SIM + the same hurt paths as any hit.
+  lightningStrike: function (x, y, spec) {
+    var self = this, st = this.player.state;
+    var dmg = SIM.damage(spec.dmg, st.stats.att, 0);
+    this.mobs.children.iterate(function (m) {
+      if (!m || !m.active) return;
+      if (Math.hypot(m.x - x, m.y - y) <= spec.radius) Entities.hurtMob(self, m, dmg, self.time.now);
+    });
+    if (this.boss && this.boss.active && Math.hypot(this.boss.x - x, this.boss.y - y) <= spec.radius) {
+      Entities.hurtBoss(this, this.boss, dmg);
+    }
+    this.strikeVfx(x, y);
+    AUDIO.play(spec.sound || 'thunder');
+  },
+
+  // The bolt: a jagged column from above down to the impact + a bright flash
+  // and expanding ring. Pure presentation (Math.random jitter is cosmetic —
+  // seam rule 4); tweened out and destroyed. Small screenshake sells it.
+  strikeVfx: function (x, y) {
+    var g = this.add.graphics().setDepth(41);
+    var top = y - 300, segs = 8;
+    var draw = function (w, col, a) {
+      g.lineStyle(w, col, a); g.beginPath(); g.moveTo(x, top);
+      for (var i = 1; i <= segs; i++) {
+        var ny = top + (y - top) * i / segs;
+        var nx = (i === segs) ? x : x + (Math.random() * 2 - 1) * 14;
+        g.lineTo(nx, ny);
+      }
+      g.strokePath();
+    };
+    draw(5, 0x7fb8ff, 0.85); draw(2, 0xffffff, 1);         // glow + hot core
+    var flash = this.add.sprite(x, y, 'softglow').setTint(0xbfe8ff).setDepth(40).setScale(0.25).setAlpha(0.9);
+    var ring = this.add.circle(x, y, 6, 0xbfe8ff, 0).setStrokeStyle(3, 0xbfe8ff, 0.9).setDepth(40);
+    this.tweens.add({ targets: flash, scale: 1.4, alpha: 0, duration: 260, onComplete: function () { flash.destroy(); } });
+    this.tweens.add({ targets: ring, radius: 46, alpha: 0, duration: 300, onComplete: function () { ring.destroy(); } });
+    this.tweens.add({ targets: g, alpha: 0, duration: 200, onComplete: function () { g.destroy(); } });
+    this.cameras.main.shake(120, 0.007);
+  },
+
+  // ---- M4: KNIGHT SWORD CLEAVE (user design 2026-07-13) --------------------
+  // Entities.updatePlayer hands a melee "shot" here (the sword fires no
+  // projectile). Hits every mob + the boss within `range` px whose bearing is
+  // inside `arcDeg`/2 of the aim — a frontal crescent. Damage routes through SIM
+  // (seam) + the same hurt paths as any hit; then the sweep VFX.
+  meleeSwing: function (p, intent, st, weapon, wDmg) {
+    var self = this, now = this.time.now, hits = 0;
+    var dmg = SIM.damage(wDmg, st.stats.att, 0);
+    var aim = intent.aimAngle, half = Phaser.Math.DegToRad((weapon.arcDeg || 100) / 2);
+    var range = weapon.range || 76, r2 = range * range;
+    var inArc = function (x, y) {
+      var dx = x - p.x, dy = y - p.y;
+      if (dx * dx + dy * dy > r2) return false;
+      return Math.abs(Phaser.Math.Angle.Wrap(Math.atan2(dy, dx) - aim)) <= half;
+    };
+    this.mobs.children.iterate(function (m) {
+      if (!m || !m.active) return;
+      if (inArc(m.x, m.y)) { Entities.hurtMob(self, m, dmg, now); hits++; }
+    });
+    if (this.boss && this.boss.active && inArc(this.boss.x, this.boss.y)) { Entities.hurtBoss(this, this.boss, dmg); hits++; }
+    // BERSERKER REWORK: every enemy the cleave connects with BANKS RAGE
+    // (weapon.rageGain each, clamped to the pool) — the auto attack is how the
+    // Knight fuels his whirlwind.
+    if (weapon.rageGain && hits) st.mp = Math.min(st.stats.mp, st.mp + weapon.rageGain * hits);
+    this.meleeVfx(p, aim, range, weapon.arcDeg || 100);
+  },
+
+  // The crescent sweep — the slash arc PIVOTS at the Knight (origin 0.03,0.5)
+  // and scales so its tip lands at the sword's reach (`range`, = the whirlwind's
+  // radius), then sweeps the whole arc and fades. Pure presentation (seam rule 3).
+  meleeVfx: function (p, aim, range, arcDeg) {
+    var swing = Phaser.Math.DegToRad(arcDeg) * 0.42;
+    var s = this.add.sprite(p.x, p.y, 'slash')
+      .setOrigin(0.03, 0.5).setDepth(11).setScale(range / 54)
+      .setRotation(aim - swing).setAlpha(0.95).setTint(0xdff1ff);
+    this.tweens.add({ targets: s, rotation: aim + swing, alpha: 0, duration: 150,
+      onComplete: function () { s.destroy(); } });
+  },
+
+  // ---- M4: KNIGHT WHIRLWIND (held channel; Entities.channelWhirlwind drives it)
+  // One damage tick: every enemy within `radius` takes SIM.damage(dmg,att). Each
+  // tick also rolls the TORNADO proc (user add 2026-07-13) — on a hit it flings
+  // a tornado outward in a random direction (SIM.rng — seam rule 4).
+  whirlwindTick: function (p, st, ab) {
+    var self = this, now = this.time.now, hits = 0;
+    var dmg = SIM.damage(ab.dmg, st.stats.att, 0);
+    this.mobs.children.iterate(function (m) {
+      if (!m || !m.active) return;
+      if (Math.hypot(m.x - p.x, m.y - p.y) <= ab.radius) { Entities.hurtMob(self, m, dmg, now); hits++; }
+    });
+    if (this.boss && this.boss.active && Math.hypot(this.boss.x - p.x, this.boss.y - p.y) <= ab.radius) {
+      Entities.hurtBoss(this, this.boss, dmg); hits++;
+    }
+    // BERSERKER REWORK: LIFESTEAL — the whirlwind mends the Knight per enemy
+    // it damages this tick (hpPerHit each; spin deep in the pack = drink deep).
+    // His survival tool now that he takes real damage.
+    if (ab.hpPerHit && hits && st.alive) st.hp = Math.min(st.stats.hp, st.hp + ab.hpPerHit * hits);
+    AUDIO.play(ab.sound || 'whirl');
+    if (ab.tornado && SIM.rng() < ab.tornado.chance)
+      this.spawnTornado(p.x, p.y, SIM.rng() * Math.PI * 2, ab.tornado, st);
+  },
+
+  // A TORNADO flung by the whirlwind: a funnel that shoots outward and grinds
+  // any enemy it overlaps, re-hitting each every `reHitMs` while touching. Pooled.
+  spawnTornado: function (x, y, angle, spec, st) {
+    var t = this.tornadoes.get(x, y, 'tornado');
+    if (!t) return null;
+    t.setActive(true).setVisible(true).setTexture('tornado').setScale(2.4).setDepth(9)
+      .setAlpha(0.9).setTint(0xd8e4f0);
+    t.body.enable = true; t.body.setSize(8, 12).setOffset(2, 2);
+    t.tornado = { dieAt: this.time.now + spec.lifeMs, radius: spec.radius,
+                  dmg: SIM.damage(spec.dmg, st.stats.att, 0), reHitMs: spec.reHitMs || 250,
+                  hits: {}, sway: 0 };
+    this.physics.velocityFromRotation(angle, spec.speed, t.body.velocity);
+    return t;
+  },
+
+  updateTornadoes: function (time) {
+    if (!this.tornadoes) return;
+    var self = this;
+    this.tornadoes.children.iterate(function (t) {
+      if (!t || !t.active) return;
+      if (time >= t.tornado.dieAt) { Entities.killProjectile(self.tornadoes, t); return; }
+      t.tornado.sway += 0.3;
+      t.setScale(2.4 + Math.sin(t.tornado.sway) * 0.25, 2.4);   // funnel wobble (cosmetic)
+      var spec = t.tornado;
+      self.mobs.children.iterate(function (m) {
+        if (!m || !m.active) return;
+        if (Math.hypot(m.x - t.x, m.y - t.y) > spec.radius) return;
+        if (time - (spec.hits[m.id] || -9999) < spec.reHitMs) return;
+        spec.hits[m.id] = time;
+        Entities.hurtMob(self, m, spec.dmg, time);
+      });
+      if (self.boss && self.boss.active &&
+          Math.hypot(self.boss.x - t.x, self.boss.y - t.y) <= spec.radius &&
+          time - (spec.hits.boss || -9999) >= spec.reHitMs) {
+        spec.hits.boss = time; Entities.hurtBoss(self, self.boss, spec.dmg);
+      }
+    });
+  },
+
+  // The whirlwind ring — a spinning blade-halo around the Knight while he
+  // channels (st.whirling). Pure presentation: created on spin-up, followed +
+  // spun each frame, destroyed on release / death.
+  updateWhirlwind: function (time) {
+    var whirling = this.player && this.player.state.alive && this.player.state.whirling;
+    if (whirling) {
+      if (!this.whirlFx) {
+        this.whirlFx = this.add.sprite(this.player.x, this.player.y, 'whirl')
+          .setDepth(9).setAlpha(0.85).setScale(2.1).setTint(0xdfeaf6);
+      }
+      this.whirlFx.setPosition(this.player.x, this.player.y)
+        .setRotation(this.whirlFx.rotation + 0.6).setVisible(true);
+    } else if (this.whirlFx) {
+      this.whirlFx.destroy(); this.whirlFx = null;
+    }
+  },
+
   update: function (time, delta) {
     if (this.paused || this.closing) return;              // M1 pause / M2 realm-closed screen
     if (this.scanning || this.looting) return;            // M2.1: scouter scan / loot overlay hold the world
@@ -2255,6 +2546,8 @@ var RealmScene = new Phaser.Class({
     if (this.boss && this.boss.active && this.player.state.alive) Entities.updateBoss(this, this.boss, this.player, time);
     Entities.updateProjectiles(this, this.playerShots, time);
     Entities.updateProjectiles(this, this.enemyShots, time);
+    this.updateTornadoes(time);                            // M4: Knight whirlwind tornadoes
+    this.updateWhirlwind(time);                            // M4: Knight whirlwind ring VFX
     this.updateHud();
   }
 });

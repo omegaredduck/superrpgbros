@@ -11,128 +11,93 @@ We're continuing work on my game in the connected "super rpg bros" folder
 (project memory has the standing decisions — read it, plus docs/MILESTONES.md
 and the top entry of docs/EVENT_LOG.md, before writing any code).
 
-WHERE THINGS STAND (as of 2026-07-12, build ?v=m3q):
-- M0–M1 done. M2 + M2.1 features all landed; their gates are HUMAN gates
-  (my dev self-test + an outside tester for Fun Gate 1) — don't wait on them.
-- M3 features done (map builder, equipment, vault, affix engine v2,
-  champion nameplates). NEW this session — M3.5 THE PORTAL WORKS: the
-  pedestal plaza is GONE. One platform at the heart of the nexus, an
-  energy conduit, and the REALM CONSOLE that visibly POWERS it. Console
-  = mode select + sealed future-realm rows + map-affix board + POWER THE
-  PLATFORM. Spawn plays a ~2s cinematic (console flare → conduit pulses →
-  8 ring lights ignite in the mode color → portal tears open); powered
-  state keeps pulses flowing until entry; ONE-SHOT consumed on entry and
-  the works go dark. Affixes (apex/escalating/hordes) are PREVIEW-only:
-  visible everywhere (board [x], signpost label, SPACE prompt, realm HUD)
-  but INERT until DATA.console.live flips at M5. Timings in
-  DATA.juice.conduit. consoleSpawnPortal(instant=true) skips the
-  cinematic (registry rebuilds + all suites' realm entry). COLOR PASS:
-  the portal texture is neutral greyscale, always tinted by purpose —
-  realm clear = PORTAL GREEN (DATA.modes.clear.color, Rick&Morty style,
-  user call: blue-on-blue was unreadable), trial gold, boss portal true
-  red. SOUND/RISE/LIGHT pass: electricity charge + phaser spawn SFX,
-  portal rises out of the platform floor, NO text inside the frame (the
-  page footer says SPACE to interact; console brightens in range), room
-  is the PORTAL CHAMBER (glowing title, well/console glow pools as in-map
-  lighting, white-on-shadow header). M3.6 BESTIARY: green terminal
-  mirroring the vault (right wall), browsable mob/boss pages read LIVE
-  from DATA.mobs/DATA.bosses (new creatures appear automatically); green
-  station-label pass (VAULT (V)/BESTIARY/REALM CONSOLE above objects, no
-  counters/headers). M3.7 RECORDS SCREEN: the floating account header is
-  GONE — a wall monitor under the title shows the live readout (NO slot
-  number by design, auto-fit text); the graveyard merged in as the
-  RECORDS page (click / SPACE at the screen). Console renamed PORTAL
-  MACHINE (P); labels advertise hotkeys. M3.8 CHAMBER-ALIVE: records
-  glass BOOTS (login = empty → letters type out w/ cursor; realm return
-  = numbers ramp slow→fast, cubic ease-in; knobs in DATA.juice.records);
-  GIANT metal LEVER (SPACE throws it in range; floating (R)/(G) chip shows the flip key; click walks you over) + wire (3-pulse burst on flip ONLY) swaps records (R) / graveyard
-  stats (G) pages, re-typing per flip (page survives resize via
-  registry); WALK-TO-INTERACT — V/B/P/R/G + clicks walk the character
-  to stand below the station THEN open (manual input cancels; open
-  window + same hotkey = instant close). NexusScene knows its entry
-  (login/realm/none via scene.start data). 143 headless checks green
-  across 6 suites, ×3 batteries. GOTCHA added to the book: looped
-  Phaser timers CATCH UP on the slow headless clock — guard callbacks
-  against firing after their own cleanup. Flakes: none seen in the
-  final 3 batteries; if they return they cluster in timer sections.
-  M3.9 CHAMBER MUSIC (?v=m3n): chiptune sequencer in audio.js + "The
-  Chamber at Rest" (original 8-bit loop, plays only in the chamber).
-  M3.10-11 SETTINGS · ESC MENU · KEYBINDS (?v=m3p, NEW binds.js + menu.js):
-  ESC no longer exits fullscreen (main.js keyboard-locks Escape; only the
-  fullscreen key toggles it); split Music + SFX volume each with on/off;
-  ONE ESC menu in chamber AND realms (Resume · Settings · Exit to load
-  screen; realm also Return to chamber). Settings = audio sliders + a
-  GAMEPLAY auto-fire checkbox (auto-fire is NO LONGER a key; realm reads
-  settings.autoFire live) + a remappable KEYBINDS list — 12 actions, each
-  with a PRIMARY + ALTERNATE slot (binds = {primary,alt}; only WASD ships
-  arrow-key alts by default), live-updating the (P)/(V)/(B)/(R)/(G) labels
-  + HUD + footer. HUD: the bottom action box is GONE — only a segmented XP
-  bar (5 sections, blue dividers, `xp / needed`) between the orbs. VERIFIED
-  via a one-off container smoke test 21/21, zero console errors — but NOT
-  folded into the numbered suites and the 143 battery has NOT been re-run.
-  CAVEAT: the fullscreen fix needs a secure context — run via
-  START_SERVER.bat (localhost); file:// may not grant Keyboard Lock.
+WHERE THINGS STAND (as of 2026-07-13, build ?v=m4d):
+- M0–M1 done. M2 + M2.1 features landed; their gates are HUMAN gates (my dev
+  self-test + an outside tester for Fun Gate 1) — don't wait on them.
+- M3 features done (map builder, equipment, vault, affix v2, PORTAL CHAMBER,
+  bestiary, records lever, chamber music, settings/ESC menu/remappable keybinds,
+  XP-bar HUD). M3 leftovers still open: Q3/Q5 behind flags, CC0 art batch 1,
+  one manual TM-8 tile-import check.
+- M4 ROSTER COMPLETE + user reworks all landed (?v=m4d):
+  * RANGER — bow + volley (unchanged).
+  * WIZARD — frost bolt basic (pierce + slow); special = STORM BARRAGE: a held
+    machine gun of BIG lightning balls (one per 90ms, dead straight, mpPerShot
+    each, no pierce) where every ball that CONNECTS has a 22% PROC to summon a
+    LIGHTNING BOLT onto the victim (area damage + sky-bolt VFX via
+    RealmScene.lightningStrike; rider = proj.strike read in the shot overlaps).
+    Staff carried UPRIGHT like a walking staff (weapons.frost.upright).
+  * KNIGHT — BERSERKER: takes REAL damage now (hp/def cut hard). Cleave (reach =
+    whirlwind radius, comma VFX, swing anim) BANKS RAGE per enemy hit; RAGE
+    replaced mana — molten-lava HUD orb (glowing, brighter as it fills), starts
+    EMPTY, zero passive regen, whirlwind drains it + refuses at 0. Whirlwind
+    LIFESTEALS (hpPerHit per enemy damaged per tick) + tornado procs.
+  * "SWARMFRONT" — original frantic 8-bit BATTLE MUSIC in every realm (A minor
+    172bpm, drive→build→peak→turnaround); cuts to silence when the fight is
+    decided (boss down / horn / death). Chamber keeps its own calm track.
+  * Class select on the TITLE SCREEN per slot; slot keeps its class through
+    permadeath; all three open.
+- Full battery GREEN on m4d: m4 18 · m4b 26 · m2 22 · m3b 24 · m3c 37.
+- Audit bugs #7–#9 all FIXED (m4b); dead code swept.
 
-THIS SESSION — close out M3, then start M4 if time:
-0. VERIFY m3q: re-run the 143-check battery (?v=m3q) + add an m3d/settings
-   suite (menu opens chamber+realm, audio split + migration, primary/alt
-   rebind updates labels + persists, auto-fire checkbox, XP-bar HUD). Then
-   continue below.
-0.5. FIX AUDIT BUGS (2026-07-12 full-code audit — details in TESTING.md
-   bug log #7–#9): (a) P1 — drinkPotion recomputes live stats WITHOUT the
-   equipment arg (gear bonuses vanish after a nexus drink until the next
-   re-derive); (b) P2 — bestiaryUi missing from the handlePortals /
-   handleConsole one-overlay guards; (c) P2 — bestiary page-flip hardcodes
-   arrow keys instead of BINDS + the static HTML fallback footer is stale.
-   Also sweep dead code when touching those files: unused `pedestal`
-   texture, dead T in the input rig, unused DATA.console.hotkey/prompt,
-   no-op ternary in createPlayer.
-1. Q3/Q5 BEHIND FLAGS: XP-gems trial (Q3) and realm-buff picks (Q5) as
-   data.js-flagged experiments (off by default; a flag flip turns them on
-   for a playtest). Small, contained — resolve by playtest, not argument.
-2. CC0 ART BATCH 1: hero + 4 mobs + tileset from a CC0 pack (kenney.nl or
-   itch CC0), loaded under the SAME texture keys (the game can't tell —
-   ASSET_PIPELINE.md lane B), credits logged in ASSET_CREDITS.md. Needs
-   START_SERVER.bat for file-based sprites OR base64-embed; check the
-   pipeline doc first.
-3. If time: open M4 — Wizard class (staff pierce-shot, AoE nova ability) as
-   pure data + one new verb if needed; class-select in the nexus; per-class
-   caps in data.js.
+THIS SESSION — options (my call at the top):
+1. BALANCE THE ROSTER by playtest — knobs all in data.js, all marked TUNE ME:
+   Knight: classes.knight (hp/def cuts), weapons.sword (dmg/range/rate/rageGain),
+   abilities.whirlwind (mpDrainPerSec/tickMs/dmg/radius/hpPerHit + .tornado).
+   Wizard: abilities.barrage (mpPerShot/fireEveryMs/dmg + strike chance/dmg/radius).
+   M4 human gate = all 3 classes clear realm-1 + testers disagree on the best.
+   Maybe class-flavored items (drop tables are still all bows/quivers — reads
+   odd on the caster and the melee bruiser).
+2. TEST DEBT: m1 / m21 / m3 suites still crash on RETIRED flows (old pause-menu
+   ArrowLeft volume + `q`-to-nexus, replaced by the unified ESC menu at m3o).
+   Proven m3o drift, NOT the roster. Port them to the m3o menu model, then
+   re-establish the full green battery. ALSO still TODO: a permanent
+   m3d/settings suite (menu, audio split + migration, rebind persistence,
+   auto-fire checkbox, XP-bar HUD).
+3. M3 leftovers: Q3 (XP-gems trial) + Q5 (realm-buff picks) behind data.js
+   flags; CC0 art batch 1 (hero + 4 mobs + tileset — asset sourcing + license
+   logging, bigger task).
 
 PROCESS (non-negotiable, enforce it on yourself):
 - Balance numbers ONLY in data.js. Respect the sim/presentation seam
   (ARCHITECTURE.md §4) and the save rules (§6 — bank + persist BEFORE any
-  screen; account/vault survive death, character/equipment don't).
-- Headless suites for anything new + run all existing suites (NODE_PATH to
-  a global playwright install; stage game/lib/phaser.min.js too if
-  rebuilding the container copy).
-- Bump ?v= in game/index.html (currently m3q) on any js change.
-- Tick MILESTONES.md boxes, append an EVENT_LOG.md entry, update project
-  memory, rewrite docs/NEXT_SESSION.md for the session after, and commit
-  every changed file back to my disk. I run 2_SAVE_AND_UPLOAD.bat myself.
+  screen; account/vault survive death, character/equipment die; a slot KEEPS
+  its class across permadeath).
+- Headless suites for anything new + run all existing suites (NODE_PATH to a
+  global playwright install; PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers; stage
+  game/lib/phaser.min.js too if rebuilding the container copy).
+- Bump ?v= in game/index.html (currently m4d) on any js change.
+- Tick MILESTONES.md boxes, append an EVENT_LOG.md entry, update project memory,
+  rewrite docs/NEXT_SESSION.md for the session after, and commit every changed
+  file back to my disk. I run 2_SAVE_AND_UPLOAD.bat myself.
+- COPYRIGHT: music/art requests naming existing games get an ORIGINAL piece
+  chasing the same feel (precedent: chamber + battle themes, both original).
 
-Known gotchas are in project memory (Phaser scene-instance reuse, listener
-stacking — includes once()/ENTER rewiring on overlay rebuilds, RESIZE
-scaling, ?v= cache, bug #5: arcade collider callbacks between a dynamic and
-a static group arrive (staticChild, dynamicChild) — identify by tag, never
-by argument order; and the headless one: software-GL runs ~2fps and Phaser
-caps frame delta, so clock timers run ~5× slow in suites — keep entry waits
-generous and reuse the Space-press retry loop pattern).
+Known gotchas are in project memory. Suite-specific ones: champion mobs can
+EVOLVE on a test hit (HP jumps UP) — clear m.mob.affix + set evolved=true +
+reset hp for deterministic damage checks; MP regen clamps st.mp to the class
+cap every frame (set test mp BELOW cap; pass dt=0 to updatePlayer for
+exact-cost assertions); auto-fire aims at the LIVE cursor in screenshots —
+page.mouse.move first or disable settings().autoFire.
 
-Start by reading the docs listed above, then give me a short plan and get
-to work.
+Start by reading the docs listed above, then give me a short plan and get to work.
 ```
 
 ---
 
 Manual items still on ME (Red), any time:
+- PLAY ALL THREE (?v=m4d) and judge the reworks:
+  * KNIGHT: does the berserker loop feel good — cleave to build rage, spin to
+    shred + heal, rage runs dry, cleave again? Is he too fragile now, or does
+    the lifesteal carry it? Does the molten rage orb READ at a glance?
+  * WIZARD: does the storm barrage feel like a machine gun? Do the lightning-
+    bolt procs land often enough to feel electric (22%)? Balls big enough?
+  * Battle music: does "Swarmfront" build the panic without wearing you out?
+    Does the cut-to-silence on the kill land?
 - Dev self-test of the M2.1 flow (chest / scouter / orbs / time trial) — closes M2.1.
 - FUN GATE 1: hand the game to a friend who didn't watch it being built, 20+ min,
   log per TESTING.md §3 — closes M2/MVP.
 - M3 GATE: bank an item in the vault (V in nexus), die or re-enter, confirm it
   survived; playtest a builder-painted map. Log it.
-- PLAY THE PORTAL CHAMBER (?v=m3n, MUSIC ON — sound ON — log in fresh to see the glass type itself out, exit a realm to watch the numbers fly, flip the lever, and let a hotkey walk you across the room): walk to the console, slot affixes, POWER THE
-  PLATFORM, watch the charge-up, step through — does it feel right? (Your redesign
-  — judge the cinematic timing especially; knobs in DATA.juice.conduit.)
 - One manual TM-8 check: IMPORT TILES in the map builder with a real image file.
-- Run 2_SAVE_AND_UPLOAD.bat to push the latest build (?v=m3q).
+- Run 2_SAVE_AND_UPLOAD.bat — GitHub is still at m3q; m4a/m4b/m4c/m4d and all
+  doc updates are waiting to be pushed in one go.

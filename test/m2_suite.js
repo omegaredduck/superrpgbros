@@ -43,7 +43,7 @@ function check(name, ok, extra) {
     mig.data.account.graveyard.length === 1);
 
   // -- 2. fresh account → realm ------------------------------------------------
-  await page.evaluate(`${scene('Title')}.chooseSlot(1)`);
+  await page.evaluate(`${scene('Title')}.createNewGame(1, 'ranger')`);
   await page.waitForFunction(`game.scene.isActive('Nexus')`, null, { timeout: 5000 });
   await page.evaluate(`(function(){var n=${scene('Nexus')}; if(!n.portal){n.consoleSetMode('clear');n.consoleSpawnPortal(true);} n.player.setPosition(n.portal.x, n.portal.y);})()`);
   await sleep(300);
