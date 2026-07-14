@@ -490,7 +490,14 @@ var DATA = {
       slash:   { type: 'square',   freq: 540, freqEnd: 190, len: 0.10, vol: 0.14, limitMs: 60,
                  noise: { vol: 0.05, hp: 2000 } },
       whirl:   { type: 'sawtooth', freq: 300, freqEnd: 250, len: 0.13, vol: 0.11, limitMs: 120,
-                 noise: { vol: 0.09, hp: 1100 } }
+                 noise: { vol: 0.09, hp: 1100 } },
+      // ART TEST (train yard): TRAINHORN — a low two-tone air horn warning the
+      // train is coming (telegraph). TRAINPASS — the low rumble + gritty roar as
+      // it barrels through (played in bursts while it crosses).
+      trainhorn: { type: 'sawtooth', arp: [175, 131, 175, 147], len: 1.1, vol: 0.30, limitMs: 1400,
+                   noise: { vol: 0.05, hp: 300 } },
+      trainpass: { type: 'triangle', freq: 78, freqEnd: 58, len: 0.5, vol: 0.26, limitMs: 220,
+                   noise: { vol: 0.16, hp: 180 } }
     },
 
     // --- M3.9: MUSIC — "The Chamber at Rest" (ORIGINAL composition, 2026).

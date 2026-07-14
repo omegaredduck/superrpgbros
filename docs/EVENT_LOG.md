@@ -6,6 +6,113 @@
 
 ---
 
+## 2026-07-13 · ART TEST · HI-FI PORTAL ROOM + SPLIT TOGGLES (?v=m4i → m4j)
+
+The chamber (portal room) gets a hi-fi remake, and the Hi-Fi toggle is SPLIT into
+two independent switches: Settings → ART TEST → **Hi-Fi: World [ ] Chamber [ ]**
+(World = train-yard realm + monsters; Chamber = portal room; both default OFF).
+
+Hi-fi chamber (NEW game/js/nexus_art.js): arcane floor/wall tiles, the portal
+PLATFORM (beveled ring + radial inlays + 8 sockets + glowing well), the PORTAL now
+a DOOR (arched stone gateway) with a churning SWIRL inside + a spinning disc, the
+CONSOLE + BESTIARY terminals, VAULT chest, LEVER, CONDUIT, records WALL SCREEN.
+textures.js buildHiFiChamber() builds them at boot; nexusKey()/nexusScale() swap
+NexusScene sprites (r = classicPx/hiPx → identical on-screen size, only fidelity
+rises). Portal shared w/ realm boss-exit → hi-fi if EITHER toggle on.
+
+Animation (user: door + animation; platform + wiring animated; honor low-fi anims):
+passive tweens carry over automatically (texture-only swap). The door FRAME stays
+put while a swirl DISC spins inside it. chamberAmbient() keeps the platform
+ring-lights breathing, the well pulsing, and energy pulses climbing the conduit
+CONTINUOUSLY; powerUp/powerDown hand off cleanly. All gated on hifiChamber.
+
+Reversible: OFF = classic chamber byte-for-byte. Backup
+`_portal_room_backup_20260714_162357/` (gitignored). Files: NEW nexus_art.js;
+textures.js, scenes.js, menu.js, save.js, index.html.
+
+Verify: m2/m4/m4b green + in-engine (Hi-Fi Chamber ON) door portal + spinning disc
+on the animated platform, all chamber textures hi-fi, zero console errors. TEST
+GOTCHA discovered: my ad-hoc Playwright launches hung on Nexus load — the
+`--use-gl=angle/swiftshader` flags were the cause; launch WITHOUT GL args (as the
+suites do) and the Nexus loads fine. Disk-only; awaits 2_SAVE_AND_UPLOAD.bat.
+
+---
+
+## 2026-07-13 · ART TEST · HI-FI TRAIN YARD + BIGGER RANGER (?v=m4e → m4f)
+
+Opt-in, reversible extension of the art test (user: "make a beautiful/cool/fun
+map… tracks all through it and a train that comes through — get hit = dead", plus
+"make my character a little bigger"). Settings → ART TEST → **Hi-Fi World
+[ON/OFF]** (default OFF).
+
+**Bigger Ranger:** RANGER_TARGET 32→64 — the hi-fi Ranger models render ~2x
+(64px), hitbox scales with it, bow-hand anchor auto-follows displayWidth.
+
+**Train yard (hifiWorld ON):** gravel arena + oil stains + concrete border, two
+horizontal rail tracks + a decorative vertical track, arched tunnel mouths. An
+AMBUSH TRAIN runs at random intervals: telegraphed by an air-horn + flashing red
+crossing signals + camera rumble (~1.3s), then barrels down a random lane at
+1050px/s out of a tunnel. Contact = **INSTANT DEATH** (bypasses i-frames; killer
+"the 5:15 express"); it also mows any mob it hits. Fair-but-deadly: warn window +
+off-track safety = dodgeable. Guard: a warning only starts from idle (no sprite
+leak). New SFX: trainhorn, trainpass.
+
+**Hi-fi monsters:** faithful higher-fidelity redraws of slime/brute/spitter/
+warlock (48px) + the Grovekeeper boss (96px). Hitboxes preserved (22px mob /
+~42x36 boss) so balance is untouched — only art + on-screen size change.
+
+**Reversible + gated:** OFF → the realm/mobs/boss/tiles are byte-for-byte classic
+(mobModel/bossModel return null; RealmScene skips the yard). Pre-edit backup
+`_map_train_backup_20260713_161251/` (gitignored). See ART_TEST_CHANGES.md.
+
+Files: **NEW** game/js/world_art.js (hi-fi mobs/boss/tiles/track/tunnel/loco,
+reuses ranger_art primitives). textures.js (buildHiFiWorld + mobModel/bossModel/
+hifiWorldOn + RANGER_TARGET 64). entities.js (spawnMob/spawnBoss hi-fi swap,
+gated). scenes.js (setupTrainYard + train state machine + instakill). menu.js
+(Hi-Fi World toggle). save.js (hifiWorld:false). data.js (train SFX). index.html
+(world_art.js + ?v m4f).
+
+Verify: m4 18/18 · m4b 26/26 · m2 green — zero console errors. Hi-Fi World ON:
+train yard (2 lanes), 10 hi-fi textures present, mobs at 22px hitbox, Ranger 64px,
+train INSTAKILLS on contact (alive→false). In-engine screenshots confirm the yard
++ headlight. Still DISK-ONLY — awaits 2_SAVE_AND_UPLOAD.bat with the m4a–m4f backlog.
+
+---
+
+## 2026-07-13 · ART TEST · RANGER HIGH-FIDELITY MODEL SELECT (?v=m4d → m4e)
+
+TEMPORARY, fully reversible feature (user request): test higher-fidelity pixel
+art for the Ranger by selecting a bigger canvas. Settings → CHARACTER (art test)
+→ Model picks **[16·orig] [32] [64] [128] [160]** — the original 16x16 is the
+DEFAULT and is never touched; the four larger sizes are procedurally-drawn,
+resolution-aware, FAITHFUL redraws (green hood, skin face, teal cloak, belt,
+quiver, slate legs) with **real idle + walk animation**, an **archer stance**
+(lead arm extended to the bow, rear hand drawn to the cheek), and a **matching
+bow + arrow**. Arms only on the hi-fi models (per user). On-screen footprint —
+and the physics hitbox — is held at 32px for every model, so ONLY fidelity
+changes; gameplay is identical.
+
+**Reversible by design:** additive + gated on `settings.rangerModel`; default
+'16' reproduces the classic path byte-for-byte (texture 'ranger', scale 2,
+20x24 hitbox, no anim — verified). Full pre-edit backup at
+`_art_test_backup_20260713_152543/` (gitignored). See `ART_TEST_CHANGES.md`.
+
+Files: **NEW** `game/js/ranger_art.js` (drawBody/drawBow/drawArrow/outlinePass,
+pure pixel-plotting — same module rendered the preview PNGs). `textures.js`
+(buildRangerModels: ranger/bow/arrow{32,64,128,160} spritesheets + idle/walk
+anims; TEX.modelFor/selectedModelId/RANGER_SIZES). `save.js` (rangerModel='16'
+default). `menu.js` (Model selector; panel 544→600). `entities.js`
+(Entities.applyModelSkin; createPlayer + updatePlayer anim/arrow, all gated on
+`p._rangerModel`). `scenes.js` (Ranger class card previews the selected model).
+`index.html` (load ranger_art.js before textures.js; ?v bump).
+
+Verify: m4 18/18 · m4b 26/26 · m2 green · boot smoke (15 tex + 8 anims + frames,
+default '16', live switch 64/160, restore to classic) — zero console errors.
+In-engine screenshots confirm the bow attaches to the lead hand. NOTE: still on
+disk only — awaits the user's 2_SAVE_AND_UPLOAD.bat like the m4a–m4d backlog.
+
+---
+
 ## 2026-07-13 · M4 · KNIGHT BERSERKER REWORK · WIZARD STORM BARRAGE · BATTLE MUSIC (?v=m4c → m4d)
 
 Three user directives in one push, all landed and suite-verified:

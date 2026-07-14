@@ -35,12 +35,58 @@ var Entities = (function () {
     if (weapon.heldTexture) {
       p.held = scene.add.sprite(x, y, weapon.heldTexture).setScale(2).setDepth(11);
     }
+    // ART-FIDELITY TEST (2026-07-13): apply the selected Ranger art model. With
+    // the default '16' (or any non-Ranger class) this is a no-op re-skin that
+    // leaves the classic static look/body EXACTLY as above.
+    applyModelSkin(scene, p);
     return p;
+  }
+
+  // ART-FIDELITY TEST: (re)skin a player sprite to the currently-selected
+  // Ranger art model. Non-Ranger classes, and the Ranger with the default
+  // '16' model, reproduce the classic look precisely (static texture, scale 2,
+  // 10x12 body). Only Ranger + a hi-fi model (32/64/128/160) diverges, gaining
+  // the higher-res spritesheet, idle/walk animation, and a matching bow. Safe
+  // to call on a live sprite (used by the Settings selector for instant preview)
+  // or right after createPlayer. Footprint stays 32px so the hitbox is unchanged.
+  function applyModelSkin(scene, p) {
+    if (!p || !p.state) return;
+    var st = p.state, cls = DATA.classes[st.cls];
+    var isRanger = (st.cls === 'ranger') || (cls && cls.texture === 'ranger');
+    var d = (isRanger && typeof TEX !== 'undefined' && TEX.modelFor)
+      ? TEX.modelFor(TEX.selectedModelId()) : null;
+    if (d && scene.textures.exists(d.key)) {
+      p._rangerModel = d;
+      p.setTexture(d.key, 'idle0').setScale(d.scale);
+      p.body.setSize(d.body.w, d.body.h).setOffset(d.body.ox, d.body.oy);
+      try { p.play(d.idle, true); } catch (e) {}
+      // the LEAD ARM is its own sprite that rotates to the aim (updatePlayer);
+      // depth sits between the body (10) and the bow (11). Created lazily.
+      if (scene.textures.exists(d.armKey)) {
+        if (!p.arm) p.arm = scene.add.sprite(p.x, p.y, d.armKey).setDepth(10.5);
+        p.arm.setTexture(d.armKey).setScale(d.scale).setOrigin(d.armPivotX, 0.5).setVisible(true);
+      }
+      if (p.held && scene.textures.exists(d.bowKey)) {
+        // bow pivots at its GRIP and stays UPRIGHT (updatePlayer flips it by
+        // facing but never rotates it to the aim — a real archer's hold).
+        p.held.setTexture(d.bowKey).setScale(d.scale).setOrigin(d.bowGrip.x, d.bowGrip.y).setDepth(11);
+      }
+    } else {
+      p._rangerModel = null;
+      try { if (p.anims) p.anims.stop(); } catch (e) {}
+      p.setTexture((cls && cls.texture) || 'ranger').setScale(2);
+      p.body.setSize(10, 12).setOffset(3, 3);
+      if (p.arm) p.arm.setVisible(false);
+      if (p.held) {
+        var weapon = cls && DATA.weapons[cls.weapon];
+        if (weapon && weapon.heldTexture) p.held.setTexture(weapon.heldTexture).setScale(2).setOrigin(0.5, 0.5).setFlipX(false);
+      }
+    }
   }
 
   function updatePlayer(scene, p, intent, time, dt) {
     var st = p.state;
-    if (!st.alive) { p.setVelocity(0, 0); if (p.held) p.held.setVisible(false); return; }
+    if (!st.alive) { p.setVelocity(0, 0); if (p.held) p.held.setVisible(false); if (p.arm) p.arm.setVisible(false); return; }
 
     // movement (diagonal normalized — TM-1)
     var vx = intent.moveX, vy = intent.moveY;
@@ -50,6 +96,16 @@ var Entities = (function () {
     // E8 (M2.1, TM-1): the body faces where you AIM, not where you walk (F2),
     // and the bow dynamically aligns to the exact aim angle.
     p.setFlipX(Math.cos(intent.aimAngle) < 0);
+
+    // ART-FIDELITY TEST: drive idle/walk animation for hi-fi Ranger models.
+    // Classic models leave p._rangerModel null → this block is skipped entirely.
+    if (p._rangerModel) {
+      var moving = !!(intent.moveX || intent.moveY);
+      var want = moving ? p._rangerModel.walk : p._rangerModel.idle;
+      var cur = (p.anims && p.anims.currentAnim) ? p.anims.currentAnim.key : null;
+      if (cur !== want) { try { p.play(want, true); } catch (e) {} }
+    }
+
     if (p.held) {
       var weap = DATA.weapons[DATA.classes[st.cls].weapon];
       if (weap.upright) {
@@ -72,9 +128,24 @@ var Entities = (function () {
           var eased = pr * pr * (3 - 2 * pr);                     // smoothstep
           ang += (-1 + 2 * eased) * (st.swingArc || 0);          // -arc → +arc
         }
-        p.held.setVisible(true)
-          .setPosition(p.x + Math.cos(ang) * weap.holdOffset, p.y + Math.sin(ang) * weap.holdOffset)
-          .setRotation(ang);   // rotation alone fully orients the weapon
+        // ART-FIDELITY TEST: a real archer's hold — the LEAD ARM rotates to the
+        // aim (the radius; it's what moves, down when you aim down). The BOW is
+        // TANGENT to the circle around the character: its limbs stay perpendicular
+        // to the arm and its belly points outward along the aim, so aiming right
+        // gives a vertical bow, up/down give horizontal, etc. (rotation = aim).
+        // The arm mounts at the shoulder (following the body flip); the bow sits
+        // at the arm's far hand. The arrow still fires the true aim angle.
+        if (p._rangerModel && p._rangerModel.shoulder) {
+          var dA = p._rangerModel, facingLeft = Math.cos(ang) < 0, f = facingLeft ? -1 : 1, ds = p.displayWidth || 32;
+          var shX = p.x + f * (dA.shoulder.x - 0.5) * ds, shY = p.y + (dA.shoulder.y - 0.5) * ds;
+          if (p.arm) p.arm.setVisible(true).setPosition(shX, shY).setRotation(ang).setFlipY(facingLeft);
+          var handX = shX + Math.cos(ang) * dA.armLen, handY = shY + Math.sin(ang) * dA.armLen;
+          p.held.setVisible(true).setFlipX(false).setRotation(ang).setPosition(handX, handY);
+        } else {
+          p.held.setVisible(true)
+            .setPosition(p.x + Math.cos(ang) * weap.holdOffset, p.y + Math.sin(ang) * weap.holdOffset)
+            .setRotation(ang);   // rotation alone fully orients the weapon
+        }
       }
     }
 
@@ -102,6 +173,15 @@ var Entities = (function () {
           weapon.projSpeed, SIM.damage(wDmg, st.stats.att, 0), weapon.lifeMs,
           weapon.texture || 'arrow', !!weapon.pierce);
         if (shot && weapon.slow) shot.proj.slow = weapon.slow;   // M4: frost rider
+        // ART-FIDELITY TEST: swap in the matching hi-fi arrow for the selected
+        // Ranger model (visual only — keeps a ~10px world hitbox for parity).
+        if (shot && p._rangerModel && p._rangerModel.arrowKey && scene.textures.exists(p._rangerModel.arrowKey)) {
+          var dM = p._rangerModel, aScl = dM.scale;
+          shot.setTexture(dM.arrowKey).setScale(aScl);
+          var bw = Math.max(4, Math.round(10 / aScl));
+          shot.body.setSize(bw, bw)
+            .setOffset(Math.round((shot.width - bw) / 2), Math.round((shot.height - bw) / 2));
+        }
       }
       scene.events.emit('player-shot');
     }
@@ -137,6 +217,7 @@ var Entities = (function () {
     var a = time - st.lastHitAt < DATA.combat.iframesMs ? (Math.floor(time / 60) % 2 ? 0.4 : 1) : 1;
     p.setAlpha(a);
     if (p.held) p.held.setAlpha(a);
+    if (p.arm) p.arm.setAlpha(a);
   }
 
   // M4 (KNIGHT): the WHIRLWIND channel. While the ability key is held AND MP
@@ -210,11 +291,18 @@ var Entities = (function () {
   // map affixes (E9/M5, e.g. Escalating Threats forcing champion spawns).
   function spawnMob(scene, key, x, y, forceAffix) {
     var def = DATA.mobs[key];
-    var m = scene.mobs.get(x, y, def.texture);
+    // ART TEST (hi-fi world): swap in the higher-fidelity mob + its scale/body
+    // when the train-yard toggle is on; otherwise the classic 16px path exactly.
+    var mm = (typeof TEX !== 'undefined' && TEX.mobModel) ? TEX.mobModel(key) : null;
+    var mtex = (mm && scene.textures.exists(mm.key)) ? mm.key : def.texture;
+    var baseScale = mm ? mm.scale : 2;
+    var m = scene.mobs.get(x, y, mtex);
     if (!m) return null;
-    m.setActive(true).setVisible(true).setTexture(def.texture).setScale(2).setDepth(5);
+    m.setActive(true).setVisible(true).setTexture(mtex).setScale(baseScale).setDepth(5);
     m.body.enable = true;
-    m.body.setSize(11, 11).setOffset(2.5, 2.5);
+    if (mm) m.body.setSize(mm.body.w, mm.body.h).setOffset(mm.body.ox, mm.body.oy);
+    else m.body.setSize(11, 11).setOffset(2.5, 2.5);
+    m._baseScale = baseScale;
     m.id = nextId++;
     m.mob = { key: key, def: def, hp: def.hp, xp: def.xp, spd: def.spd,
               affix: null, evolved: false, lastShotAt: 0, lastContactAt: 0,
@@ -240,7 +328,7 @@ var Entities = (function () {
         m.mob.hp  = Math.round(def.hp  * (af.hpMult  || 1));
         m.mob.xp  = Math.round(def.xp  * (af.xpMult  || 1));
         m.mob.spd = Math.round(def.spd * (af.spdMult || 1));
-        m.setScale(2 * (af.scale || 1)).setTint(af.tint);
+        m.setScale((m._baseScale || 2) * (af.scale || 1)).setTint(af.tint);
         // M3 polish: CHAMPION NAMEPLATE — read the threat, don't memorize
         // tints. Presentation only (seam rule 3); follows in updateMob.
         m.nameTag = scene.add.text(x, y, af.name, {
@@ -355,9 +443,13 @@ var Entities = (function () {
   // there is exactly one, as a plain physics sprite with plain-data state.
   function spawnBoss(scene, key, x, y, time) {
     var def = DATA.bosses[key];
-    var b = scene.physics.add.sprite(x, y, def.texture);
-    b.setScale(3).setDepth(6);
-    b.body.setSize(14, 12).setOffset(3, 5);
+    // ART TEST (hi-fi world): the Grovekeeper gets its hi-fi model when on.
+    var bm = (typeof TEX !== 'undefined' && TEX.bossModel) ? TEX.bossModel() : null;
+    var btex = (bm && scene.textures.exists(bm.key)) ? bm.key : def.texture;
+    var b = scene.physics.add.sprite(x, y, btex);
+    b.setScale(bm ? bm.scale : 3).setDepth(6);
+    if (bm) b.body.setSize(bm.body.w, bm.body.h).setOffset(bm.body.ox, bm.body.oy);
+    else b.body.setSize(14, 12).setOffset(3, 5);
     b.id = nextId++;
     b.boss = { key: key, def: def, hp: def.hp, maxHp: def.hp,
                nextRadialAt: time + 1600,               // grace period before the first pattern
@@ -444,7 +536,8 @@ var Entities = (function () {
   }
 
   return {
-    createPlayer: createPlayer, updatePlayer: updatePlayer, hurtPlayer: hurtPlayer,
+    createPlayer: createPlayer, updatePlayer: updatePlayer, applyModelSkin: applyModelSkin,
+    hurtPlayer: hurtPlayer,
     grantXp: grantXp, spawnMob: spawnMob, updateMob: updateMob, hurtMob: hurtMob,
     clearNameTag: clearNameTag, applySlow: applySlow,
     spawnBoss: spawnBoss, updateBoss: updateBoss, hurtBoss: hurtBoss,

@@ -214,11 +214,32 @@ var TitleScene = new Phaser.Class({
       var accent = cls.accent || 0x38b764;          // per-class accent (data-driven)
       var card = self.add.rectangle(ccx, ccy, cardW, 190, 0x1a1c2c, 0.96).setStrokeStyle(2, accent).setDepth(81).setInteractive({ useHandCursor: true });
       ui.push(card);
-      ui.push(self.add.sprite(ccx, ccy - 54, cls.texture || 'ranger').setScale(3.4).setDepth(82));
+      // ART-FIDELITY TEST: the Ranger card previews the currently-selected art
+      // model (animated) so you can see your pick before starting a run. Every
+      // other class, and the default '16' model, render exactly as before.
+      var rd = (key === 'ranger' && typeof TEX !== 'undefined' && TEX.modelFor)
+        ? TEX.modelFor(TEX.selectedModelId()) : null;
+      if (rd && self.textures.exists(rd.key)) {
+        var rsp = self.add.sprite(ccx, ccy - 54, rd.key, 'idle0').setScale(54 / rd.size).setDepth(82);
+        try { rsp.play(rd.idle); } catch (e) {}
+        ui.push(rsp);
+      } else {
+        ui.push(self.add.sprite(ccx, ccy - 54, cls.texture || 'ranger').setScale(3.4).setDepth(82));
+      }
       if (cls.weapon && DATA.weapons[cls.weapon] && DATA.weapons[cls.weapon].heldTexture) {
         var hw = DATA.weapons[cls.weapon];
-        ui.push(self.add.sprite(ccx + 26, ccy - 54, hw.heldTexture).setScale(2.2).setDepth(82)
-          .setRotation(hw.upright ? -Math.PI / 2 : 0));   // walking staffs stand up on the card too
+        if (rd && self.textures.exists(rd.bowKey)) {
+          // hi-fi Ranger card: the lead ARM out to the side (aim right) with the
+          // bow held UPRIGHT at its hand — matches the in-game hold.
+          var cd = 54, sc = cd / rd.size;
+          var shX = ccx + (rd.shoulder.x - 0.5) * cd, shY = (ccy - 54) + (rd.shoulder.y - 0.5) * cd;
+          if (self.textures.exists(rd.armKey))
+            ui.push(self.add.sprite(shX, shY, rd.armKey).setScale(sc).setOrigin(rd.armPivotX, 0.5).setDepth(83));
+          ui.push(self.add.sprite(shX + rd.armLenTex * sc, shY, rd.bowKey).setScale(sc).setOrigin(rd.bowGrip.x, rd.bowGrip.y).setDepth(84));
+        } else {
+          ui.push(self.add.sprite(ccx + 26, ccy - 54, hw.heldTexture).setScale(2.2).setDepth(82)
+            .setRotation(hw.upright ? -Math.PI / 2 : 0));   // walking staffs stand up on the card too
+        }
       }
       ui.push(self.add.text(ccx, ccy + 6, (i + 1) + '.  ' + cls.name.toUpperCase(), { fontFamily: 'monospace', fontSize: 18, color: '#f4f4f4', fontStyle: 'bold' }).setOrigin(0.5).setDepth(82));
       ui.push(self.add.text(ccx, ccy + 44, cls.blurb || '', { fontFamily: 'monospace', fontSize: 11, color: '#94b0c2', align: 'center', wordWrap: { width: cardW - 30 } }).setOrigin(0.5).setDepth(82));
@@ -330,13 +351,15 @@ var NexusScene = new Phaser.Class({
     // (DATA.nexus.w/h is the windowed minimum).
     var W = Math.max(DATA.nexus.w, this.scale.width), H = Math.max(DATA.nexus.h, this.scale.height);
     this.physics.world.setBounds(0, 0, W, H);
-    this.add.tileSprite(W / 2, H / 2, W, H, 'floor_nexus');
+    // ART TEST: hi-fi chamber tiles when Hi-Fi World is on (else classic).
+    this.add.tileSprite(W / 2, H / 2, W, H, TEX.nexusKey('floor_nexus'));
     this.cameras.main.setBounds(0, 0, W, H).setBackgroundColor('#0f0f1b');
 
     // walls (visual + physical)
     var walls = this.physics.add.staticGroup();
-    for (var x = 8; x < W; x += 32) { walls.create(x, 8, 'wall').setScale(2).refreshBody(); walls.create(x, H - 8, 'wall').setScale(2).refreshBody(); }
-    for (var y = 8; y < H; y += 32) { walls.create(8, y, 'wall').setScale(2).refreshBody(); walls.create(W - 8, y, 'wall').setScale(2).refreshBody(); }
+    var wallKey = TEX.nexusKey('wall'), wallScl = TEX.nexusScale('wall', 2);
+    for (var x = 8; x < W; x += 32) { walls.create(x, 8, wallKey).setScale(wallScl).refreshBody(); walls.create(x, H - 8, wallKey).setScale(wallScl).refreshBody(); }
+    for (var y = 8; y < H; y += 32) { walls.create(8, y, wallKey).setScale(wallScl).refreshBody(); walls.create(W - 8, y, wallKey).setScale(wallScl).refreshBody(); }
 
     // M3.5: THE PORTAL WORKS — one platform at the heart of the nexus,
     // hard-wired to the REALM CONSOLE by an energy conduit. The console
@@ -348,9 +371,9 @@ var NexusScene = new Phaser.Class({
     // Click the chest or press V to open the swap UI.
     // M3.6 polish (user, 2026-07-12): station labels are GREEN, ABOVE their
     // object, and minimal — no counters, no headers.
-    var vc = this.add.sprite(120, H / 2 - 60, 'chest').setScale(2.5).setInteractive({ useHandCursor: true });
+    var vc = this.add.sprite(120, H / 2 - 60, TEX.nexusKey('chest')).setScale(TEX.nexusScale('chest', 2.5)).setInteractive({ useHandCursor: true });
     var vl = this.add.text(120, H / 2 - 100, 'VAULT (' + BINDS.keyLabel('vault') + ')',
-      { fontFamily: 'monospace', fontSize: 11, color: '#49e83b' }).setOrigin(0.5);
+      { fontFamily: 'monospace', fontSize: 11, color: '#49e83b' }).setOrigin(0.5).setDepth(7);
     vl.setShadow(1, 2, '#1a1c2c', 2, true, true);        // readable on the light floor
     this.vaultLabel = vl;                                // live-updates on rebind
     var vSelf = this;
@@ -364,12 +387,12 @@ var NexusScene = new Phaser.Class({
     var bglow = this.add.sprite(W - 120, H / 2 - 66, 'softglow').setScale(1.0)
       .setTint(0x49e83b).setAlpha(0.25).setDepth(1);
     this.tweens.add({ targets: bglow, alpha: 0.13, yoyo: true, repeat: -1, duration: 1400 });
-    var bst = this.add.sprite(W - 120, H / 2 - 60, 'bestiary').setScale(3).setDepth(3)
+    var bst = this.add.sprite(W - 120, H / 2 - 60, TEX.nexusKey('bestiary')).setScale(TEX.nexusScale('bestiary', 3)).setDepth(3)
       .setInteractive({ useHandCursor: true });
     this.bestiarySprite = bst;
     this.tweens.add({ targets: bst, alpha: 0.78, yoyo: true, repeat: -1, duration: 1400 });
     var bl = this.add.text(W - 120, H / 2 - 100, 'BESTIARY (' + BINDS.keyLabel('bestiary') + ')',
-      { fontFamily: 'monospace', fontSize: 11, color: '#49e83b' }).setOrigin(0.5);
+      { fontFamily: 'monospace', fontSize: 11, color: '#49e83b' }).setOrigin(0.5).setDepth(7);
     bl.setShadow(1, 2, '#1a1c2c', 2, true, true);
     this.bestiaryLabel = bl;                             // live-updates on rebind
     bst.on('pointerdown', function () { vSelf.requestStation('bestiary'); });
@@ -411,7 +434,7 @@ var NexusScene = new Phaser.Class({
     var rglow = this.add.sprite(W / 2, 96, 'softglow').setScale(3.6, 0.8)
       .setTint(0x49e83b).setAlpha(0.18).setDepth(1);
     this.tweens.add({ targets: rglow, alpha: 0.1, yoyo: true, repeat: -1, duration: 1800 });
-    var rs = this.add.sprite(W / 2, 92, 'wallscreen').setScale(3).setDepth(2)
+    var rs = this.add.sprite(W / 2, 92, TEX.nexusKey('wallscreen')).setScale(TEX.nexusScale('wallscreen', 3)).setDepth(2)
       .setInteractive({ useHandCursor: true });
     this.recordsSprite = rs;
     var rSelf = this;
@@ -428,8 +451,8 @@ var NexusScene = new Phaser.Class({
     var screenLeft = W / 2 - this.recordsSprite.displayWidth / 2;
     var swX = screenLeft - 78, swY = 92;
     this.switchPos = { x: swX, y: swY };
-    var lever = this.add.sprite(swX, swY, this.recordsMode === 'records' ? 'lever_up' : 'lever_down')
-      .setScale(3).setDepth(2).setInteractive({ useHandCursor: true });
+    var lever = this.add.sprite(swX, swY, TEX.nexusKey(this.recordsMode === 'records' ? 'lever_up' : 'lever_down'))
+      .setScale(TEX.nexusScale('lever_up', 3)).setDepth(2).setInteractive({ useHandCursor: true });
     this.leverSprite = lever;
     // left-click: walk over and throw it (same trip as the hotkeys)
     lever.on('pointerdown', function () {
@@ -442,7 +465,7 @@ var NexusScene = new Phaser.Class({
       { fontFamily: 'monospace', fontSize: 11, color: '#49e83b' }).setOrigin(0.5).setDepth(3);
     this.leverLabel.setShadow(1, 2, '#1a1c2c', 2, true, true);
     for (var wx = swX + 34; wx < screenLeft; wx += 24) {
-      this.add.sprite(wx, swY, 'conduit').setScale(1.4).setDepth(1).setAngle(90).setAlpha(0.9);
+      this.add.sprite(wx, swY, TEX.nexusKey('conduit')).setScale(TEX.nexusScale('conduit', 1.4)).setDepth(1).setAngle(90).setAlpha(0.9);
     }
     this.wireFrom = swX + 28; this.wireTo = screenLeft + 6;
 
@@ -528,7 +551,7 @@ var NexusScene = new Phaser.Class({
     // mode color while powered — the room's lighting comes from the works.
     this.wellGlow = this.add.sprite(cx, platY, 'softglow').setScale(1.6)
       .setTint(0x29366f).setAlpha(0.35).setDepth(1);
-    this.add.sprite(cx, platY, 'platform').setScale(2.4).setDepth(2);
+    this.add.sprite(cx, platY, TEX.nexusKey('platform')).setScale(TEX.nexusScale('platform', 2.4)).setDepth(2);
     var J = DATA.juice.conduit;
     this.ringLights = [];
     for (var i = 0; i < J.ringLights; i++) {
@@ -544,7 +567,7 @@ var NexusScene = new Phaser.Class({
     // CONDUIT — carved channel from the console up to the platform
     this.conduitTop = platY + 70; this.conduitBottom = conY - 42;
     for (var y = this.conduitBottom; y >= this.conduitTop; y -= 30) {
-      this.add.sprite(cx, y, 'conduit').setScale(2).setDepth(2).setAlpha(0.9);
+      this.add.sprite(cx, y, TEX.nexusKey('conduit')).setScale(TEX.nexusScale('conduit', 2)).setDepth(2).setAlpha(0.9);
     }
 
     // CONSOLE — the terminal that drives it all; its screen spills blue light
@@ -552,11 +575,11 @@ var NexusScene = new Phaser.Class({
       .setTint(0x41a6f6).setAlpha(0.3).setDepth(1);
     this.tweens.add({ targets: spill, alpha: 0.16, yoyo: true, repeat: -1, duration: 1200 });
     this.consolePos = { x: cx, y: conY };
-    var c = this.add.sprite(cx, conY, 'console').setScale(3).setDepth(3).setInteractive({ useHandCursor: true });
+    var c = this.add.sprite(cx, conY, TEX.nexusKey('console')).setScale(TEX.nexusScale('console', 3)).setDepth(3).setInteractive({ useHandCursor: true });
     this.consoleSprite = c;
     this.tweens.add({ targets: c, alpha: 0.75, yoyo: true, repeat: -1, duration: 1200 });   // dormant heartbeat
     var cl = this.add.text(cx, conY + 36, DATA.console.name + ' (' + BINDS.keyLabel('portal') + ')',
-      { fontFamily: 'monospace', fontSize: 11, color: '#49e83b' }).setOrigin(0.5);
+      { fontFamily: 'monospace', fontSize: 11, color: '#49e83b' }).setOrigin(0.5).setDepth(7);
     cl.setShadow(1, 2, '#1a1c2c', 2, true, true);
     this.consoleLabel = cl;                              // live-updates on rebind
     c.on('pointerdown', function () { self.requestStation('machine'); });
@@ -565,6 +588,29 @@ var NexusScene = new Phaser.Class({
     // run config survives open/close within a visit; defaults are fresh per scene
     this.consoleMode = 'clear';
     this.consoleAffixes = [];
+    this.chamberAmbient();                    // ART TEST: hi-fi platform/conduit come alive
+  },
+
+  // ART TEST (hi-fi chamber): the platform + conduit are ALWAYS animated — the
+  // ring lights breathe, the well pulses, and energy pulses climb the conduit
+  // even when no portal is up (user: "the platform and the wiring should all be
+  // animated"). No-op unless the Hi-Fi Chamber toggle is on. powerUp() takes
+  // over while a portal is live; powerDown() restarts this.
+  chamberAmbient: function () {
+    if (!(typeof TEX !== 'undefined' && TEX.hifiChamberOn && TEX.hifiChamberOn())) return;
+    var self = this, amb = 0x49e83b;
+    (this.ringLights || []).forEach(function (l, i) {
+      self.tweens.killTweensOf(l);
+      l.setTint(amb).setAlpha(0.5).setScale(1.4);
+      self.tweens.add({ targets: l, alpha: 0.95, scale: 1.75, yoyo: true, repeat: -1, duration: 1000, delay: i * 110, ease: 'Sine.inOut' });
+    });
+    if (this.wellGlow) {
+      this.tweens.killTweensOf(this.wellGlow);
+      this.wellGlow.setTint(amb).setAlpha(0.35).setScale(1.7);
+      this.tweens.add({ targets: this.wellGlow, alpha: 0.62, scale: 2.0, yoyo: true, repeat: -1, duration: 1500, ease: 'Sine.inOut' });
+    }
+    if (this.ambientFlow) this.ambientFlow.remove();
+    this.ambientFlow = this.time.addEvent({ delay: 900, loop: true, callback: function () { self.conduitPulse(amb, 1100); } });
   },
 
   // one energy pulse traveling the conduit console→platform
@@ -588,6 +634,7 @@ var NexusScene = new Phaser.Class({
     });
     this.tweens.killTweensOf(this.wellGlow);
     this.wellGlow.setTint(0x29366f).setAlpha(0.35).setScale(1.6);   // dormant pool
+    this.chamberAmbient();                                          // ART TEST: hi-fi chamber stays alive
   },
 
   // M3.5 polish (user, 2026-07-12): NO floating instructional text — the page
@@ -597,7 +644,7 @@ var NexusScene = new Phaser.Class({
     if (this.entering || this.consoleUi || this.vaultUi || this.gyUi || this.bestiaryUi || this.charging) return;   // AUDIT #8: bestiary guard
     var p = this.player, cp = this.consolePos;
     var near = Math.hypot(cp.x - p.x, cp.y - p.y) <= DATA.interact.consoleRange;
-    this.consoleSprite.setScale(near ? 3.3 : 3);          // leans toward you
+    this.consoleSprite.setScale(TEX.nexusScale('console', near ? 3.3 : 3));   // leans toward you
     if (near && this.rig.interactJustDown()) this.toggleConsole();
   },
 
@@ -722,6 +769,7 @@ var NexusScene = new Phaser.Class({
     if (!sp) return;
     if (sp.swirl) sp.swirl.remove();
     if (sp.label) sp.label.destroy();
+    if (sp.disc) { this.tweens.killTweensOf(sp.disc); sp.disc.destroy(); }   // hi-fi door swirl
     sp.sprite.destroy();
     this.spawnedPortal = null;
     this.plazaPortals = [];
@@ -731,6 +779,9 @@ var NexusScene = new Phaser.Class({
   // Light the ring + start the powered pulse stream (the steady state).
   powerUp: function (tint) {
     var self = this, J = DATA.juice.conduit;
+    if (this.ambientFlow) { this.ambientFlow.remove(); this.ambientFlow = null; }   // hi-fi ambient yields to powered
+    this.ringLights.forEach(function (l) { self.tweens.killTweensOf(l); });
+    this.tweens.killTweensOf(this.wellGlow);
     this.ringLights.forEach(function (l, i) {
       l.setTint(tint).setAlpha(1);
       self.tweens.add({ targets: l, alpha: 0.55, yoyo: true, repeat: -1,
@@ -751,11 +802,23 @@ var NexusScene = new Phaser.Class({
   // through color and light (mode-tinted portal/ring/well; board recaps it).
   createPortalAt: function (cfg, tint) {
     var spot = this.portalSpot;
-    var p = this.physics.add.staticSprite(spot.x, spot.y, 'portal').setScale(2.2).setDepth(4);
+    var hifi = TEX.nexusKey('portal') !== 'portal';      // hi-fi door portal active?
+    var p = this.physics.add.staticSprite(spot.x, spot.y, TEX.nexusKey('portal')).setScale(TEX.nexusScale('portal', 2.2)).setDepth(4);
     p.setTint(tint);                                     // neutral texture, mode color
-    this.tweens.add({ targets: p, angle: 360, duration: 4000, repeat: -1 });
+    var disc = null;
+    if (hifi) {
+      // a DOOR frame that stays put + a swirl DISC that spins inside it (user:
+      // "portal should be more like a door and should have a animation").
+      var pS = TEX.nexusScale('portal', 2.2);
+      disc = this.add.sprite(spot.x, spot.y + 64 * pS * 0.06, 'portalDiscHi')
+        .setScale((64 * pS * 0.6) / 56).setDepth(5).setTint(tint).setAlpha(0);
+      this.tweens.add({ targets: disc, alpha: 1, duration: 350 });
+      this.tweens.add({ targets: disc, angle: 360, duration: 3200, repeat: -1 });
+    } else {
+      this.tweens.add({ targets: p, angle: 360, duration: 4000, repeat: -1 });  // classic round portal spins
+    }
     var swirl = portalSwirl(this, spot.x, spot.y, tint);
-    this.spawnedPortal = { sprite: p, swirl: swirl, mode: cfg.mode, affixes: cfg.affixes.slice() };
+    this.spawnedPortal = { sprite: p, disc: disc, swirl: swirl, mode: cfg.mode, affixes: cfg.affixes.slice() };
     this.plazaPortals = [{ sprite: p, mode: cfg.mode, affixes: cfg.affixes.slice() }];
     this.portal = p;                                     // canonical (suites + docs)
   },
@@ -774,9 +837,9 @@ var NexusScene = new Phaser.Class({
     this.charging = true;
     AUDIO.play('charge');                                // electricity crackles
     // 1. console flare
-    var flare = this.add.sprite(this.consolePos.x, this.consolePos.y, 'console')
-      .setScale(3).setDepth(5).setTintFill(0xf4f4f4).setAlpha(0.9);
-    this.tweens.add({ targets: flare, alpha: 0, scale: 3.6, duration: 320,
+    var flare = this.add.sprite(this.consolePos.x, this.consolePos.y, TEX.nexusKey('console'))
+      .setScale(TEX.nexusScale('console', 3)).setDepth(5).setTintFill(0xf4f4f4).setAlpha(0.9);
+    this.tweens.add({ targets: flare, alpha: 0, scale: TEX.nexusScale('console', 3.6), duration: 320,
       onComplete: function () { flare.destroy(); } });
     // 2. pulses race up the conduit
     for (var i = 0; i < J.chargePulses; i++) {
@@ -799,13 +862,13 @@ var NexusScene = new Phaser.Class({
       AUDIO.play('spawn');                               // phaser zap
       self.createPortalAt(cfg, tint);
       self.portal.setPosition(self.portalSpot.x, self.portalSpot.y + 22);
-      self.portal.setScale(1.6, 0.12).setAlpha(0.65);    // flat sliver in the floor
+      self.portal.setScale(TEX.nexusScale('portal', 1.6), TEX.nexusScale('portal', 0.12)).setAlpha(0.65);    // flat sliver in the floor
       self.tweens.add({ targets: self.portal,
-        y: self.portalSpot.y, scaleX: 2.2, scaleY: 2.2, alpha: 1,
+        y: self.portalSpot.y, scaleX: TEX.nexusScale('portal', 2.2), scaleY: TEX.nexusScale('portal', 2.2), alpha: 1,
         duration: J.portalMs, ease: 'Back.Out' });
-      var flash = self.add.sprite(self.portalSpot.x, self.portalSpot.y, 'portal')
-        .setScale(0.4).setDepth(5).setTint(0xf4f4f4).setAlpha(0.9);
-      self.tweens.add({ targets: flash, scale: 3.4, alpha: 0, duration: 480,
+      var flash = self.add.sprite(self.portalSpot.x, self.portalSpot.y, TEX.nexusKey('portal'))
+        .setScale(TEX.nexusScale('portal', 0.4)).setDepth(5).setTint(0xf4f4f4).setAlpha(0.9);
+      self.tweens.add({ targets: flash, scale: TEX.nexusScale('portal', 3.4), alpha: 0, duration: 480,
         onComplete: function () { flash.destroy(); } });
       self.cameras.main.shake(120, 0.002);
       self.powerUp(tint);
@@ -821,28 +884,23 @@ var NexusScene = new Phaser.Class({
   // Anim modes: 'type' (login + every lever flip: the glass boots empty and
   // the letters hammer out one by one) · 'count' (back from a realm: letters
   // already there, NUMBERS tick slowly then shoot up) · 'none' (instant).
+  // ONE combined always-on readout (user 2026-07-14): character + kills + deaths
+  // + best + realms + last death, all on the screen at once. The numbers count
+  // up (showRecords 'count') when you exit a map back to the chamber. The lever
+  // still kicks energy to the screen and re-plays the count (see setRecordsMode).
   recordsParts: function () {
     var R = ACCOUNT.records;
-    if (this.recordsMode === 'grave') {
-      var last = ACCOUNT.graveyard.length ? ACCOUNT.graveyard[ACCOUNT.graveyard.length - 1] : null;
-      var parts = [
-        { t: 'FALLEN ', n: ACCOUNT.graveyard.length },
-        { t: '  ·  TOTAL KILLS ', n: R.totalKills },
-        { t: '  ·  REALMS ENTERED ', n: R.realmsEntered }
-      ];
-      if (last) parts.push({ t: '  ·  LAST: ' + last.killer.toUpperCase(), n: null });
-      return parts;
-    }
-    var drunk = 0, k;
-    for (k in CURRENT.potionsDrunk) drunk += CURRENT.potionsDrunk[k];
-    var p = [
+    var last = ACCOUNT.graveyard.length ? ACCOUNT.graveyard[ACCOUNT.graveyard.length - 1] : null;
+    var parts = [
       { t: DATA.classes[CURRENT.cls].name.toUpperCase() + ' LV ', n: CURRENT.level },
-      { t: '  ·  DEATHS ', n: ACCOUNT.records.deaths },
-      { t: '  ·  BEST LV ', n: ACCOUNT.records.bestLevel },
-      { t: '  ·  REALMS CLOSED ', n: ACCOUNT.records.realmsClosed }
+      { t: '  ·  KILLS ', n: R.totalKills },
+      { t: '  ·  DEATHS ', n: R.deaths },
+      { t: '  ·  BEST LV ', n: R.bestLevel },
+      { t: '  ·  REALMS ', n: R.realmsEntered },
+      { t: '  ·  CLOSED ', n: R.realmsClosed }
     ];
-    if (drunk) p.push({ t: '  ·  POTS ', n: drunk });
-    return p;
+    if (last) parts.push({ t: '  ·  LAST: ' + last.killer.toUpperCase(), n: null });
+    return parts;
   },
 
   recordsString: function (scale) {
@@ -945,7 +1003,7 @@ var NexusScene = new Phaser.Class({
     if (this.recordsMode === mode) return;
     this.recordsMode = mode;
     this.registry.set('recordsMode', mode);              // survives resize restarts
-    this.leverSprite.setTexture(mode === 'records' ? 'lever_up' : 'lever_down');
+    this.leverSprite.setTexture(TEX.nexusKey(mode === 'records' ? 'lever_up' : 'lever_down'));
     this.leverLabel.setText('(' + BINDS.keyLabel(mode === 'records' ? 'recordsDown' : 'recordsUp') + ')');   // the OTHER page's key
     AUDIO.play('ui');
     // v2: the wire only carries energy when the lever is THROWN — a burst
@@ -1000,7 +1058,7 @@ var NexusScene = new Phaser.Class({
     if (this.entering || this.consoleUi || this.vaultUi || this.gyUi || this.bestiaryUi || this.charging) return;
     var p = this.player, rp = this.recordsPos;
     var near = Math.hypot(rp.x - p.x, rp.y - p.y) <= DATA.interact.consoleRange;
-    this.recordsSprite.setScale(near ? 3.2 : 3);         // leans toward you
+    this.recordsSprite.setScale(TEX.nexusScale('wallscreen', near ? 3.2 : 3));   // leans toward you
     if (near && this.rig.interactJustDown()) this.toggleGraveyard();
   },
 
@@ -1009,7 +1067,7 @@ var NexusScene = new Phaser.Class({
     if (this.entering || this.consoleUi || this.vaultUi || this.gyUi || this.bestiaryUi || this.charging) return;
     var p = this.player, sp = this.switchPos;
     var near = Math.hypot(sp.x - p.x, sp.y - p.y) <= DATA.interact.consoleRange;
-    this.leverSprite.setScale(near ? 3.3 : 3);           // leans toward you
+    this.leverSprite.setScale(TEX.nexusScale('lever_up', near ? 3.3 : 3));   // leans toward you
     if (near && this.rig.interactJustDown()) {
       this.setRecordsMode(this.recordsMode === 'records' ? 'grave' : 'records');
     }
@@ -1239,7 +1297,7 @@ var NexusScene = new Phaser.Class({
     if (this.entering || this.consoleUi || this.vaultUi || this.gyUi || this.bestiaryUi || this.charging) return;
     var p = this.player, bp = this.bestiaryPos;
     var near = Math.hypot(bp.x - p.x, bp.y - p.y) <= DATA.interact.consoleRange;
-    this.bestiarySprite.setScale(near ? 3.3 : 3);        // leans toward you
+    this.bestiarySprite.setScale(TEX.nexusScale('bestiary', near ? 3.3 : 3));   // leans toward you
     if (near && this.rig.interactJustDown()) this.toggleBestiary();
   },
 
@@ -1456,13 +1514,21 @@ var RealmScene = new Phaser.Class({
     // data.mapId; the plaza uses DATA.realm.map. A saved map under the same
     // id overrides the built-in. Fallback (missing/corrupt map): the legacy
     // endless biome tileSprite — never a crash (TM-4 spirit).
-    this.map = MAPS.get((data && data.mapId) || DATA.realm.map);
+    // ART TEST (hi-fi world): the opt-in TRAIN YARD replaces the normal realm
+    // map when Settings > Hi-Fi World is on. Fully gated + reversible.
+    this.hifiWorld = !!(typeof TEX !== 'undefined' && TEX.hifiWorldOn && TEX.hifiWorldOn());
+    this.map = this.hifiWorld ? null : MAPS.get((data && data.mapId) || DATA.realm.map);
     var WW, HH;
     if (this.map) {
       WW = this.map.w * MAPS.TILE; HH = this.map.h * MAPS.TILE;
       this.physics.world.setBounds(0, 0, WW, HH);
       this.mapRender = MAPS.renderChunks(this, this.map, 'realm', 1);
       this.wallBodies = MAPS.buildWallBodies(this, this.map);
+    } else if (this.hifiWorld) {
+      WW = HH = DATA.realm.size;
+      this.physics.world.setBounds(0, 0, WW, HH);
+      this.wallBodies = null;
+      this.setupTrainYard(WW, HH);                          // gravel arena + tracks + tunnels + the train
     } else {
       WW = HH = DATA.realm.size;
       this.physics.world.setBounds(0, 0, WW, HH);
@@ -1677,7 +1743,7 @@ var RealmScene = new Phaser.Class({
     var x = Phaser.Math.Clamp(this.player.x + Math.cos(a) * 260, 100, this.worldW - 100);
     var y = Phaser.Math.Clamp(this.player.y + Math.sin(a) * 260, 100, this.worldH - 100);
     if (this.map) { var c = MAPS.findClearPx(this.map, x, y); x = c.x; y = c.y; }
-    this.bossPortal = this.physics.add.staticSprite(x, y, 'portal').setScale(3).setTint(0xb13e53).setDepth(6);
+    this.bossPortal = this.physics.add.staticSprite(x, y, TEX.nexusKey('portal')).setScale(TEX.nexusScale('portal', 3)).setTint(0xb13e53).setDepth(6);
     this.tweens.add({ targets: this.bossPortal, angle: 360, duration: 3000, repeat: -1 });
     portalSwirl(this, x, y, 0xb13e53);
     this.annihilateSwarm();                              // E2/Q7: the run-up is CLEAR
@@ -2319,6 +2385,7 @@ var RealmScene = new Phaser.Class({
     var mmss = Math.floor(tSec / 60) + ':' + ('0' + tSec % 60).slice(-2);
     this.player.setTint(0x555555);
     if (this.player.held) this.player.held.setVisible(false);   // E8: drop the bow
+    if (this.player.arm) this.player.arm.setVisible(false);      // ART TEST: drop the lead arm too
     if (this.promptText) { this.promptText.destroy(); this.promptText = null; }
     var cam = this.cameras.main;
     var W = this.scale.width, H = this.scale.height, cx = W / 2, cy = H / 2;
@@ -2548,6 +2615,111 @@ var RealmScene = new Phaser.Class({
     Entities.updateProjectiles(this, this.enemyShots, time);
     this.updateTornadoes(time);                            // M4: Knight whirlwind tornadoes
     this.updateWhirlwind(time);                            // M4: Knight whirlwind ring VFX
+    if (this.hifiWorld) this.updateTrainYard(time, delta); // ART TEST: the ambush train
     this.updateHud();
+  },
+
+  // ======================= ART TEST — HI-FI TRAIN YARD =====================
+  // A gravel arena crossed by rail tracks with tunnels at the ends. A train
+  // AMBUSHES down a random track at random intervals — a short horn + flashing
+  // crossing signals + a rumble telegraph it (fair), then it barrels through at
+  // speed. Contact = instant death (bypasses i-frames). It also mows any mob it
+  // hits. All of this only exists when Settings > Hi-Fi World is on.
+  setupTrainYard: function (WW, HH) {
+    var self = this;
+    this.add.tileSprite(WW / 2, HH / 2, WW, HH, 'gravel').setDepth(-20);
+    // oil stains for character (deterministic scatter — no RNG needed)
+    for (var i = 0; i < 60; i++) {
+      var ox = (i * 733 % WW), oy = ((i * 977 + 311) % HH);
+      this.add.ellipse(ox, oy, 30 + (i % 4) * 22, 18 + (i % 3) * 14, 0x121319, 0.35).setDepth(-19);
+    }
+    // border wall band (visual only) around the arena
+    var wt = 26;
+    this.add.tileSprite(WW / 2, wt / 2, WW, wt, 'yardwall').setDepth(-18);
+    this.add.tileSprite(WW / 2, HH - wt / 2, WW, wt, 'yardwall').setDepth(-18).setFlipY(true);
+    // decorative VERTICAL track down the middle (no train runs it)
+    this.add.tileSprite(WW * 0.5, HH / 2, HH, 96, 'track').setDepth(-10).setAngle(90);
+    // TWO horizontal train lanes with tunnels at each end + crossing signals
+    this.trainLanes = [{ y: Math.round(HH * 0.3) }, { y: Math.round(HH * 0.7) }];
+    this.trainLanes.forEach(function (lane) {
+      self.add.tileSprite(WW / 2, lane.y, WW, 96, 'track').setDepth(-9);
+      lane.tunL = self.add.image(70, lane.y, 'tunnel').setDepth(-8).setScale(1.15);
+      lane.tunR = self.add.image(WW - 70, lane.y, 'tunnel').setDepth(-8).setScale(1.15).setFlipX(true);
+      lane.sigL = self.add.image(210, lane.y - 78, 'glowdot').setTint(0xff2a2a).setScale(2.4).setDepth(20).setVisible(false).setBlendMode(Phaser.BlendModes.ADD);
+      lane.sigR = self.add.image(WW - 210, lane.y - 78, 'glowdot').setTint(0xff2a2a).setScale(2.4).setDepth(20).setVisible(false).setBlendMode(Phaser.BlendModes.ADD);
+    });
+    this.train = { phase: 'idle', nextAt: this.time.now + 4500 + Math.random() * 5000, sprite: null, light: null };
+  },
+
+  updateTrainYard: function (time, delta) {
+    var tr = this.train; if (!tr) return;
+    if (tr.phase === 'idle') {
+      if (time >= tr.nextAt) this.startTrainWarning(time);
+    } else if (tr.phase === 'warn') {
+      var on = Math.floor(time / 110) % 2 === 0;                  // flashing crossing signals
+      tr.lane.sigL.setVisible(on); tr.lane.sigR.setVisible(on);
+      if (time >= tr.warnUntil) this.launchTrain(time);
+    } else if (tr.phase === 'running') {
+      var trn = tr.sprite;
+      trn.x += tr.dir * tr.speed * (delta / 1000);
+      if (tr.light) tr.light.x = trn.x + tr.dir * tr.halfLen;
+      if (time - (tr.lastRumble || 0) > 230) {                   // rolling rumble + shake
+        tr.lastRumble = time; try { AUDIO.play('trainpass'); } catch (e) {}
+        this.cameras.main.shake(200, 0.006);
+      }
+      this.trainCollisions(tr);
+      if ((tr.dir > 0 && trn.x > tr.endX) || (tr.dir < 0 && trn.x < tr.endX)) {
+        try { trn.destroy(); } catch (e) {}
+        if (tr.light) { try { tr.light.destroy(); } catch (e) {} tr.light = null; }
+        tr.lane.sigL.setVisible(false); tr.lane.sigR.setVisible(false);
+        tr.phase = 'idle'; tr.sprite = null; tr.nextAt = time + 5000 + Math.random() * 8000;
+      }
+    }
+  },
+
+  startTrainWarning: function (time) {
+    var tr = this.train;
+    if (tr.phase !== 'idle') return;                         // never overlap a train in flight
+    tr.lane = this.trainLanes[Math.floor(Math.random() * this.trainLanes.length)];
+    tr.dir = Math.random() < 0.5 ? 1 : -1;
+    tr.phase = 'warn'; tr.warnUntil = time + 1300;
+    try { AUDIO.play('trainhorn'); } catch (e) {}
+    this.cameras.main.shake(320, 0.003);
+  },
+
+  launchTrain: function (time) {
+    var tr = this.train, lane = tr.lane, dir = tr.dir, WW = this.worldW;
+    var loco = this.add.image(0, lane.y, 'loco').setDepth(30);
+    loco.setScale(120 / 96);                                     // ~120px tall — overhangs the lane
+    loco.setFlipX(dir < 0);
+    var half = loco.displayWidth / 2;
+    loco.x = dir > 0 ? -half : WW + half;
+    tr.sprite = loco; tr.halfLen = half * 0.9; tr.speed = 1050;
+    tr.endX = dir > 0 ? WW + half : -half; tr.lastRumble = 0;
+    tr.light = this.add.image(loco.x + dir * half, lane.y, 'softglow')
+      .setTint(0xfff2b0).setScale(3.2).setDepth(29).setBlendMode(Phaser.BlendModes.ADD);
+    tr.phase = 'running';
+    try { AUDIO.play('trainhorn'); } catch (e) {}
+    this.cameras.main.shake(260, 0.006);
+  },
+
+  trainCollisions: function (tr) {
+    var trn = tr.sprite, self = this;
+    var halfW = trn.displayWidth / 2 * 0.9, halfH = trn.displayHeight / 2 * 0.78;
+    var p = this.player;
+    if (p.state.alive && Math.abs(p.x - trn.x) < halfW && Math.abs(p.y - trn.y) < halfH) this.trainKill();
+    this.mobs.children.iterate(function (m) {
+      if (m && m.active && Math.abs(m.x - trn.x) < halfW && Math.abs(m.y - trn.y) < halfH) {
+        self.burst(m.x, m.y, 8, m.mob.def.deathTint);
+        Entities.clearNameTag(m); m.body.enable = false; self.mobs.killAndHide(m);
+      }
+    });
+  },
+
+  trainKill: function () {
+    var st = this.player.state; if (!st.alive) return;
+    st.hp = 0; st.alive = false;                                 // instakill — no i-frames
+    this.cameras.main.shake(500, 0.02);
+    this.events.emit('player-died', 'the 5:15 express');
   }
 });

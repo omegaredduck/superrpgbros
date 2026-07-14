@@ -44,6 +44,234 @@ var TEX = (function () {
     t.refresh();
   }
 
+  // ==========================================================================
+  // ART-FIDELITY TEST (2026-07-13) — higher-resolution ANIMATED Ranger models.
+  // Purely ADDITIVE and gated behind Settings > Character Model. The classic
+  // 16x16 'ranger' texture below is the DEFAULT and is never touched, so with
+  // the default selection the game is byte-for-byte identical to before.
+  // Each model is drawn by RANGER_ART (js/ranger_art.js) as true pixel art at
+  // its native canvas size, with idle + walk frames, plus a matching bow+arrow.
+  // On-screen footprint (and therefore the hitbox) is kept equal to the classic
+  // ranger, so ONLY the art fidelity changes — gameplay is unaffected.
+  // ==========================================================================
+  var RANGER_SIZES = [32, 64, 128, 160];
+  var RANGER_TARGET = 64;                 // on-screen px — user 2026-07-13: "a
+                                          // little bigger" (~2x the classic 32px)
+  var IDLE_FRAMES = 4, WALK_FRAMES = 6;
+
+  function rangerModelDesc(S) {
+    var scale = RANGER_TARGET / S;
+    var armW = Math.round(0.5 * S), armH = Math.round(0.15 * S);
+    return {
+      id: String(S), key: 'ranger' + S, size: S, scale: scale,
+      idle: 'ranger' + S + '_idle', walk: 'ranger' + S + '_walk',
+      body: { w: Math.round(0.625 * S), h: Math.round(0.75 * S),
+              ox: Math.round(0.1875 * S), oy: Math.round(0.1875 * S) },
+      bowKey: 'bow' + S, arrowKey: 'arrow' + S,
+      // bowGrip = the bow's belly/handle (drawBow grip ≈ 0.56, 0.5) → held-bow
+      // ORIGIN so it pivots at the grip. The bow stays UPRIGHT (rotation 0,
+      // flipped by facing); it does NOT spin to the aim (real archer's hold).
+      bowGrip: { x: 0.56, y: 0.5 },
+      // The LEAD ARM is a separate sprite that ROTATES to the aim (arm moves,
+      // bow stays upright). armKey texture: shoulder at the left (pivot), hand at
+      // the right. shoulder = where the arm mounts on the body; armLen = world
+      // shoulder→hand distance; armPivotX = the pivot's x-fraction in armKey.
+      armKey: 'rangerArm' + S, armW: armW, armH: armH,
+      armPivotX: (armH * 0.5) / armW, armLenTex: (armW - armH * 1.02), armLen: (armW - armH * 1.02) * scale,
+      shoulder: { x: 0.64, y: 0.44 },
+      idleFrames: IDLE_FRAMES, walkFrames: WALK_FRAMES
+    };
+  }
+  // Descriptor for a model id ('16' | '32' | '64' | '128' | '160'); null = classic.
+  function modelFor(id) {
+    id = String(id == null ? '16' : id);
+    if (id === '16') return null;
+    var S = parseInt(id, 10);
+    return RANGER_SIZES.indexOf(S) >= 0 ? rangerModelDesc(S) : null;
+  }
+  // The currently-selected model id from settings (default '16' = classic).
+  function selectedModelId() {
+    try { var s = SAVE.settings(); return (s && s.rangerModel) || '16'; }
+    catch (e) { return '16'; }
+  }
+
+  // draw into a sub-cell of a canvas at x-offset ox, clipped to cw x ch so a
+  // frame can never bleed into its neighbour on the strip.
+  function drawCell(ctx, ox, cw, ch, drawFn) {
+    var put = function (x, y, c) {
+      x |= 0; y |= 0;
+      if (x < 0 || y < 0 || x >= cw || y >= ch) return;
+      ctx.fillStyle = c; ctx.fillRect(ox + x, y, 1, 1);
+    };
+    drawFn(put);
+  }
+  // 1px dark outline around the whole silhouette on a canvas (browser side of
+  // RANGER_ART.outlinePass — reads/writes ImageData).
+  function outlineCanvas(ctx, W, H) {
+    var img = ctx.getImageData(0, 0, W, H), data = img.data;
+    var OUT = RANGER_ART.C.OUT;
+    var r = parseInt(OUT.slice(1, 3), 16), g = parseInt(OUT.slice(3, 5), 16), b = parseInt(OUT.slice(5, 7), 16);
+    RANGER_ART.outlinePass(W, H,
+      function (x, y) { return data[(y * W + x) * 4 + 3]; },
+      function (x, y) { var i = (y * W + x) * 4; data[i] = r; data[i + 1] = g; data[i + 2] = b; data[i + 3] = 255; });
+    ctx.putImageData(img, 0, 0);
+  }
+
+  function buildRangerModels(scene) {
+    if (typeof RANGER_ART === 'undefined') return;         // art module absent → skip (classic still works)
+    RANGER_SIZES.forEach(function (S) {
+      var d = rangerModelDesc(S), n = IDLE_FRAMES + WALK_FRAMES;
+      // ---- body: one strip canvas of n frames (idle... then walk...) --------
+      if (!scene.textures.exists(d.key)) {
+        var t = scene.textures.createCanvas(d.key, S * n, S), ctx = t.getContext();
+        for (var f = 0; f < n; f++) {
+          var isWalk = f >= IDLE_FRAMES, idx = isWalk ? f - IDLE_FRAMES : f;
+          var count = isWalk ? WALK_FRAMES : IDLE_FRAMES;
+          (function (ff, w, ii, cc) {
+            drawCell(ctx, ff * S, S, S, function (put) {
+              RANGER_ART.drawBody(put, S, { frame: w ? 'walk' : 'idle', t: ii / cc });
+            });
+          })(f, isWalk, idx, count);
+        }
+        outlineCanvas(ctx, S * n, S);
+        for (var fi = 0; fi < n; fi++) {
+          var fn = (fi < IDLE_FRAMES ? 'idle' + fi : 'walk' + (fi - IDLE_FRAMES));
+          t.add(fn, 0, fi * S, 0, S, S);
+        }
+        t.refresh();
+      }
+      // ---- matching bow (S x S) --------------------------------------------
+      if (!scene.textures.exists(d.bowKey)) {
+        var tb = scene.textures.createCanvas(d.bowKey, S, S), bctx = tb.getContext();
+        drawCell(bctx, 0, S, S, function (put) { RANGER_ART.drawBow(put, S); });
+        outlineCanvas(bctx, S, S); tb.refresh();
+      }
+      // ---- matching arrow (wide, short) ------------------------------------
+      if (!scene.textures.exists(d.arrowKey)) {
+        var aw = S, ah = Math.max(6, Math.round(S * 0.4));
+        var ta = scene.textures.createCanvas(d.arrowKey, aw, ah), actx = ta.getContext();
+        drawCell(actx, 0, aw, ah, function (put) { RANGER_ART.drawArrow(put, S, ah); });
+        outlineCanvas(actx, aw, ah); ta.refresh();
+      }
+      // ---- lead arm (rotates to aim in-game) -------------------------------
+      if (!scene.textures.exists(d.armKey)) {
+        var rmA = scene.textures.createCanvas(d.armKey, d.armW, d.armH), armctx = rmA.getContext();
+        drawCell(armctx, 0, d.armW, d.armH, function (put) { RANGER_ART.drawArm(put, d.armW, d.armH); });
+        outlineCanvas(armctx, d.armW, d.armH); rmA.refresh();
+      }
+      // ---- animations (global anim manager — create once) ------------------
+      if (!scene.anims.exists(d.idle)) {
+        var idleF = []; for (var a = 0; a < IDLE_FRAMES; a++) idleF.push({ key: d.key, frame: 'idle' + a });
+        scene.anims.create({ key: d.idle, frames: idleF, frameRate: 6, repeat: -1 });
+      }
+      if (!scene.anims.exists(d.walk)) {
+        var walkF = []; for (var b2 = 0; b2 < WALK_FRAMES; b2++) walkF.push({ key: d.key, frame: 'walk' + b2 });
+        scene.anims.create({ key: d.walk, frames: walkF, frameRate: 11, repeat: -1 });
+      }
+    });
+  }
+
+  // ==========================================================================
+  // HI-FI WORLD (train yard) — ART-FIDELITY TEST, gated on settings.hifiWorld.
+  // Textures are generated at boot (so the toggle is instant) but only USED
+  // when the setting is on (via mobModel/bossModel returning null when off, and
+  // RealmScene reading hifiWorldOn()). Classic mob/boss/tile art is untouched.
+  // ==========================================================================
+  var MOB_HI = { slime: 'slimeHi', brute: 'bruteHi', spitter: 'spitterHi', warlock: 'warlockHi' };
+  var MOB_HI_SIZE = 48, MOB_HI_DISPLAY = 40, MOB_BODY_WORLD = 22;     // keep classic 22px hitbox
+  var BOSS_HI_KEY = 'boss1Hi', BOSS_HI_SIZE = 96, BOSS_HI_DISPLAY = 76;
+  var BOSS_BODY_W = 42, BOSS_BODY_H = 36;                              // classic boss world body (14·3,12·3)
+
+  function hifiWorldOn() { try { var s = SAVE.settings(); return !!(s && s.hifiWorld); } catch (e) { return false; } }
+
+  function mobModel(key) {
+    if (!hifiWorldOn()) return null;
+    var hi = MOB_HI[key]; if (!hi) return null;
+    var scale = MOB_HI_DISPLAY / MOB_HI_SIZE, bt = Math.round(MOB_BODY_WORLD / scale);
+    return { key: hi, scale: scale, body: { w: bt, h: bt, ox: Math.round((MOB_HI_SIZE - bt) / 2), oy: Math.round((MOB_HI_SIZE - bt) / 2) } };
+  }
+  function bossModel() {
+    if (!hifiWorldOn()) return null;
+    var scale = BOSS_HI_DISPLAY / BOSS_HI_SIZE;
+    return { key: BOSS_HI_KEY, scale: scale, body: { w: Math.round(BOSS_BODY_W / scale), h: Math.round(BOSS_BODY_H / scale),
+             ox: Math.round((BOSS_HI_SIZE - BOSS_BODY_W / scale) / 2), oy: Math.round((BOSS_HI_SIZE - BOSS_BODY_H / scale) / 2) } };
+  }
+
+  function buildHiFiWorld(scene) {
+    if (typeof WORLD_ART === 'undefined') return;
+    function spr(key, W, H, fn) {                 // outlined creature/object
+      if (scene.textures.exists(key)) return;
+      var t = scene.textures.createCanvas(key, W, H), ctx = t.getContext();
+      drawCell(ctx, 0, W, H, function (put) { fn(put, W, H); });
+      outlineCanvas(ctx, W, H); t.refresh();
+    }
+    function tex(key, W, H, fn) {                  // seamless tile (NO outline)
+      if (scene.textures.exists(key)) return;
+      var t = scene.textures.createCanvas(key, W, H), ctx = t.getContext();
+      drawCell(ctx, 0, W, H, function (put) { fn(put, W, H); });
+      t.refresh();
+    }
+    var A = WORLD_ART;
+    spr('slimeHi', MOB_HI_SIZE, MOB_HI_SIZE, A.drawSlime);
+    spr('bruteHi', MOB_HI_SIZE, MOB_HI_SIZE, A.drawBrute);
+    spr('spitterHi', MOB_HI_SIZE, MOB_HI_SIZE, A.drawSpitter);
+    spr('warlockHi', MOB_HI_SIZE, MOB_HI_SIZE, A.drawWarlock);
+    spr('boss1Hi', BOSS_HI_SIZE, BOSS_HI_SIZE, A.drawBoss);
+    tex('gravel', 48, 48, A.drawGravel);
+    tex('yardwall', 48, 28, A.drawYardWall);
+    tex('track', 48, 96, A.drawTrack);
+    spr('tunnel', 96, 120, A.drawTunnel);
+    spr('loco', 240, 96, A.drawLoco);
+  }
+
+  // ==========================================================================
+  // HI-FI PORTAL ROOM (chamber) — same gating as the yard (settings.hifiWorld).
+  // Textures built at boot; NexusScene routes its sprites through nexusKey()/
+  // nexusScale() so the on-screen size is unchanged and ONLY the fidelity rises.
+  // r = classicPx / hiPx, so (existing setScale × r) keeps the display identical.
+  // ==========================================================================
+  var NEXUS_HI = {
+    floor_nexus: { hi: 'floorNexusHi', tile: true },
+    wall:        { hi: 'wallHi', r: 0.5 },
+    platform:    { hi: 'platformHi', r: 64 / 160 },
+    portal:      { hi: 'portalHi', r: 20 / 64 },
+    console:     { hi: 'consoleHi', r: 16 / 48 },
+    conduit:     { hi: 'conduitHi', r: 16 / 32 },
+    wallscreen:  { hi: 'wallscreenHi', r: 0.5 },
+    lever_up:    { hi: 'leverHiUp', r: 0.5 },
+    lever_down:  { hi: 'leverHiDown', r: 0.5 },
+    bestiary:    { hi: 'bestiaryHi', r: 16 / 48 },
+    chest:       { hi: 'chestHi', r: 16 / 40 }
+  };
+  var _chamberBuilt = false;
+  function hifiChamberOn() { try { var s = SAVE.settings(); return !!(s && s.hifiChamber); } catch (e) { return false; } }
+  // chamber assets follow the Hi-Fi Chamber toggle; the PORTAL is shared with the
+  // realm (boss-exit portal), so it turns hi-fi if EITHER toggle is on.
+  function nexusOn(name) { return name === 'portal' ? (hifiChamberOn() || hifiWorldOn()) : hifiChamberOn(); }
+  function nexusKey(name) { return (nexusOn(name) && _chamberBuilt && NEXUS_HI[name]) ? NEXUS_HI[name].hi : name; }
+  function nexusScale(name, base) {
+    return (nexusOn(name) && _chamberBuilt && NEXUS_HI[name] && NEXUS_HI[name].r) ? base * NEXUS_HI[name].r : base;
+  }
+  function buildHiFiChamber(scene) {
+    if (typeof NEXUS_ART === 'undefined') return;
+    function spr(key, W, H, fn) { if (scene.textures.exists(key)) return; var t = scene.textures.createCanvas(key, W, H), c = t.getContext(); drawCell(c, 0, W, H, function (put) { fn(put, W, H); }); outlineCanvas(c, W, H); t.refresh(); }
+    function tex(key, W, H, fn) { if (scene.textures.exists(key)) return; var t = scene.textures.createCanvas(key, W, H), c = t.getContext(); drawCell(c, 0, W, H, function (put) { fn(put, W, H); }); t.refresh(); }
+    var A = NEXUS_ART;
+    tex('floorNexusHi', 32, 32, A.drawFloor);
+    tex('wallHi', 32, 32, A.drawWall);
+    tex('conduitHi', 32, 32, A.drawConduit);
+    spr('platformHi', 160, 160, A.drawPlatform);
+    spr('portalHi', 64, 96, A.drawPortal);         // door-shaped gateway (tall)
+    tex('portalDiscHi', 56, 56, A.drawPortalDisc); // the spinning swirl inside the door (no outline)
+    spr('consoleHi', 48, 48, A.drawConsole);
+    spr('bestiaryHi', 48, 48, A.drawBestiary);
+    spr('wallscreenHi', 380, 52, A.drawWallscreen);
+    spr('leverHiUp', 34, 48, function (put, W, H) { A.drawLever(put, W, H, true); });
+    spr('leverHiDown', 34, 48, function (put, W, H) { A.drawLever(put, W, H, false); });
+    spr('chestHi', 40, 40, A.drawChest);
+    _chamberBuilt = true;
+  }
+
   function generateAll(scene) {
     grid(scene, 'ranger', [
       '....kkkkkk......',
@@ -765,7 +993,21 @@ var TEX = (function () {
     // 1px white for particles/bars
     var t = scene.textures.createCanvas('px', 2, 2);
     t.getContext().fillStyle = '#ffffff'; t.getContext().fillRect(0, 0, 2, 2); t.refresh();
+
+    // ART-FIDELITY TEST: build the optional hi-fi animated Ranger models last
+    // (additive; the classic 'ranger' above is the default and is untouched).
+    buildRangerModels(scene);
+    buildHiFiWorld(scene);                 // hi-fi train-yard mobs/tiles/train (gated at use)
+    buildHiFiChamber(scene);               // hi-fi portal room (gated at use)
   }
 
-  return { generateAll: generateAll };
+  return {
+    generateAll: generateAll,
+    // ART-FIDELITY TEST helpers (consumed by entities.js / scenes.js / menu.js)
+    modelFor: modelFor, selectedModelId: selectedModelId, RANGER_SIZES: RANGER_SIZES,
+    // HI-FI WORLD helpers
+    hifiWorldOn: hifiWorldOn, mobModel: mobModel, bossModel: bossModel,
+    // HI-FI CHAMBER helpers
+    nexusKey: nexusKey, nexusScale: nexusScale, hifiChamberOn: hifiChamberOn
+  };
 })();

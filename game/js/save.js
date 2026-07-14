@@ -160,6 +160,16 @@ var SAVE = (function () {
       sfxVolume: seed,
       sfxOn: true,
       autoFire: true,          // Q2 default: ON (now a Settings checkbox, not a key)
+      // ART-FIDELITY TEST (2026-07-13): which Ranger art model to use.
+      // '16' = classic 16x16 (default, unchanged); '32'/'64'/'128'/'160' =
+      // higher-fidelity animated models. Merges via settings() like any string.
+      rangerModel: '16',
+      // ART-FIDELITY TEST (2026-07-13): opt-in HI-FI toggles (independent).
+      // hifiWorld = the realm becomes the hi-fi TRAIN YARD (gravel arena, tracks,
+      // tunnels, an ambush train that instakills) + hi-fi monsters.
+      // hifiChamber = the portal room (nexus) uses hi-fi art. Both default OFF.
+      hifiWorld: false,
+      hifiChamber: false,
       binds: defaultBinds()    // action id -> { primary, alt }
     };
   }

@@ -9,3 +9,4 @@
 - Sun 07/12/2026 18:30:38  -  "code audited"
 - Sun 07/12/2026 21:24:26  -  "knight emplemented and tested "
   - note: needs tuning
+- Tue 07/14/2026 13:08:41  -  "highfedelity asset upgrades for portal room and map"

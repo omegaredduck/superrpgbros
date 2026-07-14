@@ -6,3 +6,6 @@ desktop.ini
 
 # local scratch - abandoned specs and stale lock files get parked here
 _to_delete/
+_art_test_backup_*/
+_map_train_backup_*/
+_portal_room_backup_*/
