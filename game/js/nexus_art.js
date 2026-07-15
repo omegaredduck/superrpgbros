@@ -278,9 +278,107 @@
     }
   }
 
+  // ==========================================================================
+  // HI-FI HUD (2026-07-14, user: "the hud at the bottom looks disconjointed —
+  // make hi-fi hud assets and the art that connects um together"). Three
+  // pieces in the chamber's arcane-console language: a beveled METAL RING
+  // housing for each resource orb, a tileable CONDUIT PLATE that runs behind
+  // the XP bar and physically connects the two rings, and an END CAP with a
+  // glowing power node where the plate docks into each ring.
+  // ==========================================================================
+
+  // ---- orb housing: beveled steel annulus + gold rivets + side power pips --
+  function drawHudOrbFrame(put, S) {
+    var c = S / 2, ro = S * 0.485, ri = S * 0.405;
+    for (var y = 0; y < S; y++) for (var x = 0; x < S; x++) {
+      var dx = x + 0.5 - c, dy = y + 0.5 - c, d = Math.sqrt(dx * dx + dy * dy);
+      if (d > ro || d < ri) continue;
+      var t = (y / S);                                   // lit from above
+      var b = mix(P.metalLt, P.stDk, 0.15 + t * 0.75);
+      var e = (d - ri) / (ro - ri);                      // bevel across the ring
+      if (e < 0.18 || e > 0.85) b = mix(b, P.OUT, 0.55); // inner/outer rims
+      else if (e < 0.4) b = mix(b, P.stHi, 0.25 * (1 - t));
+      put(x, y, b);
+    }
+    // four gold rivets on the diagonals
+    var rm = (ro + ri) / 2;
+    [45, 135, 225, 315].forEach(function (deg) {
+      var a = deg * Math.PI / 180;
+      var rx = c + Math.cos(a) * rm, ry = c + Math.sin(a) * rm;
+      ell(put, rx, ry, S * 0.028, S * 0.028, function (tx, ty) { return mix(P.goldLt, P.gold, 0.3 + ty * 0.5); });
+      put(Math.round(rx), Math.round(ry), P.orange);
+    });
+    // side power pips (cyan) where the connector plate docks
+    [0, Math.PI].forEach(function (a) {
+      var rx = c + Math.cos(a) * rm, ry = c + Math.sin(a) * rm;
+      ell(put, rx, ry, S * 0.02, S * 0.02, function () { return P.cyan; });
+      put(Math.round(rx), Math.round(ry), P.cyanLt);
+    });
+    // top vent ticks
+    for (var i = -2; i <= 2; i++) {
+      var vx = Math.round(c + i * 4), vy = Math.round(c - rm);
+      put(vx, vy, P.stDk2); put(vx, vy + 1, P.stDk2);
+    }
+  }
+
+  // ---- connector plate (tileable 32px segments): housing + dark XP groove --
+  function drawHudPlateMid(put, W, H) {
+    for (var y = 0; y < H; y++) {
+      var b;
+      if (y === 0 || y === H - 1) b = P.OUT;
+      else if (y <= 3) b = mix(P.stHi, P.stLt, y / 3);                      // top bevel
+      else if (y < 8) b = mix(P.st2, P.stDk, (y - 4) / 4);                  // upper housing
+      else if (y === 8 || y === 28) b = P.OUT;                              // groove lips
+      else if (y > 8 && y < 28) b = mix(P.deep2, P.black, Math.abs(y - 18) / 10);  // XP groove (bar renders inside)
+      else b = mix(P.stDk, P.stDk2, (y - 29) / 6);                          // lower housing
+      for (var x = 0; x < W; x++) {
+        var col = b;
+        if (x === 0 && y > 0 && y < H - 1) col = mix(b, P.OUT, 0.6);        // plate seam per segment
+        put(x, y, col);
+      }
+    }
+    // blue tick lights on the top housing (every segment carries two)
+    [Math.round(W * 0.3), Math.round(W * 0.75)].forEach(function (tx2) {
+      put(tx2, 5, P.blu); put(tx2 + 1, 5, P.bluLt); put(tx2, 6, P.bluDk); put(tx2 + 1, 6, P.blu);
+    });
+  }
+
+  // ---- end cap: rounded dock with a glowing power node + gold trim ---------
+  // Drawn as the LEFT cap; the right one is the same texture flipped in-game.
+  function drawHudPlateCap(put, W, H) {
+    var cy = H / 2;
+    for (var y = 0; y < H; y++) {
+      var edge = 0;                                       // rounded left corners
+      if (y < 4) edge = 4 - y; else if (y > H - 5) edge = y - (H - 5);
+      for (var x = Math.round(edge); x < W; x++) {
+        var b;
+        if (y === 0 || y === H - 1 || x === Math.round(edge)) b = P.OUT;
+        else if (y <= 3) b = P.stHi;
+        else if (y >= H - 4) b = P.stDk2;
+        else b = mix(P.st2, P.stDk, y / H);
+        put(x, y, b);
+      }
+    }
+    // glowing power node (the plate's energy source, feeds the XP conduit)
+    ell(put, W * 0.38, cy, H * 0.17, H * 0.17, function (tx, ty) {
+      return mix(P.stDk2, P.black, ty);
+    });
+    ell(put, W * 0.38, cy, H * 0.115, H * 0.115, function (tx, ty) {
+      var dd = Math.hypot(tx - 0.5, ty - 0.5) * 2;
+      return dd > 0.9 ? P.bluDk : mix(P.cyanLt, P.blu, dd);
+    });
+    put(Math.round(W * 0.38), Math.round(cy), P.white);
+    // gold trim column before the plate joins the mid segments
+    for (var y2 = 4; y2 < H - 4; y2++) {
+      put(W - 4, y2, mix(P.gold, P.orange, y2 / H));
+      put(W - 3, y2, mix(P.goldLt, P.gold, y2 / H));
+    }
+  }
+
   var API = { P: P, drawFloor: drawFloor, drawWall: drawWall, drawPlatform: drawPlatform, drawPortal: drawPortal,
     drawPortalDisc: drawPortalDisc, drawConsole: drawConsole, drawBestiary: drawBestiary, drawConduit: drawConduit,
-    drawWallscreen: drawWallscreen, drawLever: drawLever, drawChest: drawChest };
+    drawWallscreen: drawWallscreen, drawLever: drawLever, drawChest: drawChest,
+    drawHudOrbFrame: drawHudOrbFrame, drawHudPlateMid: drawHudPlateMid, drawHudPlateCap: drawHudPlateCap };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   root.NEXUS_ART = API;
 })(typeof window !== 'undefined' ? window : this);

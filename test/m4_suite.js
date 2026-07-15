@@ -88,8 +88,8 @@ function check(name, ok, extra) {
              sprite: n.player.texture.key, held: n.player.held && n.player.held.texture.key };})()`);
   check('New-game class select creates a Wizard slot (save + CURRENT)',
     nex.savedCls === 'wizard' && nex.cur === 'wizard');
-  check('Wizard is drawn with the wizard sprite + staff in the nexus',
-    nex.sprite === 'wizard' && nex.held === 'staff');
+  check('Wizard is drawn with the hi-fi Starweaver sprite + star staff in the nexus',   // 2026-07-14: hi-fi is the default look
+    nex.sprite === 'wizard64' && nex.held === 'staff64');
 
   // -- enter a realm as the wizard (M3b portal pattern) --------------------------
   await page.evaluate(`(function(){var n=${scene('Nexus')}; if(!n.portal){n.consoleSetMode('clear');n.consoleSpawnPortal(true);} n.player.setPosition(n.portal.x, n.portal.y);})()`);

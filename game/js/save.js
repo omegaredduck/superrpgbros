@@ -7,7 +7,7 @@
 // ============================================================================
 var SAVE = (function () {
 
-  var VERSION = 3;
+  var VERSION = 4;   // v4 (M4.6): six-tier item keys + class-locked gear
   var SLOTS = 3;
   var KEY = function (slot) { return 'srb_save_' + slot; };
 
@@ -35,6 +35,7 @@ var SAVE = (function () {
         unlockedClasses: allClasses(),                   // M4: both classes open
         graveyard: [],                                   // {cls, level, kills, killer}
         potions: zeroPots(),                             // v2: unclaimed stash — SURVIVES death (Pillar 3)
+        collected: [],                                   // M5.5: item keys ever OWNED — SURVIVES death (dupe→XP; gear auto-upgrades + remains)
         records: { bestLevel: 1, deaths: 0, totalKills: 0, realmsEntered: 0, realmsClosed: 0 }
       },
       vault: [],                                         // v3: item keys, ≤ DATA.vault.slots — SURVIVES death
@@ -69,14 +70,43 @@ var SAVE = (function () {
       if (!Array.isArray(data.vault)) data.vault = [];      // v1/v2 always had it, but be kind
       data.v = 3;
     }
+    if (data.v === 3) {
+      // v4 (M4.6): SIX rarity tiers — item keys renumbered so index == tier
+      // (Oak Bow w1→w2, Storm Quiver a3→a4, ...). Same item, new address:
+      // remap every stored key so nothing an account owned changes identity.
+      var remap = { w1: 'w2', w2: 'w3', w3: 'w4',  a1: 'a2',  a2: 'a3',  a3: 'a4',
+                    ar1: 'ar2', ar2: 'ar3', ar3: 'ar4', r1: 'r2', r2: 'r3', r3: 'r4' };
+      data.vault = data.vault.map(function (k) { return remap[k] || k; });
+      for (var s4 in data.character.equipment) {
+        var k4 = data.character.equipment[s4];
+        if (k4 && remap[k4]) data.character.equipment[s4] = remap[k4];
+      }
+      data.v = 4;
+    }
     if (data.v !== VERSION) return null;                    // future/unknown version
     // Sanitize (never a crash): drop vault/equipment references to item keys
     // that no longer exist in data.js — valid items are untouched (lossless).
     data.vault = data.vault.filter(function (k) { return DATA.items[k]; });
+    // M5.5: the COLLECTION ledger — additive field; default it on older v4
+    // saves and drop any stale keys (lossless for real items).
+    if (!Array.isArray(data.account.collected)) data.account.collected = [];
+    data.account.collected = data.account.collected.filter(function (k) { return DATA.items[k]; });
     if (data.character.equipment) {
       for (var s in data.character.equipment) {
         var k2 = data.character.equipment[s];
-        if (k2 && (!DATA.items[k2] || DATA.items[k2].slot !== s)) data.character.equipment[s] = null;
+        if (k2 && (!DATA.items[k2] || DATA.items[k2].slot !== s)) { data.character.equipment[s] = null; continue; }
+        // M4.6 CLASS LOCK: gear equipped on the wrong class (possible in
+        // pre-lock saves, where every drop was ranger-flavored) is REFLAVORED
+        // to the character's own line — same slot, same tier, same power
+        // (DATA.classGear), so a wizard's old Oak Bow becomes her Ashwood
+        // Staff instead of vanishing. No line for the slot → bank-or-drop.
+        if (k2 && DATA.items[k2].cls && DATA.items[k2].cls !== data.character.cls) {
+          var line = DATA.classGear && DATA.classGear[data.character.cls];
+          var swap = line && line[s] && line[s][DATA.items[k2].tier];
+          if (swap) data.character.equipment[s] = swap;
+          else if (data.vault.length < DATA.vault.slots) { data.vault.push(k2); data.character.equipment[s] = null; }
+          else data.character.equipment[s] = null;
+        }
       }
     }
     return data;
@@ -98,8 +128,14 @@ var SAVE = (function () {
     if (!raw) return { ok: false, reason: 'empty' };
     var data = null;
     try { data = JSON.parse(raw); } catch (e) { return { ok: false, reason: 'corrupt' }; }
-    data = migrate(data);
-    if (!data || !valid(data)) return { ok: false, reason: 'corrupt' };
+    // AUDIT FIX 2026-07-14: migrate()/valid() dereference nested fields, so a
+    // JSON-valid but structurally gutted save (e.g. '{"v":3}') threw an
+    // uncaught TypeError here and BRICKED the title screen for every slot —
+    // exactly what this module promises can't happen. Any throw = corrupt.
+    try {
+      data = migrate(data);
+      if (!data || !valid(data)) return { ok: false, reason: 'corrupt' };
+    } catch (e) { return { ok: false, reason: 'corrupt' }; }
     return { ok: true, data: data };
   }
 
@@ -160,16 +196,11 @@ var SAVE = (function () {
       sfxVolume: seed,
       sfxOn: true,
       autoFire: true,          // Q2 default: ON (now a Settings checkbox, not a key)
-      // ART-FIDELITY TEST (2026-07-13): which Ranger art model to use.
-      // '16' = classic 16x16 (default, unchanged); '32'/'64'/'128'/'160' =
-      // higher-fidelity animated models. Merges via settings() like any string.
-      rangerModel: '16',
-      // ART-FIDELITY TEST (2026-07-13): opt-in HI-FI toggles (independent).
-      // hifiWorld = the realm becomes the hi-fi TRAIN YARD (gravel arena, tracks,
-      // tunnels, an ambush train that instakills) + hi-fi monsters.
-      // hifiChamber = the portal room (nexus) uses hi-fi art. Both default OFF.
-      hifiWorld: false,
-      hifiChamber: false,
+      dev: false,              // M5.3: DEV MODE toggle — all gear + max level + immortality (Settings)
+      // 2026-07-14: HI-FI ART IS THE GAME NOW (user call) — the ex-ART-TEST
+      // rangerModel / hifiWorld / hifiChamber settings were REMOVED. Hi-fi is
+      // hardwired on in textures.js; stale keys in old saved settings are
+      // simply ignored by the typed merge below (def no longer carries them).
       binds: defaultBinds()    // action id -> { primary, alt }
     };
   }

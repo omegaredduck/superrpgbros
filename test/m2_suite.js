@@ -67,14 +67,18 @@ function check(name, ok, extra) {
   check('kill quota spawns the boss portal', portal.open, `kills=${portal.kills}`);
 
   // -- 4. entering the portal starts the boss fight + E3 scouter scan -----------
+  // M4.7: THE CONDUCTOR arrives ON HIS TRAIN first (~3s cinematic: the Styx
+  // Express pulls in, he steps off, THEN the scouter) — wait for the scan.
   await page.evaluate(`(function(){var r=${scene('Realm')}; r.player.setPosition(r.bossPortal.x, r.bossPortal.y);})()`);
-  await sleep(300);
+  await page.waitForFunction(`(function(){var r=${scene('Realm')}; return !!r.boss && r.scanning;})()`,
+    null, { timeout: 60000 });
   const boss = await page.evaluate(`(function(){var r=${scene('Realm')};
     var texts = []; r.children.list.forEach(function(c){ if (c.text) texts.push(c.text); });
     return { boss: !!r.boss, hp: r.boss ? r.boss.boss.hp : 0, spawnerPaused: r.spawnEvent.paused,
              mobsLeft: r.mobs.countActive(true), bar: !!r.bossBar,
              scanning: r.scanning, physPaused: r.physics.world.isPaused, blob: texts.join(' | ') };})()`);
-  check('boss spawned with full hp + hp bar', boss.boss && boss.hp === 1400 && boss.bar);
+  const bossDefHp = await page.evaluate(`DATA.bosses[DATA.realm.boss].hp`);
+  check('boss spawned with full hp + hp bar', boss.boss && boss.hp === bossDefHp && boss.bar, `hp ${boss.hp}/${bossDefHp}`);
   check('wave director stands down, swarm cleared (E2 wipe)', boss.spawnerPaused && boss.mobsLeft === 0);
   check('E3 scouter workup sheet holds combat', boss.scanning && boss.physPaused &&
     boss.blob.indexOf('THREAT ANALYSIS') >= 0 && boss.blob.indexOf('TACTICAL READOUT') >= 0);
@@ -84,12 +88,23 @@ function check(name, ok, extra) {
   await sleep(200);
   const scanGone = await page.evaluate(`(function(){var r=${scene('Realm')};return {scanning:r.scanning, phys:r.physics.world.isPaused};})()`);
   check('ENTER dismisses the scouter, combat resumes', !scanGone.scanning && !scanGone.phys);
-  await sleep(3500);
-  const shots = await page.evaluate(`${scene('Realm')}.enemyShots.countActive(true)`);
-  check('boss patterns are firing', shots > 0, `${shots} bolts in flight`);
+  // M4.7: the Conductor fights with TRAIN VERBS, not bolts — "patterns firing"
+  // = a ghost track summoned, tie markers down, the lantern lit, or (any other
+  // boss) enemy bolts in flight.
+  await page.waitForFunction(`(function(){var r=${scene('Realm')};
+    return r.enemyShots.countActive(true) > 0 || !!r.ghostTrain ||
+           (r.condFx && r.condFx.length > 0) || (r.boss && !!r.boss.boss.lanternUntil);})()`,
+    null, { timeout: 30000 });
+  const pat = await page.evaluate(`(function(){var r=${scene('Realm')};
+    return { shots: r.enemyShots.countActive(true), ghost: !!r.ghostTrain,
+             fx: r.condFx ? r.condFx.length : 0, lantern: r.boss ? !!r.boss.boss.lanternUntil : false };})()`);
+  check('boss patterns are firing', pat.shots > 0 || pat.ghost || pat.fx > 0 || pat.lantern,
+    `shots ${pat.shots} · ghost ${pat.ghost} · fx ${pat.fx} · lantern ${pat.lantern}`);
 
   // -- 6. boss death drops a chest (E1); SPACE opens it; loot banks + realm closes
-  const beforeXp = await page.evaluate(`${scene('Realm')}.player.state.level`);
+  // M4.6 curve (cap 60, ~2k xp/level): close XP alone no longer levels a
+  // fresh character — assert the XP LANDED (level OR banked xp rose) instead.
+  const beforeXp = await page.evaluate(`(function(){var s=${scene('Realm')}.player.state; return { level: s.level, xp: s.xp };})()`);
   await page.evaluate(`(function(){var r=${scene('Realm')}; Entities.hurtBoss(r, r.boss, 999999);})()`);
   await sleep(400);
   const chest = await page.evaluate(`(function(){var r=${scene('Realm')};
@@ -106,11 +121,14 @@ function check(name, ok, extra) {
     var texts = []; r.children.list.forEach(function(c){ if (c.text) texts.push(c.text); });
     var pots = 0; for (var k in ACCOUNT.potions) pots += ACCOUNT.potions[k];
     return { looting: r.looting, blob: texts.join(' | '), pots: pots,
-             realmsClosed: ACCOUNT.records.realmsClosed, level: r.player.state.level };
+             realmsClosed: ACCOUNT.records.realmsClosed, level: r.player.state.level,
+             xp: r.player.state.xp };
   })()`);
   check('SPACE opens the chest → loot selection overlay', loot.looting && loot.blob.indexOf('LOOT') >= 0 && loot.blob.indexOf('POTION OF') >= 0);
   check('exactly one potion banked at open', loot.pots === 1);
-  check('realmsClosed incremented + close XP granted', loot.realmsClosed === 1 && loot.level > beforeXp, `level ${beforeXp}→${loot.level}`);
+  check('realmsClosed incremented + close XP granted', loot.realmsClosed === 1 &&
+    (loot.level > beforeXp.level || loot.xp > beforeXp.xp),
+    `level ${beforeXp.level} xp ${beforeXp.xp} → level ${loot.level} xp ${loot.xp}`);
   const savedPots = await page.evaluate(`(function(){var d=JSON.parse(localStorage.getItem('srb_save_1')); var n=0; for (var k in d.account.potions) n+=d.account.potions[k]; return {n:n, closed:d.account.records.realmsClosed};})()`);
   check('reward persisted to disk before any screen', savedPots.n === 1 && savedPots.closed === 1);
   // take everything → REALM CLOSED screen
@@ -129,7 +147,12 @@ function check(name, ok, extra) {
   const drink = await page.evaluate(`(function(){
     var n=${scene('Nexus')};
     var stat = null; for (var k in ACCOUNT.potions) if (ACCOUNT.potions[k] > 0) stat = k;
-    var before = n.player.state.stats[stat];
+    // apples-to-apples: 'after' below is computed WITHOUT equipment, so 'before'
+    // must be too — the boss chest can legitimately drop +DEF armor that
+    // auto-equips on take-all (it did once the train-yard realm shifted the
+    // deterministic loot stream, 2026-07-14), and gear must not look like a
+    // potion effect to this check.
+    var before = SIM.statsFor(DATA.classes[CURRENT.cls], CURRENT.level, CURRENT.potionsDrunk)[stat];
     n.drinkPotion(stat);
     var after = SIM.statsFor(DATA.classes[CURRENT.cls], CURRENT.level, CURRENT.potionsDrunk)[stat];
     var d = JSON.parse(localStorage.getItem('srb_save_1'));

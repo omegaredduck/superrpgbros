@@ -93,8 +93,8 @@ function check(name, ok, extra) {
              sprite: n.player.texture.key, held: n.player.held && n.player.held.texture.key };})()`);
   check('New-game class select creates a Knight slot (save + CURRENT)',
     nex.savedCls === 'knight' && nex.cur === 'knight');
-  check('Knight is drawn with the knight sprite + sword in the nexus',
-    nex.sprite === 'knight' && nex.held === 'sword');
+  check('Knight is drawn with the hi-fi Dark Knight sprite + greatsword in the nexus',   // 2026-07-14: hi-fi is the default look
+    nex.sprite === 'knight64' && nex.held === 'sword64');
 
   // -- enter a realm as the knight (m4 portal pattern) ---------------------------
   await page.evaluate(`(function(){var n=${scene('Nexus')}; if(!n.portal){n.consoleSetMode('clear');n.consoleSpawnPortal(true);} n.player.setPosition(n.portal.x, n.portal.y);})()`);

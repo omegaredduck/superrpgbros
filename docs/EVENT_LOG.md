@@ -6,110 +6,740 @@
 
 ---
 
-## 2026-07-13 · ART TEST · HI-FI PORTAL ROOM + SPLIT TOGGLES (?v=m4i → m4j)
+## 2026-07-15 · M5.6 WAVE CARD MOTION · top placement + slide on/off (?v=m5m)
 
-The chamber (portal room) gets a hi-fi remake, and the Hi-Fi toggle is SPLIT into
-two independent switches: Settings → ART TEST → **Hi-Fi: World [ ] Chamber [ ]**
-(World = train-yard realm + monsters; Chamber = portal room; both default OFF).
+Red: "i want the wave 5 to be closer to the top of the screen and it needs an
+animation to come on and off screen." waveReveal cy moved H*0.34 → H*0.16 (up
+near the top band, clear of the play area). Animation changed from pop-fade to a
+SLIDE: parks off the left edge, sweeps in + settles with a Back.Out overshoot,
+holds ~1.65s, then winds up (Back.In) and launches off the right while fading.
+All pieces (fill, mask, outlines, shadow) move by the same relative delta each
+frame so the bitmap mask stays glued to the fill mid-flight. Verified via a
+40-frame GIF (slide-in → hold → slide-off). Boss(12) green. Files:
+game/js/scenes.js (waveReveal), index.html (?v=m5m).
 
-Hi-fi chamber (NEW game/js/nexus_art.js): arcane floor/wall tiles, the portal
-PLATFORM (beveled ring + radial inlays + 8 sockets + glowing well), the PORTAL now
-a DOOR (arched stone gateway) with a churning SWIRL inside + a spinning disc, the
-CONSOLE + BESTIARY terminals, VAULT chest, LEVER, CONDUIT, records WALL SCREEN.
-textures.js buildHiFiChamber() builds them at boot; nexusKey()/nexusScale() swap
-NexusScene sprites (r = classicPx/hiPx → identical on-screen size, only fidelity
-rises). Portal shared w/ realm boss-exit → hi-fi if EITHER toggle on.
+## 2026-07-15 · M5.6 WAVE CARD LEGIBILITY · dropped the bone fill (?v=m5l)
 
-Animation (user: door + animation; platform + wiring animated; honor low-fi anims):
-passive tweens carry over automatically (texture-only swap). The door FRAME stays
-put while a swirl DISC spins inside it. chamberAmbient() keeps the platform
-ring-lights breathing, the well pulsing, and energy pulses climbing the conduit
-CONTINUOUSLY; powerUp/powerDown hand off cleanly. All gated on hifiChamber.
+Red: "the numbers aren't legible" → "this doesn't look like a 2 and the 5 didn't
+look like a 5" → "remove bone fill from all of it and it will be better." The
+zombie-hand / bone-glint fill inside the glyphs was breaking up the digit shapes.
+waveReveal now fills each letter with ONLY the green gradient (darkened a touch),
+carried by a two-pass outline: a thick near-black HALO stroke behind the fill for
+a crisp silhouette + the bright bone stroke on top for the undead edge. No hands,
+no glints. Digits read cleanly at every wave (verified WAVE 2 and WAVE 5 renders).
+Boss(12) green. Files: game/js/scenes.js (waveReveal), index.html (?v=m5l).
 
-Reversible: OFF = classic chamber byte-for-byte. Backup
-`_portal_room_backup_20260714_162357/` (gitignored). Files: NEW nexus_art.js;
-textures.js, scenes.js, menu.js, save.js, index.html.
+## 2026-07-15 · M5.6 WAVE CARD CLEANUP · glow + subtitle removed (?v=m5k)
 
-Verify: m2/m4/m4b green + in-engine (Hi-Fi Chamber ON) door portal + spinning disc
-on the animated platform, all chamber textures hi-fi, zero console errors. TEST
-GOTCHA discovered: my ad-hoc Playwright launches hung on Nexus load — the
-`--use-gl=angle/swiftshader` flags were the cause; launch WITHOUT GL args (as the
-suites do) and the Nexus loads fine. Disk-only; awaits 2_SAVE_AND_UPLOAD.bat.
+Red on the wave card: "remove the green circle around the wave 5 and just keep
+the letters" then "i dont want wave name" (the masked subtitle rendered garbled
+— "RRITEE"). waveReveal now draws ONLY the block-letter title with the undead
+scene fill (green gradient + zombie hands + bone glints), bone outline, and drop
+shadow — no glow halo, no subtitle. Same function serves waves 1–5, so all five
+render identically (just the "WAVE N" glyph changes). Verified fresh renders of
+WAVE 2/3/4 clean. Boss(12) green. Files: game/js/scenes.js (waveReveal), index.html (?v=m5k).
 
----
+## 2026-07-15 · M5.6 BOSS FEEL · coward Gravekeeper + early Reaper + wave card (?v=m5j)
 
-## 2026-07-13 · ART TEST · HI-FI TRAIN YARD + BIGGER RANGER (?v=m4e → m4f)
-
-Opt-in, reversible extension of the art test (user: "make a beautiful/cool/fun
-map… tracks all through it and a train that comes through — get hit = dead", plus
-"make my character a little bigger"). Settings → ART TEST → **Hi-Fi World
-[ON/OFF]** (default OFF).
-
-**Bigger Ranger:** RANGER_TARGET 32→64 — the hi-fi Ranger models render ~2x
-(64px), hitbox scales with it, bow-hand anchor auto-follows displayWidth.
-
-**Train yard (hifiWorld ON):** gravel arena + oil stains + concrete border, two
-horizontal rail tracks + a decorative vertical track, arched tunnel mouths. An
-AMBUSH TRAIN runs at random intervals: telegraphed by an air-horn + flashing red
-crossing signals + camera rumble (~1.3s), then barrels down a random lane at
-1050px/s out of a tunnel. Contact = **INSTANT DEATH** (bypasses i-frames; killer
-"the 5:15 express"); it also mows any mob it hits. Fair-but-deadly: warn window +
-off-track safety = dodgeable. Guard: a warning only starts from idle (no sprite
-leak). New SFX: trainhorn, trainpass.
-
-**Hi-fi monsters:** faithful higher-fidelity redraws of slime/brute/spitter/
-warlock (48px) + the Grovekeeper boss (96px). Hitboxes preserved (22px mob /
-~42x36 boss) so balance is untouched — only art + on-screen size change.
-
-**Reversible + gated:** OFF → the realm/mobs/boss/tiles are byte-for-byte classic
-(mobModel/bossModel return null; RealmScene skips the yard). Pre-edit backup
-`_map_train_backup_20260713_161251/` (gitignored). See ART_TEST_CHANGES.md.
-
-Files: **NEW** game/js/world_art.js (hi-fi mobs/boss/tiles/track/tunnel/loco,
-reuses ranger_art primitives). textures.js (buildHiFiWorld + mobModel/bossModel/
-hifiWorldOn + RANGER_TARGET 64). entities.js (spawnMob/spawnBoss hi-fi swap,
-gated). scenes.js (setupTrainYard + train state machine + instakill). menu.js
-(Hi-Fi World toggle). save.js (hifiWorld:false). data.js (train SFX). index.html
-(world_art.js + ?v m4f).
-
-Verify: m4 18/18 · m4b 26/26 · m2 green — zero console errors. Hi-Fi World ON:
-train yard (2 lanes), 10 hi-fi textures present, mobs at 22px hitbox, Ranger 64px,
-train INSTAKILLS on contact (alive→false). In-engine screenshots confirm the yard
-+ headlight. Still DISK-ONLY — awaits 2_SAVE_AND_UPLOAD.bat with the m4a–m4f backlog.
+Red boss-feel pass:
+- COWARD MOVEMENT (gravekeeperSkulk, overrides updateBoss's chase): he no longer
+  relentlessly chases — FLEES (fast, biased behind his minions) when you close
+  in, HIDES toward his minion cluster at mid-range so bodies stay between you,
+  and only ambles back if you drift far. Lets the chasing minions separate from
+  him. Clamped in-bounds (he never wraps). DATA.bosses.gravekeeper.skulk knob.
+- REAPER'S MARCH now rises AT FIGHT START (reaper.delayMs ~1.6s), not at 60% HP
+  (Red saw it only near death). It climbs out of the CORNER farthest from you
+  with a CAMERA REVEAL — the view pans to it, holds, then snaps back (stopFollow
+  → pan → startFollow). Rises small→full (Back.Out) and can't kill mid-rise
+  (reaper.rising guard). reaperAt on the unfreeze list.
+- WAVE CARD (waveReveal) replaces the "WAVE 3 / 5" banner: a GTA-VI-logo-style
+  title — "WAVE N" in big block letters with an UNDEAD SCENE masked inside the
+  glyphs (green-dominant gradient + zombie hands clawing up: dark forearms +
+  bright bone palms/fingers that read through the letter windows), bone outline,
+  drop shadow, green glow, wave-name subtitle. Pops in (Back.Out) → holds →
+  fades. Screen-space bitmap mask; scales/fades as one unit.
+Graveyard smoke(15) + boss(12) green (boss test updated: reaper is fight-start
+timed now; gravekeeperSkulk guards a bodyless boss mid-death).
 
 ---
 
-## 2026-07-13 · ART TEST · RANGER HIGH-FIDELITY MODEL SELECT (?v=m4d → m4e)
+## 2026-07-15 · M5.6 PLAYTEST · shooter density overhaul (?v=m5i)
 
-TEMPORARY, fully reversible feature (user request): test higher-fidelity pixel
-art for the Ranger by selecting a bigger canvas. Settings → CHARACTER (art test)
-→ Model picks **[16·orig] [32] [64] [128] [160]** — the original 16x16 is the
-DEFAULT and is never touched; the four larger sizes are procedurally-drawn,
-resolution-aware, FAITHFUL redraws (green hood, skin face, teal cloak, belt,
-quiver, slate legs) with **real idle + walk animation**, an **archer stance**
-(lead arm extended to the bow, rear hand drawn to the cheek), and a **matching
-bow + arrow**. Arms only on the hi-fi models (per user). On-screen footprint —
-and the physics hitbox — is held at 32px for every model, so ONLY fidelity
-changes; gameplay is identical.
+Red: "way too many projectile mobs for the projectiles to move that fast" +
+"shooters still pool at the edge / off map" + "make them slow chasers not just
+shooters" + "one row of green proj, not three." Root causes found + fixed:
+- THE FLOOD: the PACK LEADER champion affix (roleSkew:'caster') filters the
+  director's pool to ONLY shooters while it lives — in the graveyard that's just
+  the archer, so the map flooded with them. WORSE, the maxConcurrent over-cap
+  redirect sent the pick back to pool[0], which IS the archer during that skew,
+  so the cap never bit (stress test: 119 archers vs a cap of 3!). Fix: the
+  over-cap fallback now pulls a NON-capped staple from the PRE-SKEW pool
+  (poolFull) — the capped shooter can never redirect onto itself. Stress test
+  now holds at exactly 3 archers out of 150 mobs.
+- EDGE POOLING: archers were spd:0 TURRETS, so they sat wherever they spawned
+  (often the off-screen ring / edge). Now spd:48 — the shooter verb keeps range
+  + follows the player, so they roam with the swarm and WRAP instead of pooling.
+  + a light chase.contactDmg 8 → a hybrid "slow chaser that shoots," not a pure
+  turret (Red's suggestion). Verified it now moves toward a far player.
+- CLUTTER: the 3-bolt fan → ONE aimed bolt (count 3→1), punchier (dmg 9→11,
+  cd 1900→1600). With the 3-archer cap that's ≤3 bolts in the air, not ~9.
+Regression: m47(yard) + grove(46) + graveyard smoke(15)/boss(12) all green
+(director change is behind poolFull + a default-1 spawnWeight, so yard/grove
+spawn behavior is unchanged except the now-correct over-cap fallback).
 
-**Reversible by design:** additive + gated on `settings.rangerModel`; default
-'16' reproduces the classic path byte-for-byte (texture 'ranger', scale 2,
-20x24 hitbox, no anim — verified). Full pre-edit backup at
-`_art_test_backup_20260713_152543/` (gitignored). See `ART_TEST_CHANGES.md`.
+---
 
-Files: **NEW** `game/js/ranger_art.js` (drawBody/drawBow/drawArrow/outlinePass,
-pure pixel-plotting — same module rendered the preview PNGs). `textures.js`
-(buildRangerModels: ranger/bow/arrow{32,64,128,160} spritesheets + idle/walk
-anims; TEX.modelFor/selectedModelId/RANGER_SIZES). `save.js` (rangerModel='16'
-default). `menu.js` (Model selector; panel 544→600). `entities.js`
-(Entities.applyModelSkin; createPlayer + updatePlayer anim/arrow, all gated on
-`p._rangerModel`). `scenes.js` (Ranger class card previews the selected model).
-`index.html` (load ranger_art.js before textures.js; ?v bump).
+## 2026-07-15 · M5.6 PLAYTEST · fewer shooters (?v=m5h)
 
-Verify: m4 18/18 · m4b 26/26 · m2 green · boot smoke (15 tex + 8 anims + frames,
-default '16', live switch 64/160, restore to classic) — zero console errors.
-In-engine screenshots confirm the bow attaches to the lead hand. NOTE: still on
-disk only — awaits the user's 2_SAVE_AND_UPLOAD.bat like the m4a–m4d backlog.
+Red: "reduce the amount of shooter mobs by ~10%." The director picked UNIFORMLY
+from the unlocked pool (no weights). Added a backward-compatible `spawnWeight`
+(default 1) + WEIGHTED selection in RealmScene.directorSpend (a reusable knob to
+dial any mob's frequency without cutting it). Set boneArcher.spawnWeight = 0.88
+→ its share drops from ~12.6% to ~11.3% of spawns (~10% fewer archers). No other
+mob has a weight, so yard/grove spawn mixes are byte-identical to before
+(m47 + grove suites still green). Graveyard smoke(15) + boss(12) green.
+
+---
+
+## 2026-07-15 · M5.6 PLAYTEST FIXES · toroidal wrap + bolt damage (?v=m5g)
+
+Red playtest: "mobs getting stuck off-screen accumulating around the edge" +
+"if character goes off screen he should pop up on the other side" + "the green
+ball projectiles aren't doing any damage."
+- SCREEN WRAP (RealmScene.wrapGraveyard, called each frame from updateGraveyard):
+  the graveyard is now TOROIDAL — the player, the swarm, and the reaper that walk
+  off one edge reappear on the opposite side. Kills the edge pile-up entirely
+  (nothing to stack against) and gives the "pop up on the other side" ask. Root
+  cause of the drift/pile: NOTHING in the game sets collideWorldBounds, so
+  entities always slid past the edge into the void (camera just clamped). The
+  Gravekeeper is pinned to his arena (bossWave mobs + the boss don't wrap). Wrap
+  is body-aware — body.reset(nx,ny) then restore velocity (a plain re-x snaps
+  back). Verified: player right→left wrap, mob at x=-5 → x=2395, both clean.
+- GREEN BOLTS: the archer's bolts DID damage (28 to a stationary player in a
+  physics test) — but I'd over-nerfed them (projSpeed 250→225 + 28° fan) so a
+  moving player never got clipped. Restored projSpeed to 300 (kept the wide 26°
+  fan — slip between the three), so standing still is punished. A circle-strafing
+  white-gear player now eats ~66 dmg / 7s from two archers (pressure, survivable).
+Graveyard smoke(15) + boss(12) green (bossWave mobs correctly excluded from wrap).
+
+---
+
+## 2026-07-15 · M5.6 BALANCE · THE GRAVEYARD reachable + tuned (?v=m5f)
+
+Red: "impossible to get to the boss." Built a PLAYER-SIM (test/m5_graveyard_
+playersim.js — a white-gear bot that kites, dodges gas/graves/wail-cones, breaks
+fences, grabs wisps) to diagnose. ROOT CAUSE was structural, not numbers: the
+solid fences never opened, so the swarm + the player got walled into unreachable
+pockets and the kill quota could never fill. Two fence bugs + the fixes:
+- hitFence's once-guard lived on the POOLED shot sprite (shot._hitFence), so a
+  recycled shot carrying a stale flag sailed through panels without damaging
+  them → "fences sometimes not hittable" (Red). Moved the guard to shot.proj
+  (fresh per fire). Player arrows now reliably smash fences.
+- Mobs couldn't break fences at all. Added mobChewFence — a mob pressed against
+  a panel gnaws it open (fence.chewDmg per fence.chewMs). The swarm never
+  dead-ends; a boxed-in player is never safe for long.
+- Symmetry (Red: "unavoidable damage"): ENEMY shots now die on fences too — an
+  archer can't snipe you through a wall your own arrows can't cross.
+Post-fix sim (white gear, lvl 1): 77 kills in 91s (~51/min → portal in ~3 min),
+0 stuck-on-walls, 0 deaths; the only damage that landed on the perfect-dodger
+bot was bone-archer bolts (contact/gas/hands/wail all kited to zero — a human
+takes those). Number tune for "beatable in white gear but HARD":
+- Banshee WAIL is now a TELEGRAPHED cast (windupMs cone LOCKS at cast start —
+  step out; was an unavoidable auto-hit, Red) + bansheeWailCastFx ground cone.
+- Bone Archer fan widened 12°→28° so you can slip BETWEEN the three green bolts
+  (Red: "the green projectiles seem almost undodgeable"), + slower projSpeed.
+- Softened chip damage across the roster (contact/gas/curse/hand dmg down),
+  slower/rarer bell (55s, surge 1.2×), calmer graves. Fence hp 22 · chew 11/420ms.
+- unfreeze() shifts the new banshee wailUntil + fence lastChewAt clocks.
+Full battery green (m47 spot-check) + graveyard smoke(15) + boss(12).
+
+---
+
+## 2026-07-15 · M5.6 BUILD · THE GRAVEYARD — biome 3 SHIPPED (?v=m5e)
+
+Built the entire locked design in one session (continuation). THE GRAVEYARD is
+now the third live realm (console slot unlocked). Full battery green.
+
+- ART (world_art.js + textures.js): ported the 8 mob models (Ghoul · Rattlebones
+  · Bone Archer · Tomb Golem · Corpse Bloater · Banshee · Mummy · Necro Acolyte),
+  THE GRAVEKEEPER boss (matches Red's concept art; bumped to ~2× the other bosses
+  per Red), a GRIM REAPER, graveyard/path tiles, and 17 decor props — all from
+  the approved render scripts via a `u=S/80` parity toolkit. Mob display sizes
+  bumped for readability (Red). DESTRUCTIBLE FENCE damage frames (intact→bent→
+  mangled) in BOTH a horizontal front-face and a VERTICAL top-view (Red: the
+  vertical runs must read as the top of the fence, not a rotated face).
+- DATA (data.js): DATA.realms.graveyard {kind, witching cfg} · biome roster ·
+  8 mob rows with 6 NEW verb flags · bosses.gravekeeper {graveArrival, 5-wave
+  immunity loop, reaper, Necronomicon verbs (radial=Bone Storm / stream=Soul
+  Volley + explodeCorpse/graspingHands/curseSigils), 6 hints, title KEEPER OF
+  THE HOLLOW EARTH} · dropTable · console slot (unlocked at ship).
+- WORLD (scenes.js): setupGraveyard — planned S-path layout (south iron GATE
+  spawn that AUTO-OPENS → lantern path → 4 fenced plots → arena open grave),
+  SOLID destructible iron fences (Red: no doorways, smash through), green motes.
+- THE WITCHING CYCLE (scenes.js): witching fog (conceal; lamps/candles/fungus
+  burn holes) · restless graves (green warn → hands erupt dmg/grab + a mob claws
+  out; hands credit) · soul wisps (drift to crypt; pickup buff; banshees EAT
+  them) · the CURSED BELL (~45s: fog thickens, corpses rise, mobs surge, grave
+  wave). Ambient stands down during arrival/boss; the bell becomes the boss's
+  wave opener.
+- MOB VERBS (entities.js): lunge (ghoul pounce-dash) · regen (golem heals unless
+  hit) · deathGas (bloater cloud, scene) · wail (banshee cone+slow) · contactCurse
+  (mummy DoT) · raise (acolyte resurrects corpses, capped) + bell surge.
+- THE GRAVEKEEPER (scenes.js): grave-climb arrival → 5-wave immunity loop (IMMUNE
+  while a wave walks → clear strips 20% max HP; hurtBoss bounces + 'IMMUNE' popup)
+  → REAPER'S MARCH (edge spawn, slow walk, touch = instant death) → verbs. Boss
+  bar greys while immune.
+- MUSIC (data.js): "THE GRAVEYARD" ported from the approved v3 render to the chip
+  section-composer — 6 voices (gallop bass · organ drone · 16th chug · frantic
+  arp · bell tolls · soaring lead), D harmonic minor, 168bpm, 124 bars = 496
+  beats (all tracks equal), ~2:57. + belltoll/reaperdrone SFX (rest reuse kit).
+- TESTS: new test/m5_graveyard_smoke.js (15) + test/m5_graveyard_boss.js (12,
+  deterministic — headless throttles real-time delayedCalls). Updated m3c/m47/
+  grove bestiary counts (8 mobs + 3 bosses = 11 now the Gravekeeper is listed).
+  Fixed a latent bestiary bug: boss pattern-notes said "undefined aimed bolts"
+  for non-projectile verbs (hit grove/conductor too) → now "a telegraphed strike".
+- unfreeze() shift list extended for every new clock (mob lunge/wail/regen/raise/
+  surge · fog/grave/bell/wisp/gas · player curse · boss verb clocks). banner()
+  now REPLACES the previous banner (Red: two boss banners overlapped in a shot).
+- GIT: GitHub still at m3q — m4a THROUGH m5e now wait in one push.
+
+---
+
+## 2026-07-15 · M5.6 DESIGN · THE GRAVEYARD — biome 3 fully designed (no code yet)
+
+Planning/design session (chat deliverables; build next session). Red drove
+every pick through numbered sheets + question rounds — see docs/GRAVEYARD_PLAN.md
+(the whole locked design lives there).
+
+- THEME: graveyard / ghost zombies → realm name **THE GRAVEYARD**.
+- ROSTER locked (8 of a 20-mob 160×160 sheet): Ghoul · Rattlebones · Bone
+  Archer · Tomb Golem · Corpse Bloater · Banshee · Mummy · Necro Acolyte.
+- DECOR locked (17 of a 20-sheet; cut stump/open-grave/bone-pile) + PLANNED
+  scene layout PNG: south iron gate (AUTO-OPENS on approach) → lantern-lit
+  winding path → four fenced plots (old graves / monuments / crypt+angel /
+  celtic shrine) → boss arena. **Iron fences DESTRUCTIBLE** (Red).
+- SIGNATURE SYSTEM — THE WITCHING CYCLE (Red picked all four candidates):
+  witching fog (conceal, lamps burn holes) + restless graves (hand-erupt
+  hazard/spawner) + soul wisps (pickup buffs, banshees eat them) + CURSED
+  BELL conducting all of it every ~45s (corpses rise, eyes flare, graves wave).
+- BOSS — **THE GRAVEKEEPER** (Red's concept art = canon; hi-fi sprite
+  approved): climbs out of a grave; IMMUNE while a wave lives; 5 waves, each
+  cleared = −20% max HP; REAPER'S MARCH one-shot walker at map edge (touch =
+  death); Necronomicon verbs (Explode Corpse · Bone Storm · Grasping Hands ·
+  Curse Sigils · Soul Volley filler).
+- MUSIC: "THE GRAVEYARD" v3 approved direction — dark gothic METAL, epic +
+  frantic, 168bpm D harmonic minor, 3:00 (v1 straight-metal + v2 slow-gothic
+  rejected). WAV delivered; port to data.js composer at build.
+
+Files touched: docs/GRAVEYARD_PLAN.md (new), docs/MILESTONES.md (M5.6 section),
+docs/NEXT_SESSION.md (rewritten for the build session). No game code this
+session — ?v= stays m5d.
+
+## 2026-07-15 · M5.3–5.5 · Dev mode · level-is-cosmetic + mob scaling · COLLECTION (?v=m5d)
+
+A run of user directives reshaping progression for testing + a collection loop.
+FULL BATTERY GREEN (m2 · m3b · m3c · m4 · m4b · m46 · m47 + **m5_grove_verify 46**).
+
+**DEV MODE (Settings toggle)** — one switch (menu.js) grants ALL GEAR + MAX
+LEVEL + IMMORTALITY. `SAVE.settings().dev` (device-level); immortality reads
+live in Entities.hurtPlayer + trainKill; `applyDevMode()` maxes the level and
+fills the vault with the class ladder (also collects it). Vault bumped to **24
+slots** (a full single-class ladder fits) and the vault UI now SCROLLS
+(Up/Down + wheel).
+
+**LEVEL IS COSMETIC (user)** — `DATA.xp.levelPower:false` → SIM.statsAtLevel
+drops the level term, so a hero's base stats never grow with level; power is
+GEAR + POTIONS only. Instead **MOBS SCALE WITH YOUR LEVEL**: HP · contact/shoot
+damage · XP all ×`1+(lvl-1)*waves.mobLevelScale` at spawn (L60 ≈ ×2.77). Gear
+still applies after the cap clamp, so it pushes totals past caps as before.
+
+**COLLECTION (user)** — `account.collected` (survives death). A chest roll of
+an already-owned item does NOT re-drop; it pays BONUS XP by rarity
+(DATA.collection.dupeXp[tier]). NEW items are collected + the chest overlay is
+now a SUMMARY (no manual take): gear AUTO-UPGRADES to the best owned piece per
+slot, and REMAINS across death — a fresh hero auto-fills EMPTY slots from the
+collection on realm entry (fill-empty only, so a manual downgrade for testing
+is never yanked back up; a chest find upgrades). Off-class gear never
+auto-equips. Vault equip/bank + dev-grant all mark items collected.
+
+Files: data.js (xp.levelPower, waves.mobLevelScale, vault 24, collection.dupeXp),
+save.js (dev setting, account.collected + migrate default), sim.js
+(mobLevelMult, bestCollected, level-cosmetic statsAtLevel), entities.js (mob
+level scaling on spawn/shoot, dev immortality), menu.js (Dev mode toggle),
+scenes.js (collectItem/autoEquipFromCollection/resolveLootRolls, chest summary,
+contact scaling, vault scroll, dev/immortality), index.html (?v=m5d). Tests:
+m5 +10 checks; m3b loot flow rewritten for the collection summary + cap test
+updated for level-cosmetic; m3c loot-count = items+dupes.
+
+---
+
+## 2026-07-15 · M5.2 · Muzzle fix + LEGENDARY CLASS KITS — the OP endgame chase (?v=m5c)
+
+Live playtest stream from Red, all shipped + FULL BATTERY GREEN (m2 · m3b ·
+m3c · m4 · m4b · m46 · m47 + **m5_grove_verify 38**):
+
+**"What is sticking out the back of the archer?"** — the 64px hi-fi arrow
+spawned at the BODY CENTER, so its gold fletching poked out of the hero's
+back for each shot's first frames (auto-fire = a permanent tail feather).
+All bow shots now fire from a MUZZLE point 20px along the aim.
+
+**FULL-LEGENDARY SET AURA** (user): all four equipped slots T5 wraps the
+hero in a class-colored body glow — archer GREEN · mage BLUE · knight RED
+(cls.setGlow; the T5 weapon keeps its own orange burn). SIM.fullLegendSet
+is the one gate for every set bonus.
+
+**CLASS LEGENDARY KITS** (user: "intended to be very OP" — the set is a
+sub-1%-per-slot chase):
+- KNIGHT: the epic Ragefang (+ legendary Worldsplitter) sweeps a FULL 360°
+  cleave (mod.arcDeg override through SIM.weaponMod → meleeSwing + the swing
+  animation). FULL SET = UNLIMITED RAGE (whirlwind drain 0 — the only
+  bypass of the 6/s floor).
+- WIZARD: epic+ rods make the STORM BARRAGE HOMING MISSILES (proj.homing —
+  updateProjectiles steers toward the nearest mob/boss, 7 rad/s). FULL SET
+  fires the machine gun in ALL DIRECTIONS: 8-ball radial per trigger, one
+  ball's MP cost, every ball homing.
+- RANGER: epic+ bows give UNLIMITED ENERGY (pool pins full) and upgrade the
+  BASIC ATTACK to the FIRE VOLLEY (burning fan on the weapon's own cadence,
+  free). FULL SET: the fan tightens to a SHOTGUN (+4 arrows, 24°) and every
+  arrow turns EXPLOSIVE (60px AoE, 0.6× arrow dmg) — overlapping blasts
+  STACK by design (no shared-hit guard; the direct-hit target is excluded).
+
+Files: sim.js (weaponMod arcDeg/homing/volleyShot/freeEnergy +
+fullLegendSet), data.js (w4/w5 · ww4/ww5 · kw4/kw5 mods + descs, setGlow
+colors), entities.js (muzzle, auto-volley, radial/homing barrage, unlimited
+rage, set aura), scenes.js (meleeSwing arc override, arrowExplode),
+index.html (?v=m5c), m5 suite (+8 checks: fit/glows/muzzle/kits/steering).
+
+---
+
+## 2026-07-15 · M5.1 · Playtest bugfixes: scouter overflow + LEGENDARY weapon glow (?v=m5b)
+
+Red's first grove playtest report — two bugs, both fixed + verified:
+- **Scouter readout overflow**: the Grovekeeper's SIX hints ran under the
+  engage prompt and out of the panel. showScouter now sizes the TACTICAL
+  READOUT adaptively (font steps 11→10→9→8 until the block clears cy+188),
+  wrap width 402 (was spilling 10px past the right border), block starts
+  below BOUNTY, engage prompt pinned at cy+206. Works for any hint count.
+- **LEGENDARY GLOW** (user: "legendarys should give your weapons a glow"):
+  an equipped T5 weapon gets a breathing orange additive aura riding the
+  held sprite (Entities.updatePlayer — realm AND chamber; depth 10.8 under
+  the weapon; hidden on death/unequip; alpha follows the i-frame blink).
+m5_grove_verify grew to **30** (readout-fits + glow on/off); m47 spot-run
+green (shared scouter code). Files: scenes.js, entities.js, index.html
+(?v=m5b), test/m5_grove_verify.js.
+
+---
+
+## 2026-07-15 · M5.0 · THE GROVE SHIPS — second realm, 8 new mobs, phase-two boss, theme song (?v=m5a)
+
+The whole grove, planned yesterday, built today in one rapid-fire session
+(picks + 8 live reshapes mid-build). FULL BATTERY GREEN: m2 22 · m3b 27 ·
+m3c (Grovekeeper retitle) · m4 18 · m4b 26 · m46 16 (burn-shift fixture
+hardened vs slow-boot flake) · m47 18 · **NEW m5_grove_verify 28**.
+
+**REALM ROUTING (DATA.realms):** the portal machine's map choice finally DOES
+something — cfg.map picks biome/boss/world-kind/music. THE GROVE went live on
+the console (sealed1 slot); the bestiary follows the selected destination.
+No-map starts remain the train yard, so every old suite still routes.
+
+**THE WORLD:** grovegrass/canopy tiles, the HEARTWOOD (192px great tree) at
+the north clearing, pulsing glowshrooms, wandering fireflies, and the user's
+14 decoration picks (of a numbered 20-option sheet: oak willow toadstool
+fairy-ring pond boulders stump flowers lanterns arch runestone log spring
+obelisk) hash-scattered evenly (mulberry-mix — no banding).
+
+**FALLING ANCIENT TREES** (the grove's ambush trains): creak + flashing
+shadow lane → the trunk slams (mobs mowed WITH credit, player hurt
+survivable, shoved clear of the new wall) → the trunk stays as a static
+collider ~8s → crumbles to leaves. Quiet while the boss lives.
+
+**ROSTER (8 + 2 mini types):** Moonmoth fast/squishy · Puffcap slow → splits
+into 10 minis in 4 cap recolors · Pixie Trickster blinks between pink orb
+fans · BLOOM PIXIE (blue): glow trail that RESURRECTS corpses, death-bloom
+raises everything in a radius, periodically summons a Bumblebrute ·
+Moss Golem tank · Seedling Turret radial GOLD orbs · Snapdragon aimed PINK
+fans · BUMBLEBRUTE: 0.5s SUMMON cast bar over his head → 4 ward bees (3
+recolors) → IMMORTAL until they die ('IMMUNE' popups; environmental kills
+ignore wards). Pixies/moth/bees FLAP (2-frame texture toggle). Colored shots
+= neutral orbShot + data tint (and a latent pooled-tint leak fixed by
+clearTint-on-fire).
+
+**THE GROVEKEEPER (phase-two boss):** GROWS OUT OF THE GROUND when you enter
+the boss portal (camera pan, dirt mound, sapling→full-size Back.Out, leaf
+bursts). Verbs: TIMBER (his tree-fall — 200 fromBoss, trunk lingers) ·
+THORN MORTAR (marked lobs + ticking brier patches) · OVERGROWTH (vine slow)
+· SUNLANCE (sweeping gold beam) · SPORE SURGE (ring of 6 mini puffcaps).
+Radial/stream stay as PETAL BURST / NEEDLE VOLLEY (tinted). Title: WARDEN OF
+THE HEARTWOOD. **PHASE TWO:** first kill drops him to a grey husk — 8 REAL
+pixie mobs fly in from the clearing edges and channel his revival for 3.5s;
+every one killed cuts the restored HP (floor 30%); survivors turn hostile.
+He rises enraged (spd ×1.15, pattern clocks ×0.85). The second kill drops
+the chest. hurtBoss is a no-op mid-channel; updateBoss idles him.
+
+**"HEARTWOOD"** — original 8-bit grove theme (user: magical + INSPIRING,
+strictly 8-bit): 2 squares + 2 triangles, C major 96bpm, a section-composer
+builds exactly 288 beats = 3:00/loop (intro → verse → lift → soaring chorus
+→ music-box bridge → double final chorus). WAV preview delivered. New SFX:
+creak/crash/chime/revive. Per-realm music routing (yard keeps Swarmfront).
+
+Files: data/entities/scenes/textures/world_art + index.html (?v=m5a) +
+test/m5_grove_verify.js + artdev renderers (mobs grid, decor grid, assets
+sheet, music WAV). Gotchas honored: unfreeze shift list extended (5 verb
+clocks + blink/cast/summon/glow/trunk/patch/corpse/revive), mechanic spawns
+QUEUED (group.get-inside-iterate), cast bars cleared on every death path,
+scene-reuse resets for both worlds' state, fromBoss on every verb.
+
+---
+
+## 2026-07-14 · M5 seed · THE GROVE map plan + 20-mob option grid (design only — no code)
+
+New plan from Red: **the only remaining work is maps + themed mobs for those
+maps.** First up: the Grovekeeper's grove. Direction locked via design
+questions: **lush enchanted forest** tone (danger inside beauty) and
+**FALLING ANCIENT TREES** as the signature map hazard (telegraph → lane crush
+→ mow credit, trains-style, plus a twist: the trunk LINGERS as a wall ~8s).
+
+**Landed (docs/art only):**
+- `docs/GROVE_PLAN.md` — full map plan: 3 realm-name options, hazard spec +
+  data sketch, ambient "living grove" animation pass, the 20-mob candidate
+  table, and the GROVEKEEPER rework (Conductor treatment): HEARTWOOD WAKES
+  arrival cinematic + verbs TIMBER CALL / THORN MORTAR / OVERGROWTH /
+  SUNLANCE (+ optional SAPLING SURGE); old radial/stream kept as reflavored
+  PETAL BURST / NEEDLE VOLLEY filler.
+- `artdev/render_grove_mobs.js` + `artdev/grove_mob_options.png` — 20
+  numbered grove mob candidates, 48px hi-fi style (ranger_art primitives,
+  conductor-grid pattern). Red picks ≥8 by number or name.
+
+**Waiting on Red:** mob picks, realm name (A/B/C), keep-or-cut the 5th boss
+verb. No code, no ?v= bump, no test changes this entry.
+
+Another rapid user-directive session, all shipped + green.
+
+**PORTAL MACHINE map selector** (user: "map selecter dropdown + several ???
+maps greyed out till we build more"): DATA.console.maps drives a real dropdown
+in the machine UI — THE TRAIN YARD selectable, five greyed "??? — SEALED /
+LOCKED" placeholders (only locked:false is pickable). consoleSetMap/
+toggleMapDropdown (headless-callable); the choice rides in the portal cfg
+(cfg.map) for when more realms go live; REALM CLEAR detail now shows the
+selected map's name. Replaces the old sealed-realm rows.
+
+**WIZARD out-of-combat regen** (user): the mage regens like the Ranger but on a
+LONGER lull — cls.hpRegen { delayMs 5000, pctPerSec 0.03 } (Ranger stays 2500).
+The dodge-regen aura now tints by class accent (Ranger green / Wizard blue).
+Knight still has none (lifesteal is his tool).
+
+**YARD MOB MECHANICS** (user directives, all TUNE ME):
+- DYNAMITE MOLE — no longer a contact suicide. It SURFACES on-screen near you
+  (director pickSurfacePoint for fuse mobs), holds still and FLASHES under a
+  red blast-radius warning ring, then EXPLODES after a LONG fuse (3.8s — time
+  to walk clear). SPARING: unlockAt 70 + maxConcurrent 2 (director cap). The
+  blast catches the PLAYER **and** nearby MOBS; mob kills CREDIT the player
+  (routed through Entities.hurtMob → mob-died). New BOOM sound + a FIREBALL VFX
+  (core flash + orange body + shockwave ring + additive glow + flung embers) +
+  a brief 150ms shake. Shoot it to defuse (normal kill/XP); ignore it and it
+  blows (self uncredited).
+- CONDUCTOR ZOMBIE — no longer a shooter; a SLOW chaser (spd 38) that drips a
+  GREEN SLIME TRAIL. Patches are short-lived (~2.4s, fade + self-destruct via
+  tween) and tick small damage on the player standing in them
+  (RealmScene.dropSlime/updateSlime).
+- SMOG SERPENT — no longer a shooter; a FOG CASTER. Pulses a smog cloud 5s ON /
+  5s OFF; while ON, every mob in the cloud (itself included) is CONCEALED —
+  the player's shots pass THROUGH them unless the player is standing inside the
+  cloud (shot→mob overlap guard reads m.mob.concealed + playerInFog).
+  RealmScene.updateFog owns the phase, the fog sprite (depth 7), the conceal
+  flags, and the ghost-alpha paint.
+- TRAIN MOWS now CREDIT the player too (kills/XP/quota) — the ambush train's
+  trainCollisions routes through RealmScene.killMobCredited (was a silent wipe).
+
+All new absolute clocks shifted in unfreeze() (mole fuseAt, zombie lastSlimeAt,
+serpent fogPhaseAt, slime dieAt + tick clock). New mob decorations (mole warn
+ring, serpent fog sprite) cleared on every death path via Entities.clearNameTag;
+slime cleared with the swarm in annihilateSwarm.
+
+Testing: FULL BATTERY GREEN — m2 · m3b · m3c (+MAP-dropdown checks: real
+selectable / ??? locked / cfg carries the map) · m4 · m4b · m46_verify (16:
+regen now Ranger+Wizard) · m47_verify (18: mole fuse+blast-credits-mobs,
+zombie slime drop/tick/expire, serpent fog conceal + playerInFog). Screenshots
+delivered: map dropdown, fog+slime, mole fuse ring, fireball (6 credited kills).
+
+Files: data.js entities.js scenes.js index.html (?v=m4s) · test/m3c,m46,m47 ·
+docs (this, MILESTONES, NEXT_SESSION).
+
+---
+
+## 2026-07-14 · M4.8 · Ranger DODGE REGEN + yard-mob readability pass (?v=m4r)
+
+Quick follow-ups after the m4q ship (all user directives):
+- **RANGER DODGE REGEN** (user: "add a regen so when I'm dodging effectively I'm
+  regenerating"; "slow to medium speed"): the Ranger takes full damage (dmgTaken
+  1x) and has no lifesteal — so NOT GETTING HIT is his heal. Stay untouched for
+  hpRegen.delayMs (2500) and he heals hpRegen.pctPerSec (0.03 = 3% of MAX HP/s →
+  ~33s empty→full, slow trickle that tops off chip damage but can't out-heal a
+  beating). Any hit resets it (lastHitAt). RELATIVE window, no unfreeze shift
+  needed. Ranger-only (gated on cls.hpRegen). WORLD CUE: a soft green aura +
+  drifting '+' motes while st.regenning (Entities.updatePlayer sets the flag;
+  RealmScene.updateRegenGlow draws it). data.js + entities.js + scenes.js.
+- **YARD MOB SIZES** (user: Furnace Imp "increased in size so there more
+  readable"; Crossing Creep "slightly"): new textures.js MOB_DISPLAY per-mob
+  override (default 40) — Furnace Imp 58, Crossing Creep 47. mobModel now keeps
+  the body a CONSTANT fraction of the 48px texture, so the world HITBOX scales
+  WITH the sprite (bigger art = proportionally bigger, still-fair target).
+
+Testing: m46_verify EXTENDED to 16 (regen blocked-in-delay / heals-after /
+regenning flag / off-at-full · ranger-only · enlarged-mob scale+hitbox) — ALL
+GREEN. Regression: m2 · m4 · m4b · m47_verify all GREEN (regen is gated so the
+other two classes' updatePlayer is untouched; mob resize doesn't perturb the
+conductor suite). Screenshots delivered: the green regen aura + a mob size
+comparison.
+
+Files: data.js entities.js scenes.js textures.js index.html (?v=m4r) ·
+test/m46_verify.js · docs (this, MILESTONES, NEXT_SESSION).
+
+---
+
+## 2026-07-14 · M4.6+M4.7 · THE CONDUCTOR & THE LIVING YARD — six-tier class gear, fire volley/energy, XP 60-cap, boss + consists + 8-mob roster (?v=m4q)
+
+The biggest content session yet — user directives arrived live all night and
+all shipped. USER PLAYTEST VERDICT first: the pre-m4q build was "perfect" —
+class models + train yard APPROVED (hi-fi arc closed); his balance feel-notes
+became M4.6.
+
+**M4.6 — GEAR + BALANCE (user's ladder + feel-notes):**
+- SIX RARITY TIERS: grey ABUNDANT · white COMMON · green UNCOMMON · blue RARE ·
+  purple EPIC · orange LEGENDARY ("very rare" — ~0.9%/roll boss tail). Labels
+  lead with the rarity word; tier colors tint icons/rows everywhere.
+- CLASS-LOCKED GEAR, 48 items: bows/quivers (Ranger) · staves/TOMES (Wizard —
+  cut barrage MP/ball) · greatswords/WAR HORNS (Knight — cut whirlwind drain).
+  NO off-class drops: SIM.resolveDrop remaps every rolled key to the roller's
+  class line (same slot/tier/RNG stream). The vault can HOLD off-class gear
+  (class-tagged, dimmed) but refuses to equip it. SIM.abilityFor generalized
+  with floors (mpCost 4 · mpPerShot 0.5 · mpDrainPerSec 6).
+- SAVE v4: item keys renumbered to match tiers (lossless remap in migrate());
+  pre-lock off-class equipment REFLAVORS to the wearer's line.
+- RANGER: FIRE VOLLEY — arrows ignite (ATT-scaled burn DoT, mobs AND boss, no
+  knockback/no evolve on ticks, ember tint; burn clocks on the unfreeze list)
+  + ENERGY resource (yellow orb via the RAGE plumbing, regen 4→10).
+- WIZARD: barrage 2.5→1.25 MP/ball (spam runs twice as long).
+- KNIGHT+WIZARD: dmgTaken { mob 1.3, boss 1.6 } — applied in hurtPlayer before
+  DEF; every boss source (bolts/contact/verbs) tagged fromBoss.
+- XP REWORK: cap 20→60, needed = 2000 + 25·L → ~ONE LEVEL PER MAP (cap ≈71
+  maps); class growth ×19/59 (level-60 = old level-20 power).
+
+**M4.7 — THE CONDUCTOR + TRAINS + MOBS (user directives + reference images):**
+- THE CONDUCTOR: user picked #6 "GRIM LINE" from a 10-model grid
+  (artdev/render_conductor.js — committed, regenerates anytime) + "stop watch
+  double the size". Replaces Grovekeeper as the yard boss (treant data KEPT for
+  a future grasslands map; realm.boss/biome are data picks now).
+- ARRIVAL CINEMATIC: the Styx Express steams into the nearest lane (camera
+  pans out to meet it; fresh ambush trains gated while it runs), brakes with a
+  steam burst, HE STEPS OFF, the Express departs → scouter → fight.
+- TRAIN VERBS (scene-owned; every absolute clock on the unfreeze shift list):
+  GHOST TRACK + GHOST EXPRESS (spectral consist down a summoned track through
+  your position — 200 dmg × boss mults = one-shots the ungeared, gear can
+  survive; user spec) · RAILROAD TIES (marked-circle AoE lobs, first dead-on) ·
+  THE SCHEDULE (pocket watch slows PLAYER MOVEMENT — st.slowUntil/slowMult,
+  gold haze) · LANTERN SWEEP (rotating ghost-blue beam, tick damage in the arc).
+- TRAIN CONSISTS: covered-hopper GRAIN CAR (GBRX ref) + sliding-door BOXCAR
+  (L&N ref) — 1 model × 4 recolors each; ambush trains haul 2–15 mixed cars;
+  the WHOLE consist kills/mows (per-segment collision); pass end waits for the
+  tail; ghost trains reuse the models via a luminance→spectral remap.
+- YARD MOB ROSTER (user sheet of 8, hi-fi 48px each): Coal Golem · Crossing
+  Creep · Furnace Imp · Boxcar Brute · Coupling Chomper · Conductor Zombie ·
+  DYNAMITE MOLE (new `detonate` flag: his contact hit is his death, no XP) ·
+  Smog Serpent. New `trainyard` biome; bestiary now biome-scoped (+ all
+  bosses); size-aware portraits (scouter + bestiary handle 128px art).
+
+**Testing:** full battery GREEN — m2 22 · m3b 29 · m3c (PORTED back into the
+battery: m4n records/hi-fi drift fixed) · m4 18 · m4b 26 — plus NEW
+test/m46_verify.js (13: burn+unfreeze, energy, dmg mults live, class drops,
+tome/horn mods in the channels, vault lock, labels) and test/m47_verify.js
+(15: biome roster, detonate, consists kill per-car, arrival order, all four
+verbs incl. a verified one-shot, clock shifts, boss-death cleanup). Suites
+that reach the boss now waitForFunction(r.boss && r.scanning) — the arrival
+takes ~3s.
+
+Files: data.js sim.js entities.js scenes.js save.js textures.js world_art.js
+index.html (?v=m4q) · test/m2,m3b,m3c + NEW m46_verify,m47_verify ·
+NEW artdev/render_conductor.js · docs (this, MILESTONES, NEXT_SESSION, TESTING).
+Screenshots delivered in chat: Styx arrival/step-off, full conductor fight,
+yard swarm w/ yellow energy orb, loot overlay w/ LEGENDARY.
+
+---
+
+## 2026-07-14 · AUDIT · FULL m4a→m4o CODE AUDIT — 10 bugs fixed, knight cleave root-caused, hi-fi HUD, folder cleanup (?v=m4p)
+
+Full audit of everything since the 07-12 audit (three parallel audit passes +
+adversarial verification). **Complete findings: docs/AUDIT_2026-07-14.md.**
+Fixed (all verified by a 15-check in-engine run + full battery m2 22 · m4 18 ·
+m4b 26 GREEN): (1) USER-REPORTED knight cleave whiffs — hit test was
+center-point-only, now target-size-aware (visible blade overlap = hit);
+(2) level-ups no longer refill the Knight's RAGE (startsEmpty resources keep
+their value); (3) unfreeze() now shifts ALL absolute clocks (train telegraph,
+tornadoes, frost slows, splitter forks, boss patterns) — pausing used to eat
+them, worst case launching the instakill train with zero telegraph the frame
+the menu closed; (4) train frozen during hitstop (was advancing into a
+movement-frozen player); (5) no new trains on the death screen (endless
+shake/horn under YOU DIED); (6) pendingPortal no longer leaks across save
+slots (cleared at the title = slot boundary); (7) corrupt saves can't brick
+the title (migrate/valid wrapped — any throw = "corrupt" slot); (8) builder
+PLAYTEST ▶ loads the actual map again (explicit mapId exempts the train-yard
+hardwire); (9) hifiWorldOn() gates on _worldBuilt (art-module-absent fallback
+actually falls back now); (10) portal-entry fade + resize no longer eats the
+run config (pendingPortal consumed at Realm start, not walk-in). Design notes
+(NOT changed, see report): hi-fi hurtbox is 2x classic BY DESIGN (matches the
+2x sprite; balance knob = d.body), train kills award no XP (wipe pattern),
+train ignores the boss.
+
+**HI-FI HUD (user ask: bottom HUD "disconjointed").** NEXUS_ART gains
+drawHudOrbFrame (riveted beveled ring housing, gold rivets, cyan dock pips) +
+drawHudPlateMid (tileable conduit plate; the XP bar renders inside its dark
+groove) + drawHudPlateCap (rounded dock, glowing power node, gold trim).
+textures.js buildHudArt; RealmScene.buildHud creates frames/plate/caps
+(classic fallback when art absent), updateHud docks them every frame
+(RESIZE-safe); the bar's old bright-blue floating border dropped in hi-fi
+(subdued steel dividers). One connected console in the chamber's language.
+
+**CLEANUP.** All three art-test backup folders moved off the root into
+`_to_delete/` (gitignored) — user empties at leisure.
+
+Files: index.html (?v=m4p) · scenes.js · entities.js · textures.js ·
+nexus_art.js · save.js · docs/AUDIT_2026-07-14.md (NEW) · docs.
+
+## 2026-07-14 · M4.75 · HI-FI IS THE GAME NOW — art test promoted to default, ART TEST settings removed, Starweaver wizard + Dark Knight land (?v=m4n)
+
+The art-test arc GRADUATED (user call): "keep the hi-fidelity maps, the 64
+character model, the hi-fi monsters and boss… take out the settings and make
+that default orientation."
+
+**1. HI-FI HARDWIRED AS THE DEFAULT.** `hifiWorldOn()` / `hifiChamberOn()` now
+return true, `selectedModelId()` returns '64' (textures.js); the
+rangerModel/hifiWorld/hifiChamber settings keys are GONE from save.js defaults
+(stale keys in old saved settings are ignored by the typed merge — no
+migration needed). menu.js: the whole ART TEST section removed, KEYBINDS moved
+up, panel back to h=548. Only the 64px Ranger model is built now (32/128/160
+dropped — faster boot). The train-yard realm + ambush train is the normal game
+(user confirmed keeping the instant-death train); classic art/map paths
+survive as code fallbacks only (art module absent). Realm mapId path is
+bypassed by the train yard.
+
+**2. WIZARD + KNIGHT HI-FI MODELS — picked from design grids like the m4m
+vault.** Rendered 10 forward-facing T-pose wizards + 10 knights (numbered PNG
+grids, artdev render_class_models.js). User picked **wizard #3 "Starweaver"**
+(deep-navy robe + gold stars, wide-brim hat — "some of the stars from his
+chest on his hat also" → 2 cone stars + a tip star) and **knight #6 "Dark
+Knight"** (gunmetal plate, breathing RED visor glow, outward spiked pauldrons,
+stub horns, red chest emblem). NEW `game/js/class_art.js` (same put()/frame
+contract as ranger_art): drawWizardBody/drawKnightBody idle+walk (star
+twinkle; heavier knight gait) + drawStaffHi (star-crowned staff) + drawSwordHi
+(red-gem greatsword). textures.js: CLASS_HI/classModelDesc/buildClassModels +
+**playerModel(cls)** — THE class-model lookup. entities.applyModelSkin
+generalized to all classes (ranger keeps its arm/bow rig; wizard/knight get
+heldKey weapons through the existing upright/melee carry math — p._rangerModel
+now holds any class's model). Class-picker cards preview all three hi-fi
+models (scenes.js).
+
+**3. TESTS.** Full battery GREEN on m4n: m2 22 · m4 18 · m4b 26 (suites now
+assert wizard64/staff64 + knight64/sword64 in the nexus). Fixed a REAL m2
+brittleness the default flip exposed: step 16 compared live player stats
+(WITH equipment) to a no-equipment recompute — the train-yard loot stream
+legitimately dropped +4 DEF Leather Armor into the boss chest and broke it;
+'before' now recomputes without equipment (apples-to-apples). In-engine
+screenshots: picker/chamber/realm, zero console errors.
+
+Files: index.html (?v=m4n + class_art.js script tag) · class_art.js (NEW) ·
+textures.js · entities.js · scenes.js · menu.js · save.js · test/m2+m4+m4b ·
+docs. NOT changed: data.js (no balance), world_art/nexus_art/ranger_art.
+
+**m4o addendum (same session, live user feedback + reference image):** the
+staff was overlapping the wizard's body. Lead arm re-baked STRETCHED OUT to
+the side (hand at 0.305S) and the staff now stands at that hand — new
+per-model `heldOffset` (world px, wizard=20) in CLASS_HI/classModelDesc, read
+by updatePlayer's upright branch (classic carry math untouched). Staff shaft
+slimmed (H*0.22 → H*0.14). m4 suite re-run GREEN; ?v=m4o.
+
+## 2026-07-14 · ART TEST · HI-FI CHAMBER SHIPPED & POLISHED — split toggles, combined records, keypad vault (?v=m4j → m4m)
+
+Second day of the reversible hi-fi art arc: the PORTAL CHAMBER remake landed, then
+was polished through rapid screenshot-driven user feedback. Everything gated on a
+new independent toggle; classic chamber untouched when OFF.
+
+**1. HI-FI PORTAL CHAMBER (m4j).** NEW `nexus_art.js` (reuses ranger_art
+primitives): arcane floor/wall tiles, the beveled PLATFORM ring, the PORTAL as an
+arched stone DOOR with a separate spinning swirl DISC, console/bestiary terminals,
+lever, conduit, records wall screen, vault. textures.js `buildHiFiChamber()` +
+NEXUS_HI map + `nexusKey/nexusScale` (r = classicPx/hiPx keeps on-screen size
+identical). `chamberAmbient()` keeps ring lights breathing / well pulsing /
+conduit pulses flowing continuously; `powerUp()` takes over while a portal is
+live. Portal is shared with the realm boss-exit → hi-fi if EITHER toggle is on.
+**The single Hi-Fi toggle SPLIT into two (user call): "Hi-Fi: World [ ] Chamber
+[ ]"** — settings gain `hifiChamber` next to `hifiWorld`, both default OFF.
+
+**2. Chamber polish round (m4k → m4l, user screenshots driving).**
+- Platform proportions redrawn to match the classic (big open well, clean donut
+  ring, 8 sockets) after "you got the proportions all wrong".
+- Conduit: tried a wire-bundle + sparks look (user ask), user verdict "that
+  wiring looks terrible" → REVERTED to the light strip. Sparks code removed.
+- Station labels (VAULT/BESTIARY/PORTAL MACHINE) were hiding behind the taller
+  hi-fi sprites → depths raised to 7.
+- **RECORDS COMBINED (user ask): one always-visible wall readout** — `CLASS LV ·
+  KILLS · DEATHS · BEST LV · REALMS · CLOSED · LAST: <killer>` on a single line;
+  the count-up animation still plays on realm exit, so you watch the numbers
+  climb when you leave a map. Found & fixed a real bug here: the four
+  "lean toward you" setScale calls hard-coded classic scale 3 and overrode the
+  hi-fi nexusScale — the wall screen rendered 2× too wide. All four now wrap
+  `TEX.nexusScale(...)`.
+
+**3. VAULT ICON → KEYPAD WALL-SAFE (m4m).** User reviewed numbered PNG grids
+(10 wood/metal chests, then 10 metal chests, then 10 metal VAULTS) and picked
+"vault 5": gunmetal frame + iron inset door + 3×4 keypad + green status LED +
+steel lever handle. `drawChest()` rewritten; same chestHi key, no scene changes.
+Option-grid render scripts kept in the container's artdev for future rounds.
+
+**Reversibility:** backup `_portal_room_backup_20260714_162357/` (gitignored);
+both toggles OFF = classic byte-for-byte; full detail in root ART_TEST_CHANGES.md.
+**Verified:** m2 22 · m4 18 · m4b 26 ALL GREEN at every step; in-engine
+screenshots (door portal + disc on the animated platform, combined readout on the
+correctly-sized glass, keypad safe on the wall) — zero console errors.
+**Gotcha logged:** ad-hoc Playwright with `--use-gl` flags hangs Phaser on Nexus
+load — launch plain (like the suites). Also index.html itself browser-caches:
+hard-refresh (Ctrl+Shift+R) after any ?v bump.
+**Files:** nexus_art.js (new), textures.js, scenes.js, menu.js, save.js,
+index.html (?v m4i→m4m across the arc), ART_TEST_CHANGES.md, project memory.
+
+---
+
+## 2026-07-13 · ART TEST · REVERSIBLE HI-FI ART ARC — ranger models, train yard, archer hold (?v=m4d → m4i)
+
+User directive opening the arc: **nothing may be lost, everything logged, all of
+it easily REVERSIBLE.** Architecture honored everywhere: every feature default-
+OFF behind Settings → ART TEST; classic art byte-for-byte identical when off;
+timestamped gitignored backups; root `ART_TEST_CHANGES.md` as the dedicated log.
+
+**1. RANGER MODEL PICKER (m4e).** "Ranger model [16·orig] [32] [64] [128] [160]"
+in Settings. NEW `ranger_art.js`: procedural, faithful redraws of the green-hooded
+archer at each canvas size — idle + walk frames + matching bow & arrow — same
+`put(x,y,color)` code renders offline (PNG previews) and in-engine. '16' stays
+the untouched default; picker persists per save (`rangerModel:'16'`).
+
+**2. HI-FI WORLD — THE TRAIN YARD (m4f).** "A test of how beautiful cool and fun
+of a map u can make" (user). NEW `world_art.js`: gravel/wall tilesets, tracks,
+tunnels, hi-fi remakes of ALL FOUR MOBS + the Grovekeeper boss (hitboxes
+preserved), and THE TRAIN — a telegraphed AMBUSH (idle→warn→run state machine)
+that randomly comes flying through, dodgeable but fair, INSTANT DEATH on contact,
+mows mobs down too. Character rendered ~2× bigger (RANGER_TARGET=64).
+
+**3. ARCHER HOLD ITERATIONS (m4g → m4i, user art direction).** Arms added to all
+hi-res models → redrawn T-pose so the hand meets the bow → separate LEAD-ARM
+sprite jointed at the SHOULDER (not the head), slimmed → final geometry: the arm
+ROTATES to the aim like a radius and the bow stays TANGENT to the circle around
+the character (limbs ⊥ arm, belly outward) — aim up, bow horizontal; aim right,
+bow vertical. Baked arm removed from the body art.
+
+**Verified:** m2/m4/m4b green at every bump; per-model in-engine screenshots +
+aim-hold poses at 5 angles delivered for sign-off.
+**Backups:** `_art_test_backup_20260713_152543/`, `_map_train_backup_20260713_161251/`.
+**Files:** ranger_art.js (new), world_art.js (new), textures.js, entities.js,
+scenes.js, menu.js, save.js, index.html (?v m4d→m4i), ART_TEST_CHANGES.md (new).
 
 ---
 

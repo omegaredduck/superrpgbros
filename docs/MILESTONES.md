@@ -14,7 +14,9 @@ Legend: ✅ done · 🔨 in progress · ⬜ not started · 🧊 icebox
 | M2 | First Fun (MVP) | 🔨 2026-07-11 | FUN GATE 1: outside tester, 20+ min unprompted, asks a progression question | all feature boxes landed + 19-check headless suite green; GATE PENDING — needs an outside tester |
 | M2.1 | Emergent scope patch (user directive 2026-07-12) | 🔨 2026-07-12 | Headless suites green incl. new checks; dev self-test of chest/scouter/orbs/time-trial flow | ALL phase-1 features landed same day; suites green (M1 23 + M2 22 + M2.1 18 checks); DEV SELF-TEST PENDING |
 | M3 | World, loot & MAP BUILDER | 🔨 2026-07-12 | Tester banks an item in the vault and returns to a realm; a realm map painted in the in-game builder is playable | Map-builder half LANDED · equipment/vault/affix-v2 half LANDED same day (118 headless checks green across 6 suites) — BOTH gate clauses now humanly achievable; gate itself needs the human playtest |
-| M4 | Roster (3 classes) | 🔨 2026-07-13 | All classes clear realm-1 boss; testers disagree on the best class | ALL 3 CLASSES LANDED + same-day user reworks (?v=m4d) — Ranger · Wizard (frost pierce+slow · STORM BARRAGE lightning-ball machine gun w/ strike proc) · KNIGHT (BERSERKER: cleave builds molten RAGE, lifesteal whirlwind + tornados, takes real damage). Title class-select + per-class caps + original realm BATTLE MUSIC. m4 18/18 + m4b 26/26 green. Only the HUMAN GATE + balance pass remain |
+| M4 | Roster (3 classes) | 🔨 2026-07-13 | All classes clear realm-1 boss; testers disagree on the best class | ALL 3 CLASSES LANDED + same-day user reworks (?v=m4d) — Ranger · Wizard (frost pierce+slow · STORM BARRAGE lightning-ball machine gun w/ strike proc) · KNIGHT (BERSERKER: cleave builds molten RAGE, lifesteal whirlwind + tornados, takes real damage). Title class-select + per-class caps + original realm BATTLE MUSIC. m4 18/18 + m4b 26/26 green. USER PLAYTEST 2026-07-14: pre-m4q build "perfect" — models/train yard/hi-fi APPROVED; balance notes delivered + applied at m4q. Human gate (all 3 clear realm-1) still open |
+| M4.6 | Balance & gear rework (user directives 2026-07-14) | ✅ 2026-07-14 | Suites green; user feel-notes applied | SHIPPED ?v=m4q — SIX rarity tiers (grey→white→green→blue→purple→ORANGE legendary, very rare) · CLASS-LOCKED gear lines (staves/tomes · greatswords/war horns · bows/quivers) w/ class-filtered drops + vault lock + v4 save migration · Ranger FIRE VOLLEY (burn DoT) + yellow ENERGY (regen 10/s) · knight/wizard +30% mob / +60% boss damage taken · barrage 2.5→1.25 MP/ball · XP REWORK: cap 60, ~1 level per map, growth ×19/59 |
+| M4.7 | THE CONDUCTOR + the living yard (user directives 2026-07-14) | ✅ 2026-07-14 | Suites green incl. new m47 battery | SHIPPED ?v=m4q — THE CONDUCTOR boss (user pick #6 "GRIM LINE", doubled pocket watch) replaces Grovekeeper in the yard (treant kept for a future map): Styx Express ARRIVAL CINEMATIC, ghost tracks + GHOST EXPRESS (one-shots the ungeared), railroad-tie lobs, pocket-watch SCHEDULE slow, lantern sweep · train CONSISTS (grain car + boxcar, 1 model × 4 recolors each, 2–15 cars, whole consist kills) · 8-mob YARD ROSTER from the user's sheet incl. detonating Dynamite Mole · biome-scoped bestiary |
 | M5 | Content ramp | ⬜ | FUN GATE 2: 3 testers, median session ≥30 min, a death that causes "one more run" | — |
 | M6 | 1.0 polish | ⬜ | 1.0 checklist 100%, zero P0 bugs for 7 days of play | — |
 
@@ -152,11 +154,132 @@ Pulled forward from M2 by user decision (2026-07-11): a proper front door before
       `TitleScene.promptClass/pickClass/createNewGame`.
 - [ ] Class unlock chain (deferred — both classes open until there are more to gate)
 - [x] Per-class stat caps in data.js (Wizard caps distinct from the Ranger)
-- [ ] Balance pass (by playtest — the M4 human gate)
+- [x] Balance pass ROUND 1 (2026-07-14, ?v=m4q — the user's playtest feel-notes,
+      applied): Ranger FIRE VOLLEY (arrows ignite: ATT-scaled burn DoT on mobs
+      AND the boss; ember tint; burn clocks ride unfreeze()) + ENERGY resource
+      (yellow orb, regen 4→10 — "fast and spammy"); Wizard barrage 2.5→1.25
+      MP/ball (spam runs twice as long); Knight + Wizard take +30% mob / +60%
+      boss damage (classes.dmgTaken, applied in hurtPlayer before DEF — boss
+      bolts/contact tagged fromBoss). XP REWORK: cap 20→60, needed=2000+25·L
+      (~ONE LEVEL PER MAP, cap ≈71 maps), growth ×19/59 (level-60 = old
+      level-20 power; potions+gear stay the post-cap game). Round 2 by playtest.
+- [ ] M4 human gate: all 3 classes clear realm-1 (vs THE CONDUCTOR now)
 
-## M5 — Content ramp ⬜
+## M4.6 — Six-tier class gear (user directives, 2026-07-14, ?v=m4q) ✅
 
-- [ ] Biomes 2–3 (built in the map builder), distinct mob rosters (~12 mobs total) — E7: every mob variant/archetype attaches to a dedicated biome for environmental identity
+- [x] SIX rarity tiers (user ladder): grey ABUNDANT · white COMMON · green
+      UNCOMMON · blue RARE · purple EPIC · orange LEGENDARY (very rare —
+      ~0.9%/roll boss-chest tail). Labels lead with the rarity word.
+- [x] CLASS-LOCKED gear lines, no off-class drops: bows/quivers (Ranger),
+      staves/TOMES (Wizard — mpPerShot efficiency), greatswords/WAR HORNS
+      (Knight — whirlwind drain efficiency). 48 items total. Drop tables keep
+      ranger keys as the weight template; SIM.resolveDrop remaps per class
+      (same slot/tier, same RNG stream). Vault holds off-class gear but
+      refuses to equip it (class tag shown). SIM.abilityFor generalized
+      (floors: mpCost 4 · mpPerShot 0.5 · mpDrainPerSec 6).
+- [x] SAVE v4 migration: item keys renumbered to match tiers (lossless remap);
+      pre-lock off-class equipment REFLAVORS to the wearer's line (same
+      slot/tier — a wizard's Oak Bow becomes her Ashwood Staff).
+
+## M4.7 — THE CONDUCTOR & the living yard (user directives, 2026-07-14, ?v=m4q) ✅
+
+- [x] THE CONDUCTOR (user model pick #6 "GRIM LINE" from a 10-option grid;
+      pocket watch doubled on request): the train yard's boss. Grovekeeper's
+      data KEPT for a future grasslands map (realm.boss now data-picks).
+- [x] ARRIVAL CINEMATIC: the Styx Express steams into the nearest lane (camera
+      pans to meet it; fresh ambushes gated), brakes, he steps off, the train
+      departs → scouter → fight.
+- [x] TRAIN VERBS (all scene-owned, all clocks on the unfreeze shift list):
+      GHOST TRACK + GHOST EXPRESS (spectral consist, 200 dmg × boss mults —
+      one-shots the ungeared, gear can survive it) · RAILROAD TIES (marked
+      AoE lobs) · THE SCHEDULE (pocket-watch movement slow, player-side
+      slowUntil/slowMult) · LANTERN SWEEP (rotating ghost-blue beam, tick dmg).
+- [x] TRAIN CONSISTS: covered-hopper grain car + sliding-door boxcar (1 model ×
+      4 recolors each, per user refs); ambush trains haul 2–15 mixed cars; the
+      WHOLE consist kills/mows; pass timing accounts for the tail; ghost
+      trains reuse the models (luminance-remapped spectral art).
+- [x] YARD MOB ROSTER (user sheet): Coal Golem · Crossing Creep · Furnace Imp ·
+      Boxcar Brute · Coupling Chomper · Conductor Zombie · DYNAMITE MOLE
+      (detonate: his contact hit is his death, no XP) · Smog Serpent. New
+      `trainyard` biome owns them; grasslands four kept for their future map;
+      bestiary scoped to the realm's biome + all bosses.
+- [x] Suites: full battery green (m2 · m3b · m3c · m4 · m4b) + NEW m46_verify
+      (13→16 at m4.8) + m47_verify (15). m3c PORTED back into the battery (m4n drift fixed).
+
+## M4.8 — Ranger dodge-regen + mob readability (user directives, 2026-07-14, ?v=m4r) ✅
+
+- [x] RANGER DODGE REGEN (user: "regen when I'm dodging effectively", "slow to
+      medium"): the pure-dodge class (dmgTaken 1x, no lifesteal) heals when
+      untouched — cls.hpRegen { delayMs 2500, pctPerSec 0.03 } → 3% of MAX HP/s
+      after a 2.5s clean window (~33s empty→full; tops off chip damage, won't
+      out-heal a beating). Relative window off lastHitAt (no unfreeze shift).
+      Ranger-only. Green aura + rising '+' motes VFX (RealmScene.updateRegenGlow,
+      st.regenning). data.js + entities.js + scenes.js.
+- [x] Mob readability: textures.js MOB_DISPLAY per-mob size override (default 40)
+      — Furnace Imp 58, Crossing Creep 47; mobModel keeps body a constant
+      fraction of the texture so the world hitbox scales with the sprite.
+- [x] m46_verify extended to 16 (regen blocked-in-delay/heals/flag/off-at-full ·
+      enlarged-mob scale+hitbox). Battery still GREEN.
+
+## M4.9 — Map selector + living-yard mob mechanics (user directives, 2026-07-14, ?v=m4s) ✅
+
+- [x] PORTAL MACHINE MAP SELECTOR: a dropdown (DATA.console.maps) — THE TRAIN
+      YARD selectable, five greyed "??? — SEALED/LOCKED" placeholders until
+      more maps are built. consoleSetMap/toggleMapDropdown (headless-callable);
+      choice rides in cfg.map; REALM CLEAR detail shows the selected map name.
+- [x] WIZARD out-of-combat regen (5s delay vs Ranger's 2.5s; same 3%/s). Regen
+      aura tints by class accent (green/blue). Knight has none.
+- [x] DYNAMITE MOLE = telegraphed bomb: surfaces on-screen, flashes under a
+      blast-radius warning ring, LONG 3.8s fuse, then explodes an AoE that hits
+      the player AND mobs (mob kills credited). BOOM sound + FIREBALL VFX +
+      brief shake. Sparing (unlockAt 70 + maxConcurrent 2 + on-screen surface
+      spawn). Shoot to defuse.
+- [x] CONDUCTOR ZOMBIE: slow chaser (no shoot) dripping a short-lived (~2.4s)
+      GREEN SLIME TRAIL that ticks damage on the player standing in it.
+- [x] SMOG SERPENT: fog caster (no shoot) — 5s-on/5s-off cloud that CONCEALS
+      mobs (itself too); shots pass through unless the player is inside the fog.
+- [x] TRAIN MOWS now credit the player (kills/XP/quota) via killMobCredited.
+- [x] Suites GREEN: +m3c map-dropdown checks · m46 16 · m47 18 (mole fuse/blast
+      credit · zombie slime · serpent fog). All new clocks on the unfreeze list.
+
+## M5.0 — THE GROVE (user directives, 2026-07-15, ?v=m5a) ✅
+
+The second realm. All features landed + FULL BATTERY GREEN (m2 · m3b · m3c ·
+m4 · m4b · m46 · m47 · **m5_grove_verify 28**); Balance Round = playtest.
+
+- [x] REALM REGISTRY (DATA.realms) — portal cfg.map routes biome/boss/world-kind/music per destination; no-map starts stay the yard (suites unbroken)
+- [x] THE GROVE on the portal machine (sealed1 → live) + bestiary follows the selected map
+- [x] Grove world: grass/canopy tiles, HEARTWOOD, 14 decoration picks (of a 20-option sheet) hash-scattered, pulsing glowshrooms, wandering fireflies
+- [x] FALLING ANCIENT TREES — creak+shadow telegraph → crush (mows CREDIT, player hurt survivable) → trunk LINGERS as a wall ~8s → crumbles; quiet while the boss lives
+- [x] 8-mob roster (user picks + live reshapes): Moonmoth (fast squishy) · Puffcap (slow, splits into 10 recolored minis) · Pixie Trickster (blink shooter) · Bloom Pixie (glow trail resurrects corpses, death-bloom, summons Bumblebrutes) · Moss Golem (tank) · Seedling Turret (radial GOLD) · Snapdragon (aimed PINK) · Bumblebrute (SUMMON cast bar → 4 ward minis → IMMORTAL until they die)
+- [x] Wing-flap animation (2-frame texture toggle): pixies, moonmoth, bumblebrutes + minis
+- [x] Colored mob projectiles (neutral orbShot + data tints; pooled-shot tint leak fixed with clearTint-on-fire)
+- [x] GROVEKEEPER rework — grows OUT OF THE GROUND on boss-portal entry (THE HEARTWOOD WAKES); verbs: TIMBER · THORN MORTAR (brier patches) · OVERGROWTH · SUNLANCE · SPORE SURGE; radial/stream reflavored PETAL BURST / NEEDLE VOLLEY; title WARDEN OF THE HEARTWOOD; new hints
+- [x] PHASE TWO — first death summons 8 real pixie mobs that channel his resurrection (killable mid-channel = weaker revive, floor 30%); he rises enraged (spd ×1.15, patterns ×0.85); kill him TWICE
+- [x] "HEARTWOOD" — original 8-bit theme (2 squares + 2 triangles), 3:00 loop, inspiring/magical; per-realm music routing
+- [x] New SFX: creak · crash · chime · revive
+- [x] unfreeze() shift list extended (blink/cast/summon/glow/tree/trunk/patch/corpse/revive-channel + all 5 verb clocks)
+- [ ] HUMAN: playtest THE GROVE end-to-end (Balance Round — all numbers TUNE ME)
+
+## M5.6 — THE GRAVEYARD (SHIPPED 2026-07-15 · ?v=m5f) ✅
+
+Biome 3, designed end-to-end with Red (numbered sheets + question rounds), then
+BUILT + shipped the same day. Full design: **docs/GRAVEYARD_PLAN.md**; build
+notes in memory ([[graveyard-build-progress]]). THE GRAVEYARD is the third live
+destination (console slot unlocked). Full battery green + smoke(15) + boss(12).
+
+- [x] Theme + name: graveyard/ghost zombies → THE GRAVEYARD
+- [x] 20-mob sheet (160×160 hi-fi) → roster of 8 picked: Ghoul · Rattlebones · Bone Archer · Tomb Golem · Corpse Bloater · Banshee · Mummy · Necro Acolyte (per-mob mechanic plans in the plan doc)
+- [x] 20-decor sheet → 17 picked + PLANNED scene layout (gate → lantern path → 4 fenced plots → boss arena); gate AUTO-OPENS; iron fences DESTRUCTIBLE
+- [x] Signature system: THE WITCHING CYCLE — witching fog + restless graves + soul wisps, conducted by the CURSED BELL (all four picked)
+- [x] Boss: THE GRAVEKEEPER — Red's concept art canon, hi-fi sprite approved; grave-climb entrance; 5-wave immunity loop (−20% HP per cleared wave); REAPER'S MARCH one-shot walker; Necronomicon verbs (Explode Corpse · Bone Storm · Grasping Hands · Curse Sigils)
+- [x] Music: "THE GRAVEYARD" — dark gothic metal, epic+frantic, 168bpm D harm-minor, 3:00 (v3; v1/v2 rejected). WAV delivered
+- [x] BUILT (?v=m5f): art port (8 mobs + Gravekeeper 2× + Reaper + 17 decor + destructible-fence damage frames, horizontal + vertical top-view) → data rows → world/layout (S-path, auto-gate, solid destructible fences) → Witching Cycle (fog/graves/wisps/bell) → 6 new mob verbs (lunge/regen/deathGas/wail/contactCurse/raise) → the Gravekeeper (grave-climb, 5-wave immunity loop, Reaper's March, verbs) → chip music port (496 beats, equal) + belltoll/reaperdrone SFX → bestiary (pattern-note text-fit fixed) → tests (smoke 15 + boss 12) + FULL BATTERY GREEN + console slot unlocked + ?v= bump
+
+## M5 — Content ramp 🔨 (grove = biome 2 ✅)
+
+- [x] Biome 2: THE GROVE (procedural world + own 8-mob roster) — E7 biome identity proven
+- [x] Biome 3: THE GRAVEYARD (M5.6, ?v=m5f) — SHIPPED: own world/roster/witching-cycle/boss/theme; third live realm — E7 biome identity proven again
 - [ ] Dungeons 1–2: portal drops from elites, handcrafted builder maps, dungeon bosses
 - [ ] Bosses 2–5 across realms/dungeons — scouter workup sheets (E3) data-driven per boss
 - [ ] T4–T6 gear; breakables + field chests (E1 overlay reused)

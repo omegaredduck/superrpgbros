@@ -1,5 +1,16 @@
 # Ranger Art-Fidelity Test — Change Log (2026-07-13, build ?v=m4e)
 
+> **2026-07-14 (?v=m4n): THE TEST GRADUATED — HI-FI IS THE GAME NOW.** The user
+> kept the hi-fi maps (train yard + chamber), the 64px character model, and the
+> hi-fi monsters/boss, and had the ART TEST settings REMOVED: hifiWorldOn()/
+> hifiChamberOn() are hardwired true, the Ranger model is locked to 64 (only 64
+> is built), and rangerModel/hifiWorld/hifiChamber left save.js. The Wizard
+> ("Starweaver", grid pick #3 + stars on the hat) and Knight ("Dark Knight",
+> grid pick #6) got their own 64px models in game/js/class_art.js via
+> TEX.playerModel(cls). Reverting now means restoring from the backups below or
+> git — the Settings off-switch no longer exists. Everything below this note is
+> the historical log of the test as it was built.
+
 A TEMPORARY, fully reversible feature to test higher-fidelity pixel art for the
 Ranger/archer. Adds selectable canvas sizes (32/64/128/160) with real idle +
 walk animation, plus a matching bow + arrow and an archer stance whose lead hand

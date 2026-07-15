@@ -18,10 +18,86 @@ function bindSave(slot, data) {
   CURRENT = data.character;
 }
 function persist() { if (SAVE_SLOT && GAME_SAVE) SAVE.save(SAVE_SLOT, GAME_SAVE); }
+
+// ---- M5.3 DEV MODE (user): a Settings toggle that grants ALL GEAR + MAX
+// LEVEL + IMMORTALITY, for testing gear/kits. The flag lives in device
+// settings (SAVE.settings().dev) so immortality reads live everywhere;
+// applyDevMode() applies the one-time save grants (max level + fill the vault
+// with this hero's full ladder) and refreshes a live realm player if there is
+// one. Immortality itself is enforced in Entities.hurtPlayer + trainKill.
+function devOn() { try { return !!SAVE.settings().dev; } catch (e) { return false; } }
+function applyDevMode() {
+  if (!GAME_SAVE || !CURRENT) return;
+  // MAX LEVEL
+  CURRENT.level = DATA.xp.cap; CURRENT.xp = 0;
+  // ALL GEAR — the class weapon + ability ladder (T0–T5) + every armor + ring,
+  // banked in the vault (exactly DATA.vault.slots = 24). Keep any off-class
+  // items already stored (append; the vault UI scrolls).
+  var line = DATA.classGear[CURRENT.cls] || DATA.classGear.ranger, gear = [];
+  line.weapon.forEach(function (k) { gear.push(k); });
+  line.ability.forEach(function (k) { gear.push(k); });
+  for (var t = 0; t <= 5; t++) { gear.push('ar' + t); gear.push('r' + t); }
+  var offClass = (GAME_SAVE.vault || []).filter(function (k) {
+    var it = DATA.items[k]; return it && it.cls && it.cls !== CURRENT.cls;
+  });
+  GAME_SAVE.vault = gear.concat(offClass);
+  gear.forEach(function (k) { collectItem(k); });          // M5.5: dev gear is owned (no re-drop)
+  persist();
+  // refresh a live realm hero (max level now; immortality is read live)
+  var realm = game.scene.getScene('Realm');
+  if (realm && realm.scene.isActive() && realm.player && realm.player.state) {
+    var st = realm.player.state;
+    st.level = CURRENT.level;
+    st.stats = SIM.statsFor(DATA.classes[st.cls], st.level, CURRENT.potionsDrunk, CURRENT.equipment);
+    st.hp = st.stats.hp; st.mp = st.stats.mp;
+  }
+}
 function freshCharacter(cls) {
   cls = (DATA.classes[cls]) ? cls : 'ranger';             // M4: keep the slot's class on death
   return { cls: cls, level: 1, xp: 0, potionsDrunk: SAVE.zeroPots(),
            equipment: SAVE.emptyEquip() };               // M3: gear dies with the character
+}
+
+// ---- M5.5 COLLECTION (user): items are OWNED once (account.collected). Gear
+// AUTO-UPGRADES from the collection when you find better, and REMAINS across
+// death (a fresh hero auto-fills empty slots from the best owned gear).
+function collectItem(key) {
+  if (!ACCOUNT || !DATA.items[key]) return;
+  if (!ACCOUNT.collected) ACCOUNT.collected = [];
+  if (ACCOUNT.collected.indexOf(key) < 0) ACCOUNT.collected.push(key);
+}
+// upgrade=false: only FILL EMPTY slots (realm entry — gear "remains", but a
+// manual downgrade for testing is never yanked back up). upgrade=true: also
+// replace a weaker piece with a better owned one (chest pickup — auto-upgrade).
+function autoEquipFromCollection(upgrade) {
+  if (!GAME_SAVE || !CURRENT) return false;
+  var coll = (ACCOUNT && ACCOUNT.collected) || [], changed = false;
+  DATA.equipSlots.forEach(function (slot) {
+    var best = SIM.bestCollected(coll, CURRENT.cls, slot);
+    if (!best) return;
+    var cur = CURRENT.equipment[slot];
+    if (!cur) { CURRENT.equipment[slot] = best; changed = true; }
+    else if (upgrade && DATA.items[best].tier > DATA.items[cur].tier) { CURRENT.equipment[slot] = best; changed = true; }
+  });
+  if (changed) persist();
+  return changed;
+}
+
+// M5.5: split rolled loot into NEW items (not yet owned) and DUPLICATES
+// (already owned → BONUS XP by rarity). Dedup is against the PERSISTENT
+// collection only (intra-chest repeats stay, so drop-table roll counts are
+// unchanged for a fresh account). Does not mutate the collection.
+function resolveLootRolls(keys) {
+  var owned = (ACCOUNT && ACCOUNT.collected) || [];
+  var items = [], dupeXp = 0, dupes = [];
+  (keys || []).forEach(function (k) {
+    var it = DATA.items[k]; if (!it) return;
+    if (owned.indexOf(k) >= 0) {
+      var bx = (DATA.collection && DATA.collection.dupeXp[it.tier]) || 0;
+      dupeXp += bx; dupes.push({ key: k, xp: bx });
+    } else items.push(k);
+  });
+  return { items: items, dupeXp: dupeXp, dupes: dupes };
 }
 
 // M3: after any gear change (chest take, vault swap) re-derive the live stats
@@ -40,7 +116,9 @@ function applyEquipmentChange(scene) {
 // Item display helpers (M3) — one place for tier color/name text.
 function itemTint(key)  { return DATA.tiers[DATA.items[key].tier].color; }
 function itemColor(key) { return '#' + ('00000' + itemTint(key).toString(16)).slice(-6); }
-function itemLabel(key) { var it = DATA.items[key]; return DATA.tiers[it.tier].name + ' · ' + it.name; }
+// M4.6: labels lead with the RARITY word (user's ladder: ABUNDANT → COMMON →
+// UNCOMMON → RARE → EPIC → LEGENDARY), tinted by the tier color at draw time.
+function itemLabel(key) { var it = DATA.items[key]; return DATA.tiers[it.tier].rarity + ' · ' + it.name; }
 
 // --- M1 shared presentation helpers ----------------------------------------
 
@@ -99,6 +177,11 @@ var TitleScene = new Phaser.Class({
   create: function () {
     this.starting = false;                 // scene objects persist across visits — reset the guard
     this.classPicking = false; this.classUi = null;   // M4: class-select overlay state (reset on re-entry)
+    // AUDIT FIX 2026-07-14: a spawned-but-unentered portal must NOT outlive a
+    // trip to the load screen — it leaked ACROSS SAVE SLOTS (spawn in slot 1,
+    // exit, load slot 2 → slot 2's chamber materializes slot 1's configured
+    // portal). The title screen is the slot boundary: clear it here.
+    this.registry.remove('pendingPortal');
     // RESIZE mode: read the real canvas size; center the 640-tall layout vertically
     var W = this.scale.width, H = this.scale.height;
     var oy = Math.max(0, (H - 640) / 2);
@@ -214,11 +297,10 @@ var TitleScene = new Phaser.Class({
       var accent = cls.accent || 0x38b764;          // per-class accent (data-driven)
       var card = self.add.rectangle(ccx, ccy, cardW, 190, 0x1a1c2c, 0.96).setStrokeStyle(2, accent).setDepth(81).setInteractive({ useHandCursor: true });
       ui.push(card);
-      // ART-FIDELITY TEST: the Ranger card previews the currently-selected art
-      // model (animated) so you can see your pick before starting a run. Every
-      // other class, and the default '16' model, render exactly as before.
-      var rd = (key === 'ranger' && typeof TEX !== 'undefined' && TEX.modelFor)
-        ? TEX.modelFor(TEX.selectedModelId()) : null;
+      // HI-FI DEFAULT (2026-07-14): every class card previews its hi-fi
+      // animated model (Ranger 64 / Starweaver / Dark Knight). Classic sprite
+      // only if the art module failed to load.
+      var rd = (typeof TEX !== 'undefined' && TEX.playerModel) ? TEX.playerModel(key) : null;
       if (rd && self.textures.exists(rd.key)) {
         var rsp = self.add.sprite(ccx, ccy - 54, rd.key, 'idle0').setScale(54 / rd.size).setDepth(82);
         try { rsp.play(rd.idle); } catch (e) {}
@@ -228,7 +310,7 @@ var TitleScene = new Phaser.Class({
       }
       if (cls.weapon && DATA.weapons[cls.weapon] && DATA.weapons[cls.weapon].heldTexture) {
         var hw = DATA.weapons[cls.weapon];
-        if (rd && self.textures.exists(rd.bowKey)) {
+        if (rd && rd.bowKey && self.textures.exists(rd.bowKey)) {
           // hi-fi Ranger card: the lead ARM out to the side (aim right) with the
           // bow held UPRIGHT at its hand — matches the in-game hold.
           var cd = 54, sc = cd / rd.size;
@@ -236,6 +318,12 @@ var TitleScene = new Phaser.Class({
           if (self.textures.exists(rd.armKey))
             ui.push(self.add.sprite(shX, shY, rd.armKey).setScale(sc).setOrigin(rd.armPivotX, 0.5).setDepth(83));
           ui.push(self.add.sprite(shX + rd.armLenTex * sc, shY, rd.bowKey).setScale(sc).setOrigin(rd.bowGrip.x, rd.bowGrip.y).setDepth(84));
+        } else if (rd && rd.heldKey && self.textures.exists(rd.heldKey)) {
+          // hi-fi Wizard/Knight card: the hi-fi weapon beside the model (staff
+          // stands upright like the in-game carry; sword rests at a ready angle).
+          var wsc = (54 / rd.size) * (rd.heldScale || 1) * 1.2;
+          ui.push(self.add.sprite(ccx + 26, ccy - 54, rd.heldKey).setScale(wsc).setDepth(84)
+            .setRotation(hw.upright ? -Math.PI / 2 : -Math.PI / 5));
         } else {
           ui.push(self.add.sprite(ccx + 26, ccy - 54, hw.heldTexture).setScale(2.2).setDepth(82)
             .setRotation(hw.upright ? -Math.PI / 2 : 0));   // walking staffs stand up on the card too
@@ -506,6 +594,13 @@ var NexusScene = new Phaser.Class({
       esc.scene.start('Builder');
     });
 
+    // M5.3: the 24-slot vault scrolls (Up/Down + mouse wheel) while it's open.
+    this.input.keyboard.on('keydown-UP', function () { if (esc.vaultUi) esc.scrollVault(-1); });
+    this.input.keyboard.on('keydown-DOWN', function () { if (esc.vaultUi) esc.scrollVault(1); });
+    this.input.on('wheel', function (ptr, over, dx, dy) {
+      if (esc.vaultUi) esc.scrollVault(dy > 0 ? 1 : -1);
+    });
+
     // M3 polish: portals are SPACE-ACTIVATED, not walk-in — approach, THEN
     // commit. (M3.5: no floating prompts — the footer says SPACE to interact.)
     this.entering = false;
@@ -588,6 +683,8 @@ var NexusScene = new Phaser.Class({
     // run config survives open/close within a visit; defaults are fresh per scene
     this.consoleMode = 'clear';
     this.consoleAffixes = [];
+    this.consoleMap = (DATA.console.maps && DATA.console.maps[0]) ? DATA.console.maps[0].id : 'trainyard';  // M4.9
+    this.mapDropdownOpen = false;
     this.chamberAmbient();                    // ART TEST: hi-fi platform/conduit come alive
   },
 
@@ -652,6 +749,7 @@ var NexusScene = new Phaser.Class({
     if (this.consoleUi) {
       this.consoleUi.forEach(function (o) { o.destroy(); });
       this.consoleUi = null;
+      this.mapDropdownOpen = false;                        // M4.9: collapse the map dropdown on close
       this.input.keyboard.off('keydown-ENTER', this.consoleEnterFn, this);   // bug #2 family
       return;
     }
@@ -680,9 +778,26 @@ var NexusScene = new Phaser.Class({
   },
 
   // instant=true skips the charge-up cinematic (registry rebuilds + suites).
+  // M4.9: MAP SELECTOR — headless-callable like consoleSetMode. Refuses locked
+  // (??? placeholder) maps; only a built, unlocked destination can be chosen.
+  consoleSetMap: function (id) {
+    var m = (DATA.console.maps || []).filter(function (x) { return x.id === id; })[0];
+    if (!m || m.locked) { AUDIO.play('ui'); return; }    // ??? is not selectable
+    this.consoleMap = id;
+    this.mapDropdownOpen = false;
+    AUDIO.play('ui');
+    if (this.consoleUi) this.buildConsoleUi();
+  },
+
+  toggleMapDropdown: function () {
+    this.mapDropdownOpen = !this.mapDropdownOpen;
+    AUDIO.play('ui');
+    if (this.consoleUi) this.buildConsoleUi();
+  },
+
   consoleSpawnPortal: function (instant) {
     if (this.charging) return;                           // one cinematic at a time
-    var cfg = { mode: this.consoleMode, affixes: this.consoleAffixes.slice() };
+    var cfg = { mode: this.consoleMode, map: this.consoleMap, affixes: this.consoleAffixes.slice() };  // M4.9: map rides along
     this.registry.set('pendingPortal', cfg);             // survives resize restarts
     if (this.consoleUi) this.toggleConsole();
     this.materializePortal(cfg, !instant);
@@ -698,6 +813,10 @@ var NexusScene = new Phaser.Class({
     ui.push(this.add.text(cx, cy - 206, 'configure the run · power the platform · step through',
       { fontFamily: 'monospace', fontSize: 11, color: '#94b0c2' }).setOrigin(0.5).setDepth(81));
 
+    // the selected MAP (M4.9) — its name feeds the REALM CLEAR detail line
+    var selMap = (DATA.console.maps || []).filter(function (x) { return x.id === self.consoleMap; })[0]
+                 || { name: DATA.realm.name };
+
     // --- mode select ---
     ui.push(this.add.text(cx - 290, cy - 180, 'GAME MODE', { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }).setDepth(81));
     DATA.console.modes.forEach(function (m, i) {
@@ -709,7 +828,7 @@ var NexusScene = new Phaser.Class({
       box.on('pointerdown', function () { self.consoleSetMode(m); });
       ui.push(box);
       var detail = m === 'clear'
-        ? DATA.realm.name + ' · ' + DATA.realm.killQuota + ' ' + md.desc
+        ? selMap.name + ' · ' + DATA.realm.killQuota + ' ' + md.desc
         : md.desc;
       ui.push(self.add.text(cx - 278, y - 8, (sel ? '> ' : '  ') + md.name,
         { fontFamily: 'monospace', fontSize: 13, color: sel ? '#ffcd75' : '#94b0c2' }).setDepth(82));
@@ -717,14 +836,43 @@ var NexusScene = new Phaser.Class({
         { fontFamily: 'monospace', fontSize: 10, color: '#566c86' }).setDepth(82));
     });
 
-    // --- sealed destinations (M5) — future realms live in the console now ---
-    DATA.console.sealed.forEach(function (d, i) {
-      var y = cy - 66 + i * 24;
-      var box = self.add.rectangle(cx, y, 580, 20, 0x14142a, 1).setDepth(81).setStrokeStyle(1, 0x1f2440);
-      ui.push(box);
-      ui.push(self.add.text(cx - 278, y, '  ' + d.label + ' — ' + d.sub,
-        { fontFamily: 'monospace', fontSize: 10, color: '#3b4466' }).setOrigin(0, 0.5).setDepth(82));
-    });
+    // --- MAP SELECTOR (M4.9, user) — a dropdown: collapsed shows the chosen
+    // destination; click to expand the list (real maps selectable, ??? sealed
+    // placeholders greyed until built). Only unlocked maps are pickable. ---
+    ui.push(this.add.text(cx - 290, cy - 82, 'MAP', { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }).setDepth(81));
+    var selRow = this.add.rectangle(cx, cy - 58, 580, 26, 0x1a1c2c, 1).setDepth(81)
+      .setStrokeStyle(1, 0x41a6f6).setInteractive({ useHandCursor: true });
+    selRow.on('pointerdown', function () { self.toggleMapDropdown(); });
+    ui.push(selRow);
+    ui.push(this.add.text(cx - 278, cy - 58, '> ' + selMap.name,
+      { fontFamily: 'monospace', fontSize: 12, color: '#a7d3ff' }).setOrigin(0, 0.5).setDepth(82));
+    ui.push(this.add.text(cx + 278, cy - 58, this.mapDropdownOpen ? '▲' : '▼',
+      { fontFamily: 'monospace', fontSize: 12, color: '#41a6f6' }).setOrigin(1, 0.5).setDepth(82));
+
+    if (this.mapDropdownOpen) {
+      // catcher: click anywhere off an option closes the dropdown
+      var catcher = this.add.rectangle(cx, cy, 640, 520, 0x000000, 0.01).setDepth(89)
+        .setInteractive();
+      catcher.on('pointerdown', function () { self.toggleMapDropdown(); });
+      ui.push(catcher);
+      DATA.console.maps.forEach(function (mp, i) {
+        var y = cy - 44 + i * 26;
+        var isSel = mp.id === self.consoleMap;
+        var box = self.add.rectangle(cx, y, 574, 24, mp.locked ? 0x14142a : (isSel ? 0x29366f : 0x1a1c2c), 1)
+          .setDepth(90).setStrokeStyle(1, mp.locked ? 0x1f2440 : (isSel ? 0x41a6f6 : 0x333c57));
+        ui.push(box);
+        if (!mp.locked) {
+          box.setInteractive({ useHandCursor: true });
+          box.on('pointerover', function () { if (!isSel) box.setFillStyle(0x222a4d, 1); });
+          box.on('pointerout',  function () { if (!isSel) box.setFillStyle(0x1a1c2c, 1); });
+          box.on('pointerdown', function () { self.consoleSetMap(mp.id); });
+        }
+        ui.push(self.add.text(cx - 270, y, (isSel ? '> ' : '  ') + mp.name,
+          { fontFamily: 'monospace', fontSize: 11, color: mp.locked ? '#3b4466' : (isSel ? '#ffcd75' : '#a7d3ff') }).setOrigin(0, 0.5).setDepth(91));
+        ui.push(self.add.text(cx + 268, y, mp.locked ? 'LOCKED · ' + mp.sub : mp.sub,
+          { fontFamily: 'monospace', fontSize: 9, color: mp.locked ? '#3b4466' : '#566c86' }).setOrigin(1, 0.5).setDepth(91));
+      });
+    }
 
     // --- affix board (M3.5 preview: toggleable + visible, INERT until M5) ---
     ui.push(this.add.text(cx - 290, cy - 4, 'MAP AFFIXES — ' + this.consoleAffixes.length + '/' + DATA.console.maxAffixes +
@@ -818,8 +966,8 @@ var NexusScene = new Phaser.Class({
       this.tweens.add({ targets: p, angle: 360, duration: 4000, repeat: -1 });  // classic round portal spins
     }
     var swirl = portalSwirl(this, spot.x, spot.y, tint);
-    this.spawnedPortal = { sprite: p, disc: disc, swirl: swirl, mode: cfg.mode, affixes: cfg.affixes.slice() };
-    this.plazaPortals = [{ sprite: p, mode: cfg.mode, affixes: cfg.affixes.slice() }];
+    this.spawnedPortal = { sprite: p, disc: disc, swirl: swirl, mode: cfg.mode, map: cfg.map, affixes: cfg.affixes.slice() };   // M5.0: map rides the portal
+    this.plazaPortals = [{ sprite: p, mode: cfg.mode, map: cfg.map, affixes: cfg.affixes.slice() }];
     this.portal = p;                                     // canonical (suites + docs)
   },
 
@@ -1138,6 +1286,7 @@ var NexusScene = new Phaser.Class({
     if (this.gyUi) this.toggleGraveyard();               // one overlay at a time
     if (this.consoleUi) this.toggleConsole();
     if (this.bestiaryUi) this.toggleBestiary();
+    this.vaultScroll = 0;                                 // M5.3: always open at the top
     this.buildVaultUi();
     AUDIO.play('ui');
   },
@@ -1197,35 +1346,61 @@ var NexusScene = new Phaser.Class({
     ui.push(this.add.text(lx, top + 4 * rowH + 4, parts.length ? 'gear total:  ' + parts.join(' · ') : 'no gear equipped',
       { fontFamily: 'monospace', fontSize: 10, color: '#38b764', wordWrap: { width: colW } }).setOrigin(0.5, 0).setDepth(82));
 
-    // right column: VAULT (click → equip/swap)
-    var rx = cx + 172;
-    ui.push(this.add.text(rx, top - 24, 'VAULT ' + GAME_SAVE.vault.length + '/' + DATA.vault.slots + '  (click to equip)',
+    // right column: VAULT (click → equip/swap). SCROLLABLE (M5.3): a dev
+    // gear-grant can overfill the vault well past DATA.vault.slots, so the
+    // list shows a WINDOW of rows and scrolls (mouse wheel / Up-Down) through
+    // however many items are banked.
+    var rx = cx + 172, vRowH = 38, PER_PAGE = 9;
+    var total = Math.max(DATA.vault.slots, GAME_SAVE.vault.length);
+    var maxScroll = Math.max(0, total - PER_PAGE);
+    if (this.vaultScroll == null) this.vaultScroll = 0;
+    this.vaultScroll = Phaser.Math.Clamp(this.vaultScroll, 0, maxScroll);
+    var scroll = this.vaultScroll;
+    var moreBelow = scroll + PER_PAGE < total, moreAbove = scroll > 0;
+    ui.push(this.add.text(rx, top - 24,
+      'VAULT ' + GAME_SAVE.vault.length + '/' + DATA.vault.slots +
+      (maxScroll > 0 ? '  ▲▼ scroll' : '  (click to equip)'),
       { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }).setOrigin(0.5).setDepth(81));
-    var vRowH = 38;
-    for (var i = 0; i < DATA.vault.slots; i++) {
-      (function (idx) {
+    for (var i = 0; i < PER_PAGE; i++) {
+      (function (row) {
+        var idx = scroll + row, ry = top + row * vRowH;
+        if (idx >= total) return;
         var key = GAME_SAVE.vault[idx] || null;
-        var box = self.add.rectangle(rx, top + idx * vRowH, colW, vRowH - 5, 0x1a1c2c, 1).setDepth(81)
+        var box = self.add.rectangle(rx, ry, colW, vRowH - 5, 0x1a1c2c, 1).setDepth(81)
           .setStrokeStyle(1, key ? itemTint(key) : 0x29366f);
         ui.push(box);
         if (key) {
           var it = DATA.items[key];
-          ui.push(self.add.sprite(rx - colW / 2 + 20, top + idx * vRowH, it.texture).setScale(1.5).setTint(itemTint(key)).setDepth(82));
-          ui.push(self.add.text(rx - colW / 2 + 38, top + idx * vRowH - 8, itemLabel(key) + '  (' + it.slot + ')',
-            { fontFamily: 'monospace', fontSize: 11, color: itemColor(key) }).setDepth(82));
+          // M4.6: off-class gear (banked by another slot's hero) shows its
+          // class tag — it can sit in the vault but won't equip on this hero.
+          var offCls = it.cls && it.cls !== CURRENT.cls;
+          ui.push(self.add.sprite(rx - colW / 2 + 20, ry, it.texture).setScale(1.5).setTint(itemTint(key)).setDepth(82));
+          ui.push(self.add.text(rx - colW / 2 + 38, ry - 8,
+            itemLabel(key) + '  (' + it.slot + (offCls ? ' · ' + DATA.classes[it.cls].name.toUpperCase() : '') + ')',
+            { fontFamily: 'monospace', fontSize: 11, color: offCls ? '#566c86' : itemColor(key) }).setDepth(82));
           box.setInteractive({ useHandCursor: true });
           box.on('pointerover', function () { box.setFillStyle(0x29366f, 1); });
           box.on('pointerout',  function () { box.setFillStyle(0x1a1c2c, 1); });
           box.on('pointerdown', function () { self.equipFromVault(idx); });
         } else {
-          ui.push(self.add.text(rx - colW / 2 + 38, top + idx * vRowH - 7, '— empty —',
+          ui.push(self.add.text(rx - colW / 2 + 38, ry - 7, '— empty —',
             { fontFamily: 'monospace', fontSize: 10, color: '#566c86' }).setDepth(82));
         }
       })(i);
     }
+    // scroll affordances
+    if (moreAbove) ui.push(this.add.text(rx, top - 6, '▲', { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }).setOrigin(0.5).setDepth(83));
+    if (moreBelow) ui.push(this.add.text(rx, top + PER_PAGE * vRowH - 16, '▼ more', { fontFamily: 'monospace', fontSize: 11, color: '#ffcd75' }).setOrigin(0.5).setDepth(83));
 
-    ui.push(this.add.text(cx, cy + 222, '[ V or ESC to close ]', { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }).setOrigin(0.5).setDepth(81));
+    ui.push(this.add.text(cx, cy + 228, '[ V or ESC to close ]', { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }).setOrigin(0.5).setDepth(81));
     this.vaultUi = ui;
+  },
+
+  // M5.3: scroll the 24-slot vault list (mouse wheel + Up/Down while it's open).
+  scrollVault: function (delta) {
+    if (!this.vaultUi) return;
+    this.vaultScroll = (this.vaultScroll || 0) + delta;
+    this.buildVaultUi();
   },
 
   // Equipped → vault (first free slot). The gate clause: "tester banks an item".
@@ -1237,6 +1412,7 @@ var NexusScene = new Phaser.Class({
       return;
     }
     GAME_SAVE.vault.push(key);
+    collectItem(key);                                    // M5.5: banked = owned
     CURRENT.equipment[slot] = null;
     applyEquipmentChange(this);                          // persists
     AUDIO.play('ui');
@@ -1248,9 +1424,17 @@ var NexusScene = new Phaser.Class({
   equipFromVault: function (idx) {
     var key = GAME_SAVE.vault[idx];
     if (!key) return;
+    // M4.6 CLASS LOCK: another hero's gear stays banked — it never equips here.
+    var vIt = DATA.items[key];
+    if (vIt.cls && vIt.cls !== CURRENT.cls) {
+      AUDIO.play('ui');
+      this.toast(vIt.name + ' is ' + DATA.classes[vIt.cls].name + ' gear — this hero cannot wield it');
+      return;
+    }
     var slot = DATA.items[key].slot;
     var old = CURRENT.equipment[slot];
     CURRENT.equipment[slot] = key;
+    collectItem(key);                                    // M5.5: equipped = owned
     if (old) GAME_SAVE.vault[idx] = old;                 // swap in place
     else GAME_SAVE.vault.splice(idx, 1);                 // slot freed
     applyEquipmentChange(this);                          // persists
@@ -1302,8 +1486,16 @@ var NexusScene = new Phaser.Class({
   },
 
   bestiaryEntries: function () {
+    // M4.7: the mob pages are SCOPED TO THE REALM'S BIOME ("everything the
+    // realm sends at you" — literally); bosses all stay listed (the index of
+    // everything known). A future biome swap re-scopes the book for free.
     var e = [], k;
-    for (k in DATA.mobs) e.push({ kind: 'mob', key: k });
+    // M5.0: the book follows the console's SELECTED destination — pick the
+    // grove at the machine and the bestiary shows the grove's roster.
+    var bio = (DATA.realms && this.consoleMap && DATA.realms[this.consoleMap])
+      ? DATA.realms[this.consoleMap].biome : DATA.realm.biome;
+    var roster = (DATA.biomes[bio] || {}).mobs || Object.keys(DATA.mobs);
+    roster.forEach(function (key) { if (DATA.mobs[key]) e.push({ kind: 'mob', key: key }); });
     for (k in DATA.bosses) e.push({ kind: 'boss', key: k });
     return e;
   },
@@ -1386,8 +1578,9 @@ var NexusScene = new Phaser.Class({
       lines.push(['HP', d.hp], ['SPEED', d.spd], ['XP', d.xp], ['CONTACT DMG', d.contactDmg]);
     }
 
-    // portrait + name
-    ui.push(this.add.sprite(cx - 180, cy - 60, d.texture).setScale(entry.kind === 'boss' ? 4.5 : 5).setDepth(81));
+    // portrait + name (M4.7: size-aware — hi-fi boss art is 128px, classic 16-20px)
+    var pw = this.textures.exists(d.texture) ? this.textures.get(d.texture).getSourceImage().width : 16;
+    ui.push(this.add.sprite(cx - 180, cy - 60, d.texture).setScale((entry.kind === 'boss' ? 90 : 80) / pw).setDepth(81));
     ui.push(this.add.text(cx - 180, cy + 6, d.name, { fontFamily: 'monospace', fontSize: 14, color: '#f4f4f4' }).setOrigin(0.5).setDepth(81));
     ui.push(this.add.text(cx - 180, cy + 24, entry.kind === 'boss' ? (d.title || role) : role,
       { fontFamily: 'monospace', fontSize: 10, color: '#' + ('00000' + tint.toString(16)).slice(-6) }).setOrigin(0.5).setDepth(81));
@@ -1414,9 +1607,14 @@ var NexusScene = new Phaser.Class({
       var pk;
       for (pk in d.patterns) {
         var pat = d.patterns[pk];
-        notes.push(pk.toUpperCase() + ' — ' +
-          (pat.count ? pat.count + ' bolts in a ring' : pat.shots + ' aimed bolts') +
-          ' · ' + pat.dmg + ' dmg · every ' + (pat.everyMs / 1000) + 's');
+        // M5.6: not every verb is a projectile — scene-owned verbs (timber,
+        // ghost train, explode corpse, grasping hands…) have no count/shots.
+        var desc = pat.count ? (pat.count + ' bolts in a ring')
+                 : pat.shots ? (pat.shots + ' aimed bolts')
+                 : 'a telegraphed strike';
+        var dmgTxt = (pat.dmg != null) ? (' · ' + pat.dmg + ' dmg') : '';
+        var everyTxt = pat.everyMs ? (' · every ' + (pat.everyMs / 1000) + 's') : '';
+        notes.push(pk.toUpperCase() + ' — ' + desc + dmgTxt + everyTxt);
       }
       (d.hints || []).forEach(function (h) { notes.push(h); });
     }
@@ -1455,7 +1653,6 @@ var NexusScene = new Phaser.Class({
   enterPortal: function (entry) {
     if (this.entering) return;
     this.entering = true;
-    this.registry.remove('pendingPortal');               // M3.5: ONE-SHOT — consumed on entry
     this.powerDown();                                    // the works go dark behind you
     AUDIO.stopMusic();                                   // M3.9: the chamber falls silent
     persist();
@@ -1463,7 +1660,13 @@ var NexusScene = new Phaser.Class({
     this.cameras.main.fadeOut(400);
     var self = this;
     this.time.delayedCall(450, function () {
-      self.scene.start('Realm', { mode: entry.mode, affixes: entry.affixes || [] });
+      // M3.5 ONE-SHOT — consumed HERE, not at the walk-in (audit fix
+      // 2026-07-14): a resize/fullscreen restart during the 450ms fade
+      // cancels this call; consuming early meant the rebuilt chamber had no
+      // portal AND no run — the whole config was lost. Now a cancelled entry
+      // simply leaves the portal standing to walk into again.
+      self.registry.remove('pendingPortal');
+      self.scene.start('Realm', { mode: entry.mode, map: entry.map, affixes: entry.affixes || [] });   // M5.0: map rides in
     });
   },
 
@@ -1514,9 +1717,31 @@ var RealmScene = new Phaser.Class({
     // data.mapId; the plaza uses DATA.realm.map. A saved map under the same
     // id overrides the built-in. Fallback (missing/corrupt map): the legacy
     // endless biome tileSprite — never a crash (TM-4 spirit).
-    // ART TEST (hi-fi world): the opt-in TRAIN YARD replaces the normal realm
-    // map when Settings > Hi-Fi World is on. Fully gated + reversible.
-    this.hifiWorld = !!(typeof TEX !== 'undefined' && TEX.hifiWorldOn && TEX.hifiWorldOn());
+    // HI-FI WORLD (2026-07-14: the DEFAULT realm — hifiWorldOn() is hardwired
+    // true once its textures build): the TRAIN YARD replaces the map path.
+    // Classic map path survives below as a real fallback (art module absent).
+    // AUDIT FIX 2026-07-14: an EXPLICIT mapId (the builder's PLAYTEST ▶
+    // button) takes the map path — the hardwired train yard was silently
+    // swallowing the map under edit, killing builder playtests. Normal portal
+    // runs pass no mapId and get the yard.
+    // M5.0: REALM ROUTING — the portal's map choice (cfg.map) picks the entry
+    // in DATA.realms; biome/boss/world-kind/music resolve from it. No map in
+    // the start data (old suites, direct starts) = the train yard, unchanged.
+    this.realmId = (data && data.map && DATA.realms && DATA.realms[data.map]) ? data.map : 'trainyard';
+    this.realmDef = (DATA.realms && DATA.realms[this.realmId]) ||
+                    { name: DATA.realm.name, biome: DATA.realm.biome, boss: DATA.realm.boss, kind: 'yard', music: 'battle' };
+    this.realmBiome = this.realmDef.biome;
+    this.realmBoss = this.realmDef.boss;
+    // SCENE REUSE (bug #1 family): the yard's train state must not leak into
+    // a grove run (and vice versa) — reset both worlds' handles before setup.
+    this.train = null; this.trainLanes = null; this.arrivalTrain = null;
+    this.groveFall = null; this.groveTrunks = []; this.heartwood = null; this.arrivalGrove = false;
+    // M5.6 graveyard handles (scene reuse — reset before setup)
+    this.witching = null; this.graveFences = null; this.graveGate = null; this.soulWisps = null;
+    this.gasPatches = null; this.graveArrivalActive = false; this.reaper = null; this._realmStart = null;
+    this.gravekeeperWaves = null;
+    this.hifiWorld = !!(typeof TEX !== 'undefined' && TEX.hifiWorldOn && TEX.hifiWorldOn())
+                     && !(data && data.mapId);
     this.map = this.hifiWorld ? null : MAPS.get((data && data.mapId) || DATA.realm.map);
     var WW, HH;
     if (this.map) {
@@ -1524,6 +1749,16 @@ var RealmScene = new Phaser.Class({
       this.physics.world.setBounds(0, 0, WW, HH);
       this.mapRender = MAPS.renderChunks(this, this.map, 'realm', 1);
       this.wallBodies = MAPS.buildWallBodies(this, this.map);
+    } else if (this.hifiWorld && this.realmDef.kind === 'grove') {
+      WW = HH = DATA.realm.size;
+      this.physics.world.setBounds(0, 0, WW, HH);
+      this.wallBodies = null;
+      this.setupGrove(WW, HH);                              // M5.0: the enchanted forest
+    } else if (this.hifiWorld && this.realmDef.kind === 'graveyard') {
+      WW = HH = DATA.realm.size;
+      this.physics.world.setBounds(0, 0, WW, HH);
+      this.wallBodies = null;
+      this.setupGraveyard(WW, HH);                          // M5.6: the moonlit cemetery
     } else if (this.hifiWorld) {
       WW = HH = DATA.realm.size;
       this.physics.world.setBounds(0, 0, WW, HH);
@@ -1532,19 +1767,24 @@ var RealmScene = new Phaser.Class({
     } else {
       WW = HH = DATA.realm.size;
       this.physics.world.setBounds(0, 0, WW, HH);
-      this.add.tileSprite(WW / 2, HH / 2, WW, HH, DATA.biomes[DATA.realm.biome].tile);  // E7: biome floor
+      this.add.tileSprite(WW / 2, HH / 2, WW, HH, DATA.biomes[this.realmBiome].tile);  // E7: biome floor
       this.wallBodies = null;
     }
     this.worldW = WW; this.worldH = HH;
     this.cameras.main.setBounds(0, 0, WW, HH).setBackgroundColor('#0f0f1b');
 
-    // player start comes from the map's object layer (center fallback)
-    var start = { x: WW / 2, y: HH / 2 };
+    // player start comes from the map's object layer (center fallback).
+    // M5.6: the graveyard spawns you at the SOUTH iron gate (setupGraveyard).
+    var start = this._realmStart || { x: WW / 2, y: HH / 2 };
     if (this.map && this.map.objects.playerStart) {
       start = MAPS.findClearPx(this.map,
         (this.map.objects.playerStart.tx + 0.5) * MAPS.TILE,
         (this.map.objects.playerStart.ty + 0.5) * MAPS.TILE);
     }
+    // M5.5: gear REMAINS — a fresh hero auto-fills EMPTY slots from the best
+    // owned (collected) gear before spawning. Fill-empty only, so a manual
+    // downgrade equipped for testing is never yanked back up.
+    autoEquipFromCollection(false);
     this.player = Entities.createPlayer(this, start.x, start.y, CURRENT);
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
     this.rig = makeInputRig(this);
@@ -1570,6 +1810,13 @@ var RealmScene = new Phaser.Class({
     this.lootItems = [];                                           // M3: chest gear rows
     this.chest = null; this.interactables = []; this.promptText = null; // E1/Q6
     this.championKills = 0;                    // E9 v2: bounty rolls for the boss chest
+    // M5.0 grove state (scene reuse — reset EVERYTHING)
+    this.glowPatches = [];                     // bloom-pixie resurrection trail
+    this.corpses = [];                         // recent mob deaths (revive targets)
+    this._spawnQueue = [];                     // mechanic spawns, drained once per frame
+    this._reviveTarget = null;                 // phase-two: where the pixies fly
+    this._reviveState = null;                  // phase-two channel bookkeeping
+    this._immuneAt = {};                       // 'IMMUNE' popup rate limit per mob id
     wireFullscreen(this);
 
     // pooled groups (TM-3/TM-5)
@@ -1577,11 +1824,15 @@ var RealmScene = new Phaser.Class({
     this.playerShots = this.physics.add.group({ maxSize: 220 });
     this.enemyShots = this.physics.add.group({ maxSize: 300 });
     this.tornadoes = this.physics.add.group({ maxSize: 24 });   // M4: Knight whirlwind tornado pool
+    this.slimePatches = [];                                      // M4.9: conductor-zombie slime hazard pool
+    this.playerInFog = false; this._lastSlimeTickAt = 0;        // M4.9: smog fog + slime tick clock
     // (the Wizard's storm-orb pool retired 2026-07-13 — the ARCANE BARRAGE
     //  machine gun fires plain playerShots; see Entities.channelBarrage)
     this.whirlFx = null;                                        // M4: Knight whirlwind ring VFX
 
     this.physics.add.collider(this.mobs, this.mobs);
+    if (this._trunkColliderPending) this.wireGroveColliders();   // M5.0: fallen-trunk walls
+    if (this._fenceColliderPending) this.wireGraveyardColliders();  // M5.6: destructible iron fences
     var self = this;
 
     // M3: walls are real — they block bodies AND shots (cover to kite around).
@@ -1606,13 +1857,19 @@ var RealmScene = new Phaser.Class({
     // down onto its victim (SIM.rng — seam rule 4).
     this.physics.add.overlap(this.playerShots, this.mobs, function (shot, mob) {
       if (!shot.active || !mob.active) return;
+      // M4.9 SMOG: a mob concealed by a serpent's fog can't be hit from OUTSIDE
+      // the cloud — the shot passes through (not consumed, not marked) until the
+      // player is standing in the fog too.
+      if (mob.mob.concealed && !self.playerInFog) return;
       if (shot.proj.hits[mob.id]) return;
       shot.proj.hits[mob.id] = true;
       Entities.hurtMob(self, mob, shot.proj.dmg, self.time.now);
       if (shot.proj.slow) Entities.applySlow(mob, shot.proj.slow, self.time.now);
+      if (shot.proj.burn) Entities.applyBurn(mob, shot.proj.burn, self.time.now);   // M4.6 fire volley
       if (shot.proj.strike && SIM.rng() < shot.proj.strike.chance) {
         self.lightningStrike(mob.x, mob.y, shot.proj.strike);
       }
+      if (shot.proj.explode) self.arrowExplode(shot.x, shot.y, shot.proj.explode, mob);  // M5.1 set arrows
       if (!shot.proj.pierce) Entities.killProjectile(self.playerShots, shot);
     });
 
@@ -1620,8 +1877,9 @@ var RealmScene = new Phaser.Class({
     this.physics.add.overlap(this.enemyShots, this.player, function (playerObj, shot) {
       if (!shot.active) return;
       var killer = shot.proj.src ? shot.proj.src + "'s bolt" : 'a magic bolt';
+      var fromBoss = !!shot.proj.fromBoss;                 // M4.6: boss bolts hit harder per class
       Entities.killProjectile(self.enemyShots, shot);
-      Entities.hurtPlayer(self, self.player, shot.proj.dmg, self.time.now, killer);
+      Entities.hurtPlayer(self, self.player, shot.proj.dmg, self.time.now, killer, fromBoss);
     });
 
     // chaser contact damage (ticked — TM-2 i-frames still apply)
@@ -1629,7 +1887,17 @@ var RealmScene = new Phaser.Class({
       if (!mob.active || !mob.mob.def.chase) return;
       if (self.time.now - mob.mob.lastContactAt < DATA.combat.contactTickMs) return;
       mob.mob.lastContactAt = self.time.now;
-      Entities.hurtPlayer(self, self.player, mob.mob.def.chase.contactDmg, self.time.now, 'a ' + mob.mob.def.name);
+      // M5.4: contact damage scales with the mob's level mult
+      var cDmg = Math.max(DATA.combat.minDamage, Math.round(mob.mob.def.chase.contactDmg * (mob.mob.dmgMult || 1)));
+      Entities.hurtPlayer(self, self.player, cDmg, self.time.now, 'a ' + mob.mob.def.name);
+      // M4.7 DETONATE (Dynamite Mole): his contact hit IS his death — one big
+      // boom, no XP (he blew himself up; nobody earned that).
+      if (mob.mob.def.detonate && mob.active) {
+        self.burst(mob.x, mob.y, 14, mob.mob.def.deathTint);
+        self.cameras.main.shake(160, 0.008);
+        try { AUDIO.play('thud'); } catch (e) {}
+        Entities.clearNameTag(mob); mob.body.enable = false; self.mobs.killAndHide(mob);
+      }
     });
 
     // wave director (Fusion Law F3)
@@ -1649,7 +1917,7 @@ var RealmScene = new Phaser.Class({
     // M4.5: BATTLE MUSIC — "Swarmfront" (original) drives the whole realm; it
     // cuts out the moment the fight is decided (boss down / horn / death), so
     // the silence itself is the release. playMusic is idempotent (resize-safe).
-    AUDIO.playMusic('battle');
+    AUDIO.playMusic((this.realmDef && this.realmDef.music) || 'battle');   // M5.0: per-realm theme
     this.cameras.main.fadeIn(300);
   },
 
@@ -1700,8 +1968,102 @@ var RealmScene = new Phaser.Class({
     this.paused = false;
     var dt = this.time.now - this.pausedAt;
     this.startedAt += dt;                        // realm clock ignores paused time
-    var shift = function (g) { g.children.iterate(function (s) { if (s && s.active) s.proj.dieAt += dt; }); };
+    // AUDIT FIX 2026-07-14: the scene clock keeps running while paused, so
+    // EVERY absolute time-stamp must shift by the paused duration — not just
+    // shot lifetimes. Before this, pausing ate tornado lifetimes, frost slows,
+    // splitter forks, boss pattern cooldowns, and (worst) the train telegraph:
+    // the horn's 1300ms warning could fully elapse behind the ESC menu and the
+    // instakill train launched the same frame the menu closed.
+    var shift = function (g) { g.children.iterate(function (s) {
+      if (!s || !s.active) return;
+      s.proj.dieAt += dt;
+      if (s.proj.splitAt) s.proj.splitAt += dt;            // E9 splitter fork point
+    }); };
     shift(this.playerShots); shift(this.enemyShots);
+    if (this.tornadoes) this.tornadoes.children.iterate(function (t) {
+      if (!t || !t.active) return;
+      t.tornado.dieAt += dt;
+      for (var k in t.tornado.hits) t.tornado.hits[k] += dt;   // re-hit clocks
+    });
+    this.mobs.children.iterate(function (m) {
+      if (!m || !m.active || !m.mob) return;
+      if (m.mob.slowUntil) m.mob.slowUntil += dt;                            // frost slows
+      if (m.mob.burnUntil) { m.mob.burnUntil += dt; m.mob.nextBurnAt += dt; } // M4.6 fire burns
+      if (m.mob.fuseAt) m.mob.fuseAt += dt;                                  // M4.9 mole bomb
+      if (m.mob.lastSlimeAt) m.mob.lastSlimeAt += dt;                        // M4.9 zombie slime cadence
+      if (m.mob.fogPhaseAt) m.mob.fogPhaseAt += dt;                          // M4.9 serpent fog phase
+      // M5.0 grove mob clocks
+      if (m.mob.nextBlinkAt) m.mob.nextBlinkAt += dt;                        // pixie blink
+      if (m.mob.castUntil) { m.mob.castUntil += dt; m.mob.castStart += dt; } // brute SUMMON cast
+      if (m.mob.nextSummonAt) m.mob.nextSummonAt += dt;                      // bloom-pixie summon
+      if (m.mob.lastGlowAt) m.mob.lastGlowAt += dt;                          // glow-trail cadence
+      // M5.6 graveyard mob clocks
+      if (m.mob.lungeUntil) m.mob.lungeUntil += dt;                          // ghoul lunge windup/dash
+      if (m.mob.nextLungeAt) m.mob.nextLungeAt += dt;                        // ghoul lunge cooldown
+      if (m.mob.lastWailAt) m.mob.lastWailAt += dt;                          // banshee wail cadence
+      if (m.mob.wailUntil) m.mob.wailUntil += dt;                            // banshee wail cast
+      if (m.mob.lastHitAt) m.mob.lastHitAt += dt;                            // golem regen idle window
+      if (m.mob.nextRegenAt) m.mob.nextRegenAt += dt;                        // golem regen tick
+      if (m.mob.nextRaiseAt) m.mob.nextRaiseAt += dt;                        // acolyte raise cadence
+      if (m.mob.surgeUntil) m.mob.surgeUntil += dt;                          // cursed-bell speed surge
+    });
+    // M4.9: slime hazard lifetimes + the player slime-tick clock
+    if (this.slimePatches) this.slimePatches.forEach(function (s) { if (s && !s.dead) s.dieAt += dt; });
+    if (this._lastSlimeTickAt) this._lastSlimeTickAt += dt;
+    if (this.boss && this.boss.active) {
+      var bs = this.boss.boss;
+      bs.nextRadialAt += dt; bs.nextStreamAt += dt;
+      if (bs.streamLeft > 0) bs.nextStreamShotAt += dt;
+      if (bs.burnUntil) { bs.burnUntil += dt; bs.nextBurnAt += dt; }         // M4.6 fire burns
+      // M4.7: the Conductor's pattern clocks are absolute too
+      if (bs.def.patterns.ghostTrain) {
+        ['nextTrainAt', 'nextTiesAt', 'nextSchedAt', 'nextLanternAt',
+         'lanternUntil', 'nextLanternTickAt', 'lastLanternAt'].forEach(function (k) {
+          if (bs[k]) bs[k] += dt;
+        });
+      }
+      // M5.0: the Grovekeeper's verb clocks
+      if (bs.def.patterns.timber) {
+        ['nextTimberAt', 'nextMortarAt', 'nextOvergrowthAt', 'nextSunlanceAt',
+         'nextSurgeAt', 'sunUntil', 'nextSunTickAt', 'lastSunAt'].forEach(function (k) {
+          if (bs[k]) bs[k] += dt;
+        });
+      }
+      // M5.6: the Gravekeeper's Necronomicon verb clocks
+      if (bs.def.waves) {
+        ['nextExplodeAt', 'nextHandsAt', 'nextSigilAt', 'reaperAt'].forEach(function (k) { if (bs[k]) bs[k] += dt; });
+      }
+    }
+    // M5.0 grove scene clocks: falling trees, lingering trunks, glow patches,
+    // corpse ledger, the phase-two channel
+    if (this.groveFall) {
+      if (this.groveFall.nextAt && this.groveFall.nextAt !== Infinity) this.groveFall.nextAt += dt;
+      if (this.groveFall.fall && this.groveFall.fall.warnUntil) this.groveFall.fall.warnUntil += dt;
+    }
+    if (this.timberFall && this.timberFall.warnUntil) this.timberFall.warnUntil += dt;
+    if (this.groveTrunks) this.groveTrunks.forEach(function (r2) { r2.dieAt += dt; });
+    if (this.glowPatches) this.glowPatches.forEach(function (g2) { if (!g2.dead) g2.dieAt += dt; });
+    if (this.corpses) this.corpses.forEach(function (c2) { c2.at += dt; });
+    if (this._reviveState) this._reviveState.until += dt;
+    // M5.6 graveyard scene clocks: the Witching Cycle + hazards + player curse
+    if (this.witching) {
+      var W = this.witching;
+      if (W.nextGraveAt && W.nextGraveAt !== Infinity) W.nextGraveAt += dt;
+      if (W.grave && W.grave.eruptAt) W.grave.eruptAt += dt;
+      if (W.nextBellAt && W.nextBellAt !== Infinity) W.nextBellAt += dt;
+      if (W.nextTollAt) W.nextTollAt += dt;
+      if (W.surgeUntil) W.surgeUntil += dt;
+    }
+    if (this.gasPatches) this.gasPatches.forEach(function (g) { g.dieAt += dt; if (g.lastTick) g.lastTick += dt; });
+    if (this.soulWisps) this.soulWisps.forEach(function (s) { s.dieAt += dt; });
+    if (this.graveFences) this.graveFences.forEach(function (f) { if (f.lastChewAt) f.lastChewAt += dt; });
+    if (this.player.state.curseUntil) { this.player.state.curseUntil += dt; if (this.player.state.curseNextAt) this.player.state.curseNextAt += dt; }
+    if (this.ghostTrain && this.ghostTrain.warnUntil) this.ghostTrain.warnUntil += dt;   // M4.7 ghost track
+    if (this.player.state.slowUntil) this.player.state.slowUntil += dt;                  // M4.7 the schedule
+    if (this.train) {                                       // train phase clocks
+      if (this.train.nextAt) this.train.nextAt += dt;
+      if (this.train.warnUntil) this.train.warnUntil += dt;
+    }
     if (!this.hitstopActive && !this.scanning && !this.looting) this.physics.world.resume();
     // the director resumes only if nothing upstream stood it down (boss flow,
     // E2 wipe, chest pending) — fixes a latent unpause-restarts-the-swarm bug
@@ -1712,10 +2074,66 @@ var RealmScene = new Phaser.Class({
 
   // ------------------------------------------------- M2: BOSS FLOW (F8) --
   banner: function (msg, color) {
+    var self = this;
+    // one banner at a time — a new one REPLACES the old so they never overlap
+    if (this._bannerText && this._bannerText.active) { try { this._bannerText.destroy(); } catch (e) {} }
     var t = this.add.text(this.scale.width / 2, this.scale.height * 0.28, msg,
       { fontFamily: 'monospace', fontSize: 26, color: color || '#ffcd75', align: 'center' })
       .setScrollFactor(0).setOrigin(0.5).setDepth(70);
-    this.tweens.add({ targets: t, alpha: 0, delay: 2200, duration: 700, onComplete: function () { t.destroy(); } });
+    this._bannerText = t;
+    this.tweens.add({ targets: t, alpha: 0, delay: 2200, duration: 700,
+      onComplete: function () { try { t.destroy(); } catch (e) {} if (self._bannerText === t) self._bannerText = null; } });
+  },
+
+  // M5.6 WAVE REVEAL (Red): a GTA-VI-logo-style title card — "WAVE N" in big
+  // block letters with an UNDEAD SCENE poured inside the glyphs (ecto→green→rune
+  // gradient, zombie hands clawing up, bone highlights, ecto glints), a bone
+  // outline, drop shadow, and a soft green glow. A real graphic that POPS in,
+  // not flat tinted text. Screen-space; scales/fades as one.
+  waveReveal: function (waveIdx, label) {
+    var self = this, W = this.scale.width, H = this.scale.height;
+    var cx = W / 2, cy = H * 0.16, txt = 'WAVE ' + (waveIdx + 1);
+    var FS = Math.max(56, Math.min(132, Math.floor(W / 7))), DEP = 74;
+    var FONT = { fontFamily: 'monospace', fontSize: FS, fontStyle: 'bold' };
+    var pieces = [];
+    var maskText = this.add.text(cx, cy, txt, { fontFamily: 'monospace', fontSize: FS, fontStyle: 'bold', color: '#ffffff' })
+      .setOrigin(0.5).setScrollFactor(0).setVisible(false);
+    var tw = maskText.width + 22, th = maskText.height + 14;
+    // (no glow halo — Red: just the letters)
+    // drop shadow
+    pieces.push(this.add.text(cx + FS * 0.05, cy + FS * 0.06, txt, { fontFamily: 'monospace', fontSize: FS, fontStyle: 'bold', color: '#08080c' }).setOrigin(0.5).setScrollFactor(0).setDepth(DEP - 1));
+    // DARK HALO OUTLINE behind the fill — a thick near-black stroke so every glyph
+    // (esp. the wide number) has a crisp, unmistakable silhouette. Red: "the
+    // numbers aren't legible" — the busy bone fill was merging with the edges.
+    pieces.push(this.add.text(cx, cy, txt, { fontFamily: 'monospace', fontSize: FS, fontStyle: 'bold', color: 'rgba(0,0,0,0)', stroke: '#04100a', strokeThickness: Math.max(12, FS * 0.16) }).setOrigin(0.5).setScrollFactor(0).setDepth(DEP));
+    // UNDEAD SCENE fill (drawn centered at 0,0; positioned at cx,cy so it scales about center)
+    var g = this.add.graphics().setScrollFactor(0).setDepth(DEP + 1).setPosition(cx, cy);
+    var lc = function (a, b, t) { return (Math.round(a[0] + (b[0] - a[0]) * t) << 16) | (Math.round(a[1] + (b[1] - a[1]) * t) << 8) | Math.round(a[2] + (b[2] - a[2]) * t); };
+    // GREEN gradient, DARKER now so the fill reads as texture INSIDE the glyph
+    // rather than competing with the bright bone edge (keeps digits legible).
+    var TOP = [0x7c, 0xd8, 0x9a], MID = [0x2c, 0x84, 0x50], BOT = [0x0c, 0x2a, 0x1a];
+    for (var yy = 0; yy < th; yy++) { var tt = yy / th; g.fillStyle(tt < 0.5 ? lc(TOP, MID, tt * 2) : lc(MID, BOT, (tt - 0.5) * 2), 1); g.fillRect(-tw / 2, -th / 2 + yy, tw, 1); }
+    // (no bone / zombie-hand fill — Red: "remove bone fill from all of it" — the
+    // clawing hands were breaking up the digit shapes. Just the green gradient
+    // inside the glyphs; the crisp outlines carry the undead read.)
+    g.setMask(maskText.createBitmapMask());
+    pieces.push(g);
+    // bright bone block-letter OUTLINE on top — the crisp readable edge
+    pieces.push(this.add.text(cx, cy, txt, { fontFamily: 'monospace', fontSize: FS, fontStyle: 'bold', color: 'rgba(0,0,0,0)', stroke: '#f4e3c2', strokeThickness: Math.max(7, FS * 0.075) }).setOrigin(0.5).setScrollFactor(0).setDepth(DEP + 2));
+    // (no subtitle — Red: the wave-name text under it was unreadable; just the letters)
+    // SLIDE ON from the left → hold near the top → SLIDE OFF to the right. All
+    // pieces (glyph fill, mask, outlines, shadow) move by the SAME relative delta
+    // each frame so the bitmap mask stays aligned to the fill mid-flight.
+    var all = pieces.concat([maskText]);
+    var SL = W * 0.95;
+    all.forEach(function (o) { o.x -= SL; o.setAlpha(0); });   // parked off the left edge
+    this.tweens.add({ targets: all, x: '+=' + SL, alpha: 1, duration: 520, ease: 'Back.Out' });  // sweep in + settle
+    this.cameras.main.shake(150, 0.003);
+    try { AUDIO.play('belltoll'); } catch (e) {}
+    this.time.delayedCall(1650, function () {
+      self.tweens.add({ targets: all, x: '+=' + SL, alpha: 0, duration: 460, ease: 'Back.In',   // wind up + launch off the right
+        onComplete: function () { try { g.clearMask(true); } catch (e) {} all.forEach(function (o) { try { o.destroy(); } catch (e2) {} }); } });
+    });
   },
 
   // E2 (M2.1, Q7): the mob-destruction wipe — annihilates every live mob (no
@@ -1729,6 +2147,20 @@ var RealmScene = new Phaser.Class({
       if (m && m.active) { self.burst(m.x, m.y, 6, m.mob.def.deathTint); Entities.clearNameTag(m); m.body.enable = false; self.mobs.killAndHide(m); }
     });
     this.enemyShots.children.iterate(function (s) { if (s && s.active) Entities.killProjectile(self.enemyShots, s); });
+    // M4.9: clear lingering slime patches with the swarm (fog/warn rings ride
+    // on the mobs and were cleared by clearNameTag above)
+    if (this.slimePatches) { this.slimePatches.forEach(function (s) { if (s.obj && s.obj.active) { try { s.obj.destroy(); } catch (e) {} } }); this.slimePatches = []; }
+    this.playerInFog = false;
+    // M5.0: the grove's revival machinery dies with the swarm too — no queued
+    // spawns, no glow patches, no corpses for a pixie that no longer exists
+    if (this.glowPatches) { this.glowPatches.forEach(function (g2) { if (g2.obj && g2.obj.active) { try { g2.obj.destroy(); } catch (e) {} } }); this.glowPatches = []; }
+    this.corpses = [];
+    this._spawnQueue = [];
+    // M5.6: the graveyard's hazard pools die with the swarm too
+    if (this.gasPatches) { this.gasPatches.forEach(function (g) { if (g.obj && g.obj.active) { try { g.obj.destroy(); } catch (e) {} } }); this.gasPatches = []; }
+    if (this.soulWisps) { this.soulWisps.forEach(function (s) { if (s.spr && s.spr.active) { try { s.spr.destroy(); } catch (e) {} } }); this.soulWisps = []; }
+    if (this.witching && this.witching.grave && this.witching.grave.ring) { try { this.witching.grave.ring.destroy(); } catch (e) {} this.witching.grave = null; }
+    if (this.clearReaper) this.clearReaper();               // M5.6: the reaper marches no more
     // full-screen destruction flash
     var W = this.scale.width, H = this.scale.height;
     var flash = this.add.rectangle(W / 2, H / 2, W, H, 0xffffff, 0.55).setScrollFactor(0).setDepth(75);
@@ -1766,7 +2198,7 @@ var RealmScene = new Phaser.Class({
     this.enemyShots.children.iterate(function (s) { if (s && s.active) Entities.killProjectile(self.enemyShots, s); });
     if (this.bossPortal) { this.bossPortal.destroy(); this.bossPortal = null; }
 
-    var def = DATA.bosses[DATA.realm.boss];
+    var def = DATA.bosses[this.realmBoss || DATA.realm.boss];   // M5.0: per-realm boss
     var bx, by;
     if (this.map && this.map.objects.bossArena) {
       // M3: the map defines a BOSS ARENA — the portal delivers you to its
@@ -1782,9 +2214,31 @@ var RealmScene = new Phaser.Class({
       by = Phaser.Math.Clamp(this.player.y + Math.sin(a) * 380, 150, this.worldH - 150);
       if (this.map) { var c = MAPS.findClearPx(this.map, bx, by); bx = c.x; by = c.y; }
     }
-    this.boss = Entities.spawnBoss(this, DATA.realm.boss, bx, by, this.time.now);
+    // M4.7: THE CONDUCTOR ARRIVES ON HIS TRAIN (user, 2026-07-14) — the Styx
+    // Express steams in, brakes, and he steps off; THEN the scouter + fight.
+    // Bosses without an `arrival` block (the Grovekeeper on future maps) keep
+    // the classic instant spawn.
+    if (def.arrival && this.trainLanes && this.textures.exists('ghostLoco')) {
+      this.conductorArrival(def, bx, by);
+    } else if (def.treeArrival && this.heartwood) {
+      // M5.0: THE HEARTWOOD WAKES — the Grovekeeper steps out of the great tree
+      this.grovekeeperArrival(def);
+    } else if (def.graveArrival && this.arenaGrave) {
+      // M5.6: THE GRAVEKEEPER climbs out of the arena grave
+      this.gravekeeperArrival(def);
+    } else {
+      this.spawnBossNow(def, bx, by);
+      this.showScouter(def);                             // E3: the workup sheet
+    }
+  },
+
+  // The actual boss materialization — spawn, colliders, HP bar, overlaps.
+  // (Extracted from startBossFight for the M4.7 arrival cinematic.)
+  spawnBossNow: function (def, bx, by) {
+    var self = this;
+    this.boss = Entities.spawnBoss(this, this.realmBoss || DATA.realm.boss, bx, by, this.time.now);
     if (this.wallBodies) this.physics.add.collider(this.boss, this.wallBodies);   // M3: bosses respect walls
-    this.banner(def.name.toUpperCase() + '\nguardian of ' + DATA.realm.name, '#b13e53');
+    this.banner(def.name.toUpperCase() + '\n' + (def.title ? def.title.toLowerCase() : 'guardian of ' + DATA.realm.name), '#b13e53');
 
     // boss HP bar (top center)
     var W = this.scale.width;
@@ -1799,9 +2253,11 @@ var RealmScene = new Phaser.Class({
       if (shot.proj.hits[boss.id]) return;
       shot.proj.hits[boss.id] = true;
       Entities.hurtBoss(self, boss, shot.proj.dmg);
+      if (shot.proj.burn) Entities.applyBurn(boss, shot.proj.burn, self.time.now);   // M4.6: the boss burns too
       if (shot.proj.strike && SIM.rng() < shot.proj.strike.chance) {
         self.lightningStrike(boss.x, boss.y, shot.proj.strike);
       }
+      if (shot.proj.explode) self.arrowExplode(shot.x, shot.y, shot.proj.explode, null);  // M5.1 set arrows
       if (!shot.proj.pierce) Entities.killProjectile(self.playerShots, shot);
     });
     // boss contact damage (ticked, i-frames still apply)
@@ -1809,10 +2265,321 @@ var RealmScene = new Phaser.Class({
       if (!boss.active) return;
       if (self.time.now - boss.boss.lastContactAt < DATA.combat.contactTickMs) return;
       boss.boss.lastContactAt = self.time.now;
-      Entities.hurtPlayer(self, self.player, boss.boss.def.contactDmg, self.time.now, def.name);
+      Entities.hurtPlayer(self, self.player, boss.boss.def.contactDmg, self.time.now, def.name, true);   // M4.6: boss source
     });
 
-    this.showScouter(def);                               // E3: the workup sheet
+    if (def.patterns.ghostTrain) this.initConductor(this.boss, this.time.now);   // M4.7 pattern clocks
+    if (def.patterns.timber) this.initGrovekeeper(this.boss, this.time.now);     // M5.0 grove verb clocks
+    if (def.waves) this.initGravekeeper(this.boss, this.time.now);               // M5.6 wave loop + verbs
+  },
+
+  // ---------------------- M4.7: THE CONDUCTOR — ARRIVAL + TRAIN VERBS --------
+  // The Styx Express pulls into the nearest lane, brakes at the arena point,
+  // the Conductor steps off, the train departs. Tween-driven → pause-safe.
+  // (Pausing mid-arrival lets the scene clock run — a 3s cinematic, accepted.)
+  conductorArrival: function (def, bx, by) {
+    var self = this, A = def.arrival;
+    // nearest lane to the arena point
+    var lane = this.trainLanes[0];
+    for (var i = 1; i < this.trainLanes.length; i++)
+      if (Math.abs(this.trainLanes[i].y - by) < Math.abs(lane.y - by)) lane = this.trainLanes[i];
+    var dir = bx > this.worldW / 2 ? 1 : -1;             // approach from the FAR tunnel (long, dramatic)
+    var stopX = Phaser.Math.Clamp(bx, 220, this.worldW - 220);
+    var units = [];
+    var loco = this.add.image(0, lane.y, 'loco').setDepth(30).setScale(120 / 96).setFlipX(dir < 0);
+    var half = loco.displayWidth / 2;
+    units.push({ spr: loco, off: 0 });
+    var carScale = 108 / 88, off = half;
+    for (var c = 0; c < (A.cars || 5); c++) {
+      var car = this.add.image(0, lane.y, 'carBox' + (c % 4)).setDepth(30).setScale(carScale).setFlipX(dir < 0);
+      var cHalf = car.displayWidth / 2;
+      off += 10 + cHalf;
+      units.push({ spr: car, off: off });
+      off += cHalf;
+    }
+    var startX = dir > 0 ? -(half + off) : this.worldW + half + off;
+    units.forEach(function (u) { u.spr.x = startX - dir * u.off; });
+    this.arrivalTrain = units;
+    try { AUDIO.play('trainhorn'); } catch (e) {}
+    // the CAMERA goes to meet the train (the player may be far from the lane);
+    // it snaps back to following the player when the scouter comes up.
+    this.cameras.main.stopFollow();
+    this.cameras.main.pan(stopX, lane.y, 700, 'Sine.easeInOut');
+    this.cameras.main.shake(300, 0.004);
+    var proxy = { x: startX };
+    this.tweens.add({
+      targets: proxy, x: stopX, duration: A.runInMs, ease: 'Cubic.Out',   // braking
+      onUpdate: function () { units.forEach(function (u) { u.spr.x = proxy.x - dir * u.off; }); },
+      onComplete: function () {
+        try { AUDIO.play('trainpass'); } catch (e) {}                     // brake screech
+        self.burst(stopX - dir * half * 0.6, lane.y - 30, 14, 0xd8dce4);  // steam
+        self.cameras.main.shake(220, 0.006);
+        self.time.delayedCall(A.puffMs, function () {
+          // HE STEPS OFF — spawn at the cab, hop down toward the yard
+          var offY = lane.y + 86;
+          self.spawnBossNow(def, stopX, offY);
+          if (self.boss) {
+            self.boss.setPosition(stopX, lane.y + 30).setAlpha(0);
+            self.tweens.add({ targets: self.boss, y: offY, alpha: 1, duration: A.stepOffMs, ease: 'Back.Out' });
+          }
+          try { AUDIO.play('thud'); } catch (e) {}
+          // the Express departs while he cracks his knuckles
+          var out = { x: stopX };
+          self.tweens.add({
+            targets: out, x: dir > 0 ? self.worldW + half + off + 40 : -(half + off + 40),
+            duration: 1700, ease: 'Sine.In', delay: A.stepOffMs + 150,
+            onUpdate: function () { units.forEach(function (u) { u.spr.x = out.x - dir * u.off; }); },
+            onComplete: function () {
+              units.forEach(function (u) { try { u.spr.destroy(); } catch (e) {} });
+              self.arrivalTrain = null;
+            }
+          });
+          self.time.delayedCall(A.stepOffMs + 100, function () {
+            self.cameras.main.startFollow(self.player);   // back to the hero (snap hides behind the scouter)
+            self.showScouter(def);
+          });
+        });
+      }
+    });
+  },
+
+  initConductor: function (b, time) {
+    var cd = b.boss, P = cd.def.patterns;
+    cd.nextTrainAt = time + 4200;
+    cd.nextTiesAt = time + 2600;
+    cd.nextSchedAt = time + 7000;
+    cd.nextLanternAt = time + 5200;
+    cd.lanternUntil = 0; cd.nextLanternTickAt = 0; cd.lanternAng = 0; cd.lastLanternAt = 0; cd.lanternDir = 1;
+    this.ghostTrain = null;
+    this.condFx = [];                                     // markers/ties for cleanup
+  },
+
+  // Pattern driver — called from Entities.updateBoss every frame the boss and
+  // player are both alive. All timestamps here are ABSOLUTE (unfreeze shifts).
+  conductorUpdate: function (b, player, time) {
+    var cd = b.boss, P = cd.def.patterns;
+    // GHOST TRACK → GHOST EXPRESS
+    if (!this.ghostTrain && time >= cd.nextTrainAt) this.summonGhostTrack(b, time);
+    var gt = this.ghostTrain;
+    if (gt && gt.phase === 'warn') {
+      gt.trackSpr.setAlpha(Math.floor(time / 110) % 2 === 0 ? 0.6 : 0.35);   // flashing rails
+      if (time >= gt.warnUntil) this.launchGhostTrain(time);
+    }
+    // RAILROAD TIES
+    if (time >= cd.nextTiesAt) { cd.nextTiesAt = time + P.ties.everyMs; this.throwTies(b, P.ties); }
+    // THE SCHEDULE
+    if (time >= cd.nextSchedAt) { cd.nextSchedAt = time + P.schedule.everyMs; this.snapSchedule(b, P.schedule, time); }
+    // LANTERN SWEEP
+    this.updateLantern(b, player, time);
+  },
+
+  summonGhostTrack: function (b, time) {
+    var P = b.boss.def.patterns.ghostTrain;
+    var horiz = SIM.rng() < 0.7;                          // gameplay roll — SIM.rng (seam rule 4)
+    var gt = this.ghostTrain = {
+      phase: 'warn', horiz: horiz, warnUntil: time + P.warnMs,
+      dir: SIM.rng() < 0.5 ? 1 : -1, dmg: P.dmg, speed: P.speed
+    };
+    if (horiz) {
+      gt.pos = Phaser.Math.Clamp(this.player.y, 130, this.worldH - 130);
+      gt.trackSpr = this.add.tileSprite(this.worldW / 2, gt.pos, this.worldW, 96, 'track')
+        .setDepth(-8).setTint(0x9fd8ff).setAlpha(0);
+    } else {
+      gt.pos = Phaser.Math.Clamp(this.player.x, 130, this.worldW - 130);
+      gt.trackSpr = this.add.tileSprite(gt.pos, this.worldH / 2, this.worldH, 96, 'track')
+        .setDepth(-8).setTint(0x9fd6ff).setAlpha(0).setAngle(90);
+    }
+    this.tweens.add({ targets: gt.trackSpr, alpha: 0.55, duration: 260 });
+    try { AUDIO.play('trainhorn'); } catch (e) {}
+    this.cameras.main.shake(280, 0.004);
+  },
+
+  launchGhostTrain: function (time) {
+    var gt = this.ghostTrain;
+    gt.phase = 'run';
+    var span = gt.horiz ? this.worldW : this.worldH;
+    var units = [], scale = 120 / 96, carScale = 108 / 88;
+    var count = Math.round(3 + SIM.rng() * 5);            // 3..8 spectral cars
+    var mk = function (scene, key, s) {
+      var spr = scene.add.image(0, 0, key).setDepth(31).setScale(s).setAlpha(0.82);
+      if (gt.horiz) spr.setFlipX(gt.dir < 0);
+      else spr.setAngle(gt.dir > 0 ? 90 : -90);
+      return spr;
+    };
+    var loco = mk(this, 'ghostLoco', scale);
+    var half = (gt.horiz ? loco.displayWidth : loco.displayHeight) / 2;
+    units.push({ spr: loco, off: 0, along: half * 0.9, across: (gt.horiz ? loco.displayHeight : loco.displayWidth) / 2 * 0.78 });
+    var off = half;
+    for (var i = 0; i < count; i++) {
+      var car = mk(this, 'ghostCar', carScale);
+      var cHalf = (gt.horiz ? car.displayWidth : car.displayHeight) / 2;
+      off += 10 + cHalf;
+      units.push({ spr: car, off: off, along: cHalf * 0.9, across: (gt.horiz ? car.displayHeight : car.displayWidth) / 2 * 0.78 });
+      off += cHalf;
+    }
+    gt.units = units;
+    gt.a = gt.dir > 0 ? -half : span + half;              // axis position of the loco
+    gt.endA = gt.dir > 0 ? span + half + off : -(half + off);
+    gt.lastRumble = 0;
+    try { AUDIO.play('trainhorn'); } catch (e) {}
+    this.cameras.main.shake(260, 0.006);
+  },
+
+  // Ghost-train MOVEMENT — driven from update() (not updateBoss) so a rolling
+  // ghost express finishes its pass even if the player just died (same rule as
+  // the ambush train). Gated on hitstop like the real train.
+  updateGhostTrain: function (time, delta) {
+    var gt = this.ghostTrain;
+    if (!gt) return;
+    if (gt.phase !== 'run') {
+      // a WARN with no boss left (he died mid-summon) — fade the rails out
+      if (gt.phase === 'warn' && (!this.boss || !this.boss.active)) this.clearGhostTrain();
+      return;
+    }
+    gt.a += gt.dir * gt.speed * (delta / 1000);
+    var p = this.player, self = this;
+    for (var i = 0; i < gt.units.length; i++) {
+      var u = gt.units[i], pos = gt.a - gt.dir * u.off;
+      if (gt.horiz) u.spr.setPosition(pos, gt.pos); else u.spr.setPosition(gt.pos, pos);
+      // EXTREME damage (user: insta-kill if no gear on) — through hurtPlayer,
+      // so DEF/HP gear + the class dmgTaken mults all apply; i-frames stop
+      // one pass from double-dipping.
+      if (p.state.alive) {
+        var along = gt.horiz ? Math.abs(p.x - u.spr.x) : Math.abs(p.y - u.spr.y);
+        var across = gt.horiz ? Math.abs(p.y - gt.pos) : Math.abs(p.x - gt.pos);
+        if (along < u.along && across < u.across) {
+          Entities.hurtPlayer(this, p, gt.dmg, time, 'the ghost express', true);
+        }
+      }
+    }
+    if (time - (gt.lastRumble || 0) > 230) {
+      gt.lastRumble = time; try { AUDIO.play('trainpass'); } catch (e) {}
+      this.cameras.main.shake(180, 0.005);
+    }
+    if ((gt.dir > 0 && gt.a > gt.endA) || (gt.dir < 0 && gt.a < gt.endA)) {
+      this.clearGhostTrain();
+      if (this.boss && this.boss.active && this.boss.boss.def.patterns.ghostTrain) {
+        this.boss.boss.nextTrainAt = time + this.boss.boss.def.patterns.ghostTrain.everyMs;
+      }
+    }
+  },
+
+  clearGhostTrain: function () {
+    var gt = this.ghostTrain;
+    if (!gt) return;
+    if (gt.units) gt.units.forEach(function (u) { try { u.spr.destroy(); } catch (e) {} });
+    var track = gt.trackSpr;
+    if (track) this.tweens.add({ targets: track, alpha: 0, duration: 500,
+      onComplete: function () { try { track.destroy(); } catch (e) {} } });
+    this.ghostTrain = null;
+  },
+
+  throwTies: function (b, T) {
+    var self = this;
+    for (var i = 0; i < T.count; i++) {
+      // first tie dead on the player, the rest scattered around them (SIM.rng)
+      var tx = i === 0 ? this.player.x : this.player.x + (SIM.rng() * 2 - 1) * T.scatter;
+      var ty = i === 0 ? this.player.y : this.player.y + (SIM.rng() * 2 - 1) * T.scatter;
+      tx = Phaser.Math.Clamp(tx, 60, this.worldW - 60);
+      ty = Phaser.Math.Clamp(ty, 60, this.worldH - 60);
+      (function (tx, ty) {
+        var marker = self.add.ellipse(tx, ty, T.radius * 2, T.radius * 2)
+          .setStrokeStyle(3, 0xff5a3c, 0.9).setFillStyle(0xff5a3c, 0.12).setDepth(4);
+        self.condFx.push(marker);
+        self.tweens.add({ targets: marker, scaleX: { from: 0.4, to: 1 }, scaleY: { from: 0.4, to: 1 },
+          duration: T.warnMs, ease: 'Sine.In' });
+        var tie = self.add.image(b.x, b.y - 24, 'railtie').setDepth(40).setScale(2.4);
+        self.condFx.push(tie);
+        self.tweens.add({ targets: tie, scale: 3.4, duration: T.flightMs * 0.5, yoyo: true });   // lob height
+        self.tweens.add({
+          targets: tie, x: tx, y: ty, angle: 660, duration: T.flightMs, delay: T.warnMs - T.flightMs,
+          onComplete: function () {
+            try { AUDIO.play('thud'); } catch (e) {}
+            self.cameras.main.shake(140, 0.005);
+            self.burst(tx, ty, 8, 0x8a5a30);
+            var p = self.player;
+            if (p.state.alive && Math.hypot(p.x - tx, p.y - ty) < T.radius) {
+              Entities.hurtPlayer(self, p, T.dmg, self.time.now, 'a railroad tie', true);
+            }
+            try { marker.destroy(); } catch (e) {}
+            self.tweens.add({ targets: tie, alpha: 0, duration: 900, delay: 500,
+              onComplete: function () { try { tie.destroy(); } catch (e) {} } });
+          }
+        });
+      })(tx, ty);
+    }
+  },
+
+  snapSchedule: function (b, S, time) {
+    var self = this, st = this.player.state;
+    st.slowUntil = time + S.durMs;
+    st.slowMult = S.slowMult;
+    try { AUDIO.play('ticktock'); } catch (e) {}
+    // the watch flash: a gold ring bursts from the boss...
+    var ring = this.add.ellipse(b.x, b.y, 40, 40).setStrokeStyle(4, 0xffd23e, 0.9).setDepth(41);
+    this.tweens.add({ targets: ring, scaleX: 9, scaleY: 9, alpha: 0, duration: 700,
+      onComplete: function () { try { ring.destroy(); } catch (e) {} } });
+    // ...and a golden haze clings to the slowed hero for the duration
+    var fx = this.add.sprite(this.player.x, this.player.y, 'softglow')
+      .setTint(0xffd23e).setScale(1.6).setAlpha(0.5).setDepth(9).setBlendMode(Phaser.BlendModes.ADD);
+    this.condFx.push(fx);
+    var pRef = this.player;
+    this.tweens.add({ targets: fx, alpha: 0.15, duration: S.durMs, ease: 'Sine.In',
+      onUpdate: function () { fx.setPosition(pRef.x, pRef.y); },
+      onComplete: function () { try { fx.destroy(); } catch (e) {} } });
+  },
+
+  updateLantern: function (b, player, time) {
+    var cd = b.boss, L = cd.def.patterns.lantern;
+    if (!cd.lanternUntil && time >= cd.nextLanternAt) {
+      cd.lanternUntil = time + L.durMs;
+      cd.lanternAng = Math.atan2(player.y - b.y, player.x - b.x) - 0.6;   // starts just behind you
+      cd.lanternDir = SIM.rng() < 0.5 ? 1 : -1;
+      cd.lastLanternAt = time;
+      cd.nextLanternTickAt = time;
+      if (!this.lanternG) this.lanternG = this.add.graphics().setDepth(7);
+      try { AUDIO.play('charge'); } catch (e) {}
+    }
+    if (!cd.lanternUntil) return;
+    if (time >= cd.lanternUntil) {
+      cd.lanternUntil = 0;
+      cd.nextLanternAt = time + L.everyMs;
+      if (this.lanternG) this.lanternG.clear();
+      return;
+    }
+    var dtL = Math.min(120, time - (cd.lastLanternAt || time));
+    cd.lastLanternAt = time;
+    cd.lanternAng += cd.lanternDir * Phaser.Math.DegToRad(L.degPerSec) * dtL / 1000;
+    var x2 = b.x + Math.cos(cd.lanternAng) * L.length, y2 = b.y + Math.sin(cd.lanternAng) * L.length;
+    var g = this.lanternG;
+    g.clear();
+    g.lineStyle(26, 0x8fd6ff, 0.22); g.lineBetween(b.x, b.y, x2, y2);
+    g.lineStyle(10, 0xd8f3ff, 0.5);  g.lineBetween(b.x, b.y, x2, y2);
+    if (time >= cd.nextLanternTickAt) {
+      cd.nextLanternTickAt = time + L.tickMs;
+      var pd = Math.hypot(player.x - b.x, player.y - b.y);
+      if (player.state.alive && pd < L.length && pd > 10) {
+        var pa = Math.atan2(player.y - b.y, player.x - b.x);
+        var diff = Phaser.Math.Angle.Wrap(pa - cd.lanternAng);
+        var halfRad = Phaser.Math.DegToRad(L.halfDeg) + 14 / Math.max(40, pd);   // beam width forgiveness
+        if (Math.abs(diff) < halfRad) {
+          Entities.hurtPlayer(this, player, L.dmg, time, "the Conductor's lantern", true);
+        }
+      }
+    }
+  },
+
+  clearConductorFx: function () {
+    if (this.lanternG) { try { this.lanternG.destroy(); } catch (e) {} this.lanternG = null; }
+    this.clearGhostTrain();
+    (this.condFx || []).forEach(function (o) { try { o.destroy(); } catch (e) {} });
+    this.condFx = [];
+    if (this.arrivalTrain) {
+      this.arrivalTrain.forEach(function (u) { try { u.spr.destroy(); } catch (e) {} });
+      this.arrivalTrain = null;
+    }
+    var st = this.player && this.player.state;
+    if (st) { st.slowUntil = 0; st.slowMult = 1; }
   },
 
   // --------------------------------------- E3 (M2.1): SCOUTER WORKUP SHEET --
@@ -1840,20 +2607,33 @@ var RealmScene = new Phaser.Class({
       { fontFamily: 'monospace', fontSize: 11, color: '#94b0c2' }).setScrollFactor(0).setOrigin(0.5).setDepth(86));
     // visual readout — the boss itself, framed
     ui.push(this.add.rectangle(cx - 210, cy - 8, 170, 170, 0x1a1c2c, 1).setScrollFactor(0).setDepth(86).setStrokeStyle(1, 0x38b764));
-    var pic = this.add.image(cx - 210, cy - 8, def.texture).setScale(6).setScrollFactor(0).setDepth(87);
+    // M4.7: size-aware portrait — classic 20px art needs ×6, the Conductor's
+    // 128px hi-fi model needs ~×1. Target ≈ 120px in the frame either way.
+    var srcW = this.textures.exists(def.texture) ? this.textures.get(def.texture).getSourceImage().width : 20;
+    var picScale = 120 / srcW;
+    var pic = this.add.image(cx - 210, cy - 8, def.texture).setScale(picScale).setScrollFactor(0).setDepth(87);
     ui.push(pic);
-    this.tweens.add({ targets: pic, scale: { from: 6, to: 6.5 }, yoyo: true, duration: 700, repeat: -1 });
+    this.tweens.add({ targets: pic, scale: { from: picScale, to: picScale * 1.08 }, yoyo: true, duration: 700, repeat: -1 });
     // raw stats
     var pats = 0; for (var k in def.patterns) pats++;
     ui.push(this.add.text(cx - 100, cy - 88,
       'HP        ' + def.hp + '\nSPEED     ' + def.spd + '\nCONTACT   ' + def.contactDmg + ' dmg' +
       '\nPATTERNS  ' + pats + '\nBOUNTY    ' + def.xp + ' xp',
       { fontFamily: 'monospace', fontSize: 13, color: '#38b764', lineSpacing: 6 }).setScrollFactor(0).setDepth(86));
-    // tactical hints (the moveset)
+    // tactical hints (the moveset) — M5.1 (user bug report): ADAPTIVE SIZING.
+    // A six-verb boss (the Grovekeeper) overflowed the panel and ran under
+    // the engage prompt; shrink the font until the block fits its box.
     var hints = (def.hints || []).map(function (h) { return '· ' + h; }).join('\n');
-    ui.push(this.add.text(cx - 100, cy + 24, 'TACTICAL READOUT\n' + hints,
-      { fontFamily: 'monospace', fontSize: 11, color: '#94b0c2', lineSpacing: 5, wordWrap: { width: 400 } }).setScrollFactor(0).setDepth(86));
-    ui.push(this.add.text(cx, cy + 198, '[ ENTER or CLICK to engage ]',
+    var hintsTxt = this.add.text(cx - 100, cy + 22, 'TACTICAL READOUT\n' + hints,
+      { fontFamily: 'monospace', fontSize: 11, color: '#94b0c2', lineSpacing: 4, wordWrap: { width: 402 } })
+      .setScrollFactor(0).setDepth(86);
+    var hintsBottom = cy + 188;                          // must clear the engage prompt
+    [10, 9, 8].forEach(function (fs) {
+      if (hintsTxt.y + hintsTxt.height > hintsBottom) hintsTxt.setFontSize(fs);
+    });
+    ui.push(hintsTxt);
+    // the engage prompt sits pinned just inside the panel's bottom edge
+    ui.push(this.add.text(cx, cy + 206, '[ ENTER or CLICK to engage ]',
       { fontFamily: 'monospace', fontSize: 13, color: '#ffcd75' }).setScrollFactor(0).setOrigin(0.5).setDepth(86));
     this.scanUi = ui;
     AUDIO.play('ui');
@@ -1869,6 +2649,9 @@ var RealmScene = new Phaser.Class({
     if (this.boss && this.boss.boss) {                   // the grace period starts NOW
       this.boss.boss.nextRadialAt = this.time.now + 1600;
       this.boss.boss.nextStreamAt = this.time.now + 3000;
+      // M5.0: the Grovekeeper's verb clocks re-arm too — a long scouter read
+      // must not bank an instant TIMBER
+      if (this.boss.boss.def.patterns.timber) this.initGrovekeeper(this.boss, this.time.now);
     }
     if (!this.paused && !this.hitstopActive) this.physics.world.resume();
     AUDIO.play('ui');
@@ -1882,6 +2665,8 @@ var RealmScene = new Phaser.Class({
     var def = boss.boss.def;
     var bx = boss.x, by = boss.y;
     this.burst(bx, by, 40, def.deathTint);
+    if (def.patterns.ghostTrain) this.clearConductorFx();   // M4.7: beam/rails/ties die with him
+    if (def.patterns.timber) this.clearGrovekeeperFx();     // M5.0: beam/markers/vines die with him
     boss.destroy(); this.boss = null;
     if (this.bossBar) { this.bossBar.destroy(); this.bossBarBg.destroy(); this.bossName.destroy(); this.bossBar = null; }
     AUDIO.stopMusic();                                   // M4.5: the battle is decided — silence is the release
@@ -1889,16 +2674,21 @@ var RealmScene = new Phaser.Class({
     var stat = DATA.potions.stats[Math.floor(SIM.rng() * DATA.potions.stats.length)];  // seam rule 4
     // M3: the chest also rolls GEAR from the boss's drop table (E1 phase 2 —
     // per-item take/leave is real now). Rolled here, once, through SIM.rng.
-    var items = [];
+    // M4.6: every rolled key passes through SIM.resolveDrop — a wizard/knight
+    // receives their OWN class line (no off-class drops; same RNG stream).
+    var rolled = [];
     var table = def.lootTable && DATA.dropTables[def.lootTable];
-    if (table) for (var i = 0; i < table.rolls; i++) items.push(SIM.rollDrop(table.entries));
+    if (table) for (var i = 0; i < table.rolls; i++) rolled.push(SIM.resolveDrop(SIM.rollDrop(table.entries), CURRENT.cls));
     // E9 v2 — CHAMPION BOUNTY: every champion killed this realm adds a roll
     // (capped) — affixed mobs drop better, paid out where loot lives: the chest.
     var B = DATA.affixes.championBounty;
     var bounty = Math.min(B.cap, this.championKills * B.perKill);
-    for (var j = 0; j < bounty; j++) items.push(SIM.rollDrop(DATA.dropTables[B.table].entries));
+    for (var j = 0; j < bounty; j++) rolled.push(SIM.resolveDrop(SIM.rollDrop(DATA.dropTables[B.table].entries), CURRENT.cls));
+    // M5.5: already-owned rolls become bonus XP; only NEW items drop
+    var res = resolveLootRolls(rolled);
     this.pendingLoot = {
-      kind: 'clear', stat: stat, xp: def.xp + DATA.realm.closeXpBonus, items: items,
+      kind: 'clear', stat: stat, xp: def.xp + DATA.realm.closeXpBonus + res.dupeXp,
+      items: res.items, dupes: res.dupes,
       headline: def.name + ' has fallen'
     };
     this.spawnLootChest(bx, by);
@@ -1925,109 +2715,79 @@ var RealmScene = new Phaser.Class({
     // becomes real when equipment lands at M3 (E1 phase 2).
     var L = this.pendingLoot, st = this.player.state;
     if (L.stat) ACCOUNT.potions[L.stat]++;
+    // M5.5 COLLECTION: every NEW item is OWNED now; gear AUTO-UPGRADES from the
+    // collection (best owned piece per slot). Duplicates already became bonus
+    // XP at the roll (folded into L.xp). No manual take — gear stays upgraded.
+    (L.items || []).forEach(function (k) { collectItem(k); });
+    var equippedNow = {};
+    DATA.equipSlots.forEach(function (s) { equippedNow[s] = CURRENT.equipment[s]; });
+    autoEquipFromCollection(true);                           // upgrade to best owned
+    applyEquipmentChange(this);                              // re-derive live stats (persists)
+    // record which of THIS chest's items landed on the hero (for the summary)
+    L.equipped = (L.items || []).filter(function (k) {
+      return CURRENT.equipment[DATA.items[k].slot] === k;
+    });
     Entities.grantXp(this, this.player, L.xp);
     ACCOUNT.records.realmsClosed++;
     ACCOUNT.records.totalKills += st.kills; st.kills = 0;    // banked, not lost
     CURRENT.level = st.level; CURRENT.xp = st.xp;
     persist();                                               // reward on disk BEFORE any screen
-    // M3: gear is a CHOICE, not a grant — the rows live here while the overlay
-    // is up; TAKE equips (persisting each take), leftovers stay in the realm.
-    this.lootItems = (L.items || []).slice();
     this.buildLootOverlay(L);
   },
 
+  // M5.5: the chest is now a COLLECTION SUMMARY (no manual take — items are
+  // auto-collected + auto-equipped at open). Rows: potion · XP (incl. dupe
+  // bonus) · each NEW item (collected, tagged EQUIPPED when it landed) · each
+  // DUPLICATE (already owned → +XP). ENTER/CLICK closes.
   buildLootOverlay: function (L) {
     if (this.lootUi) { this.lootUi.forEach(function (o) { o.destroy(); }); }
     var self = this, st = this.player.state;
     var W = this.scale.width, H = this.scale.height, cx = W / 2, cy = H / 2;
-    var nItems = this.lootItems.length;
-    var panelH = 240 + Math.max(1, nItems + 1) * 62;
+    var items = L.items || [], dupes = L.dupes || [];
+    var rows = 1 + (L.stat ? 1 : 0) + items.length + dupes.length;   // XP row always
+    var panelH = 200 + Math.max(1, rows) * 56;
     var ui = [];
     ui.push(this.add.rectangle(cx, cy, W, H, 0x000000, 0.55).setScrollFactor(0).setDepth(84));
-    ui.push(this.add.rectangle(cx, cy, 480, panelH, 0x0f0f1b, 0.97).setScrollFactor(0).setDepth(85).setStrokeStyle(2, 0xffcd75));
-    ui.push(this.add.sprite(cx - 200, cy - panelH / 2 + 34, 'chest').setScale(2).setScrollFactor(0).setDepth(86));
-    ui.push(this.add.text(cx - 168, cy - panelH / 2 + 26, 'LOOT', { fontFamily: 'monospace', fontSize: 20, color: '#ffcd75' }).setScrollFactor(0).setDepth(86));
-    var y = cy - panelH / 2 + 92;
-    // banked rows (already yours — display only)
-    if (L.stat) {
-      ui.push(this.add.rectangle(cx, y, 440, 52, 0x1a1c2c, 1).setScrollFactor(0).setDepth(86).setStrokeStyle(1, 0x29366f));
-      ui.push(this.add.sprite(cx - 196, y, 'potion').setScale(2.2).setTint(DATA.potions.tints[L.stat]).setScrollFactor(0).setDepth(87));
-      ui.push(this.add.text(cx - 170, y - 16, 'POTION OF ' + L.stat.toUpperCase(), { fontFamily: 'monospace', fontSize: 14, color: '#f4f4f4' }).setScrollFactor(0).setDepth(87));
-      ui.push(this.add.text(cx - 170, y + 3, '+' + DATA.potions.boost + ' ' + L.stat.toUpperCase() + ' — banked to the stash (survives death)',
-        { fontFamily: 'monospace', fontSize: 10, color: '#94b0c2' }).setScrollFactor(0).setDepth(87));
-      y += 62;
-    }
-    ui.push(this.add.rectangle(cx, y, 440, 52, 0x1a1c2c, 1).setScrollFactor(0).setDepth(86).setStrokeStyle(1, 0x29366f));
-    ui.push(this.add.sprite(cx - 196, y, 'px').setScale(6).setTint(0xffcd75).setScrollFactor(0).setDepth(87));
-    ui.push(this.add.text(cx - 170, y - 16, '+' + L.xp + ' XP', { fontFamily: 'monospace', fontSize: 14, color: '#f4f4f4' }).setScrollFactor(0).setDepth(87));
-    ui.push(this.add.text(cx - 170, y + 3, 'applied — now level ' + st.level + (st.level >= DATA.xp.cap ? ' (MAX)' : ''),
-      { fontFamily: 'monospace', fontSize: 10, color: '#94b0c2' }).setScrollFactor(0).setDepth(87));
-    y += 62;
-    // M3: GEAR rows — the PoE2 moment. TAKE equips; an occupied slot swaps the
-    // old item back into the chest row (change your mind freely; leftovers
-    // stay behind when you close the lid).
-    this.lootItems.forEach(function (key, idx) {
-      var box = self.add.rectangle(cx, y, 440, 52, 0x1a1c2c, 1).setScrollFactor(0).setDepth(86);
-      ui.push(box);
-      if (key) {
-        var it = DATA.items[key];
-        box.setStrokeStyle(1, itemTint(key)).setInteractive({ useHandCursor: true });
-        box.on('pointerover', function () { box.setFillStyle(0x29366f, 1); });
-        box.on('pointerout',  function () { box.setFillStyle(0x1a1c2c, 1); });
-        box.on('pointerdown', function () { self.takeItemFromChest(idx); });
-        ui.push(self.add.sprite(cx - 196, y, it.texture).setScale(2).setTint(itemTint(key)).setScrollFactor(0).setDepth(87));
-        ui.push(self.add.text(cx - 170, y - 16, itemLabel(key), { fontFamily: 'monospace', fontSize: 13, color: itemColor(key) }).setScrollFactor(0).setDepth(87));
-        var cur = CURRENT.equipment[it.slot];
-        ui.push(self.add.text(cx - 170, y + 3, it.desc + (cur ? '  ·  swaps out ' + DATA.items[cur].name : ''),
-          { fontFamily: 'monospace', fontSize: 10, color: '#94b0c2' }).setScrollFactor(0).setDepth(87));
-        ui.push(self.add.text(cx + 208, y, 'TAKE ▶', { fontFamily: 'monospace', fontSize: 12, color: '#38b764' }).setOrigin(1, 0.5).setScrollFactor(0).setDepth(87));
-      } else {
-        box.setStrokeStyle(1, 0x29366f);
-        ui.push(self.add.text(cx - 170, y - 6, '— taken —', { fontFamily: 'monospace', fontSize: 11, color: '#566c86' }).setScrollFactor(0).setDepth(87));
-      }
-      y += 62;
+    ui.push(this.add.rectangle(cx, cy, 500, panelH, 0x0f0f1b, 0.97).setScrollFactor(0).setDepth(85).setStrokeStyle(2, 0xffcd75));
+    ui.push(this.add.sprite(cx - 210, cy - panelH / 2 + 34, 'chest').setScale(2).setScrollFactor(0).setDepth(86));
+    ui.push(this.add.text(cx - 178, cy - panelH / 2 + 26, 'LOOT', { fontFamily: 'monospace', fontSize: 20, color: '#ffcd75' }).setScrollFactor(0).setDepth(86));
+    var y = cy - panelH / 2 + 88;
+    var row = function (tint, spr, sprScale, sprTint, title, titleColor, sub) {
+      ui.push(self.add.rectangle(cx, y, 460, 48, 0x1a1c2c, 1).setScrollFactor(0).setDepth(86).setStrokeStyle(1, tint));
+      if (spr) ui.push(self.add.sprite(cx - 206, y, spr).setScale(sprScale).setTint(sprTint).setScrollFactor(0).setDepth(87));
+      ui.push(self.add.text(cx - 180, y - 14, title, { fontFamily: 'monospace', fontSize: 13, color: titleColor }).setScrollFactor(0).setDepth(87));
+      ui.push(self.add.text(cx - 180, y + 4, sub, { fontFamily: 'monospace', fontSize: 10, color: '#94b0c2' }).setScrollFactor(0).setDepth(87));
+      y += 56;
+    };
+    if (L.stat) row(0x29366f, 'potion', 2.2, DATA.potions.tints[L.stat],
+      'POTION OF ' + L.stat.toUpperCase(), '#f4f4f4',
+      '+' + DATA.potions.boost + ' ' + L.stat.toUpperCase() + ' — banked to the stash (survives death)');
+    row(0x29366f, 'px', 6, 0xffcd75, '+' + L.xp + ' XP',
+      '#f4f4f4', 'applied — now level ' + st.level + (st.level >= DATA.xp.cap ? ' (MAX)' : ''));
+    // NEW items — collected + (auto-)equipped
+    items.forEach(function (key) {
+      var it = DATA.items[key], eq = (L.equipped || []).indexOf(key) >= 0;
+      row(itemTint(key), it.texture, 2, itemTint(key),
+        itemLabel(key) + (eq ? '   ◄ EQUIPPED' : '   · collected'),
+        itemColor(key), eq ? it.desc : it.desc + '  ·  owned (a better piece is equipped)');
     });
-    ui.push(this.add.text(cx, cy + panelH / 2 - 26,
-      nItems ? '[ ENTER — take upgrades & close ]' : '[ ENTER — close ]',
+    // DUPLICATES — already owned → bonus XP
+    dupes.forEach(function (d) {
+      var it = DATA.items[d.key];
+      row(0x3a3550, it.texture, 2, 0x8a7fb0,
+        itemLabel(d.key) + '   · ALREADY OWNED', '#8a7fb0', 'duplicate → +' + d.xp + ' bonus XP');
+    });
+    ui.push(this.add.text(cx, cy + panelH / 2 - 24, '[ ENTER or CLICK to continue ]',
       { fontFamily: 'monospace', fontSize: 14, color: '#ffcd75' }).setScrollFactor(0).setOrigin(0.5).setDepth(86));
     this.lootUi = ui;
-    // the overlay rebuilds on every take — clear the old once() first so ENTER
-    // listeners don't stack (TESTING.md bug #2 family)
     this.rig.keys.ENTER.off('down');
     this.rig.keys.ENTER.once('down', function () { self.takeLoot(); });
+    this.input.once('pointerdown', function () { self.takeLoot(); });
   },
 
-  // M3: TAKE one item — equips it on the spot (persisted); if the slot was
-  // occupied, the old item takes the row (swap back any time before closing).
-  takeItemFromChest: function (idx) {
-    if (!this.looting) return;
-    var key = this.lootItems[idx];
-    if (!key) return;
-    var slot = DATA.items[key].slot;
-    var old = CURRENT.equipment[slot] || null;
-    CURRENT.equipment[slot] = key;
-    this.lootItems[idx] = old;
-    applyEquipmentChange(this);                          // re-derive + persist
-    AUDIO.play('drink');
-    this.buildLootOverlay(this.pendingLoot);             // redraw with the swap
-  },
-
+  // M5.5: close the chest summary (all rewards already applied at open).
   takeLoot: function () {
     if (!this.looting) return;
-    // ENTER = grab the sensible leftovers: equip anything whose slot is empty
-    // or holds a LOWER tier (the replaced piece is left in the realm), then close.
-    var changed = false;
-    for (var i = 0; i < this.lootItems.length; i++) {
-      var key = this.lootItems[i];
-      if (!key) continue;
-      var it = DATA.items[key], cur = CURRENT.equipment[it.slot];
-      if (!cur || DATA.items[cur].tier < it.tier) {
-        CURRENT.equipment[it.slot] = key;
-        this.lootItems[i] = null;
-        changed = true;
-      }
-    }
-    if (changed) applyEquipmentChange(this);             // re-derive + persist
     if (this.lootUi) { this.lootUi.forEach(function (o) { o.destroy(); }); this.lootUi = null; }
     if (this.chest) { this.chest.destroy(); this.chest = null; }
     var L = this.pendingLoot; this.pendingLoot = null;
@@ -2075,10 +2835,12 @@ var RealmScene = new Phaser.Class({
     AUDIO.play('victory');
     var stat = this.modeDef.potionReward
       ? DATA.potions.stats[Math.floor(SIM.rng() * DATA.potions.stats.length)] : null;
-    var items = [];                                       // M3: trial gear (pocket change)
+    var rolled = [];                                      // M3: trial gear (pocket change)
     var table = this.modeDef.lootTable && DATA.dropTables[this.modeDef.lootTable];
-    if (table) for (var i = 0; i < table.rolls; i++) items.push(SIM.rollDrop(table.entries));
-    this.pendingLoot = { kind: 'survival', stat: stat, xp: this.modeDef.xpBonus, items: items,
+    if (table) for (var i = 0; i < table.rolls; i++) rolled.push(SIM.resolveDrop(SIM.rollDrop(table.entries), CURRENT.cls));   // M4.6: class-locked drops
+    var res = resolveLootRolls(rolled);                  // M5.5: dupes → bonus XP
+    this.pendingLoot = { kind: 'survival', stat: stat, xp: this.modeDef.xpBonus + res.dupeXp,
+                         items: res.items, dupes: res.dupes,
                          headline: 'survived the ' + this.modeDef.name.toLowerCase() };
     var x = Phaser.Math.Clamp(this.player.x + 60, 100, this.worldW - 100), y = this.player.y;
     if (this.map) { var c = MAPS.findClearPx(this.map, x, y); x = c.x; y = c.y; }
@@ -2104,10 +2866,11 @@ var RealmScene = new Phaser.Class({
     var budget = DATA.waves.budget(tSec);
     // E7: the spawn pool comes from the realm's BIOME roster, never the global
     // mob table — attaching a mob to a biome IS adding it to this list.
-    var roster = DATA.biomes[DATA.realm.biome].mobs;
+    var roster = DATA.biomes[this.realmBiome || DATA.realm.biome].mobs;
     var pool = [];
     roster.forEach(function (k) { if (!DATA.mobs[k].unlockAt || DATA.mobs[k].unlockAt <= tSec) pool.push(k); });
     if (!pool.length) return;                 // biome roster entirely time-locked (early seconds)
+    var poolFull = pool.slice();              // pre-skew pool — the safe over-cap fallback pulls from here
     // E9 v2 — PACK LEADER: while one lives, the director skews the mix to
     // casters (shooter mobs), if the unlocked pool has any.
     var leaderUp = false;
@@ -2119,13 +2882,51 @@ var RealmScene = new Phaser.Class({
       if (casters.length) pool = casters;
     }
     var alive = this.mobs.countActive(true);
+    // WEIGHTED pick — a mob's `spawnWeight` (default 1) scales how often it comes
+    // up. Used to dial shooters down without cutting them (Red: −10% archers).
+    var poolW = pool.reduce(function (s, k) { return s + (DATA.mobs[k].spawnWeight || 1); }, 0);
+    var pickWeighted = function () {
+      var roll = SIM.rng() * poolW, acc = 0;
+      for (var pi = 0; pi < pool.length; pi++) { acc += (DATA.mobs[pool[pi]].spawnWeight || 1); if (roll < acc) return pool[pi]; }
+      return pool[pool.length - 1];
+    };
     while (budget > 0 && alive < DATA.waves.maxAlive) {
-      var k2 = pool[Math.floor(SIM.rng() * pool.length)];
+      var k2 = pickWeighted();
       if (DATA.mobs[k2].cost > budget && budget < 4) k2 = pool[0];   // cheap fallback stays IN-BIOME (E7)
+      // M4.9: SPARING mobs (the Dynamite Mole) are bounded — over their cap,
+      // fall back to the cheap staple so the yard doesn't fill with bombs.
+      if (DATA.mobs[k2].maxConcurrent) {
+        var cnt = 0;
+        this.mobs.children.iterate(function (m) { if (m && m.active && m.mob.key === k2) cnt++; });
+        if (cnt >= DATA.mobs[k2].maxConcurrent) {
+          // over the cap → spawn a NON-capped in-biome staple instead. Pull from
+          // the PRE-SKEW pool so a PACK LEADER caster-skew (pool = [one shooter])
+          // can't redirect the capped shooter back onto itself and flood the map.
+          k2 = null;
+          for (var fi = 0; fi < poolFull.length; fi++) { if (!DATA.mobs[poolFull[fi]].maxConcurrent) { k2 = poolFull[fi]; break; } }
+          if (!k2) break;                      // everything unlocked is capped → stop this burst
+        }
+      }
       budget -= DATA.mobs[k2].cost;
-      var pt = this.pickSpawnPoint();
+      // M4.9: fuse mobs SURFACE on-screen near you (the telegraph must be seen);
+      // everything else pours from the off-screen ring as before.
+      var pt = DATA.mobs[k2].fuse ? this.pickSurfacePoint() : this.pickSpawnPoint();
       if (pt && Entities.spawnMob(this, k2, pt.x, pt.y)) alive++;
     }
+  },
+
+  // M4.9: an ON-SCREEN point near the player (for a mole to surface + telegraph),
+  // clear of walls where the map has them.
+  pickSurfacePoint: function () {
+    var p = this.player;
+    for (var t = 0; t < 10; t++) {
+      var a = SIM.rng() * Math.PI * 2, d = 130 + SIM.rng() * 170;
+      var x = Phaser.Math.Clamp(p.x + Math.cos(a) * d, 60, this.worldW - 60);
+      var y = Phaser.Math.Clamp(p.y + Math.sin(a) * d, 60, this.worldH - 60);
+      if (this.map) { var c = MAPS.findClearPx(this.map, x, y); x = c.x; y = c.y; }
+      return { x: x, y: y };
+    }
+    return { x: p.x + 160, y: p.y };
   },
 
   // M3: spawn placement — the classic off-screen ring, but never inside a
@@ -2166,7 +2967,7 @@ var RealmScene = new Phaser.Class({
     // headless suite).
     ['player-shot', 'player-ability', 'mob-hurt', 'mob-died', 'mob-evolved',
      'player-hurt', 'player-levelup', 'player-died', 'boss-hurt', 'boss-died',
-     'boss-pattern'].forEach(function (e) { self.events.off(e); });
+     'boss-pattern', 'mob-immune'].forEach(function (e) { self.events.off(e); });
     // M4: the shot / ability SFX come from the class's weapon / ability data
     // (bow→'shoot' + volley→'volley'; frost→'frost' + barrage→'zap'; sword→'slash').
     this.events.on('player-shot', function () {
@@ -2201,9 +3002,75 @@ var RealmScene = new Phaser.Class({
           self.tweens.add({ targets: bt, y: bt.y - 18, alpha: 0, duration: 1000, onComplete: function () { bt.destroy(); } });
         }
       }
+      // ---- M5.0 grove death hooks ----------------------------------------
+      var mdef = mob.mob.def;
+      // PUFFCAP SPLIT (user: "duplicate into 10 smaller versions when u kill
+      // it") — queued, not spawned inline (group.get inside iterates).
+      if (mdef.split) {
+        for (var si = 0; si < mdef.split.count; si++) {
+          var sa = Math.PI * 2 * si / mdef.split.count;
+          self.queueSpawn({ key: mdef.split.key,
+                            x: mob.x + Math.cos(sa) * mdef.split.ring,
+                            y: mob.y + Math.sin(sa) * mdef.split.ring });
+        }
+      }
+      // BUMBLEBRUTE WARDS — a dead mini frees its brute a step closer
+      if (mob.mob.guardianOf) {
+        self.mobs.children.iterate(function (b2) {
+          if (b2 && b2.active && b2.id === mob.mob.guardianOf && b2.mob.ward > 0) {
+            b2.mob.ward--;
+            if (b2.mob.ward === 0) {
+              self.burst(b2.x, b2.y, 12, 0xffd23e);
+              var vt = self.add.text(b2.x, b2.y - b2.displayHeight / 2 - 12, 'VULNERABLE!',
+                { fontFamily: 'monospace', fontSize: 11, fontStyle: 'bold', color: '#ffd23e' }).setOrigin(0.5).setDepth(30);
+              self.tweens.add({ targets: vt, y: vt.y - 18, alpha: 0, duration: 900,
+                onComplete: function () { try { vt.destroy(); } catch (e) {} } });
+            }
+          }
+        });
+      }
+      // CORPSE LEDGER — the Bloom Pixie's glow (and her death burst) raises
+      // these. Bloom pixies themselves never chain-revive. M5.6: the graveyard
+      // leans on this ledger too (Acolyte raise · Cursed Bell rise · boss
+      // Explode Corpse); ethereal mobs (banshee) leave nothing to raise.
+      var _corpseKind = self.realmDef && (self.realmDef.kind === 'grove' || self.realmDef.kind === 'graveyard');
+      if (_corpseKind && mob.mob.key !== 'bloomPixie' && mob.mob.key !== 'banshee' && !mob.mob.cinematic) {
+        self.corpses.push({ key: (self.realmDef.kind === 'graveyard' ? 'rattlebones' : mob.mob.key),
+                            realKey: mob.mob.key, x: mob.x, y: mob.y, at: self.time.now });
+        if (self.corpses.length > 40) self.corpses.shift();
+      }
+      // M5.6 CORPSE BLOATER — bursts a poison gas cloud on death (DoT patch).
+      if (mdef.deathGas && self.dropGas) self.dropGas(mob.x, mob.y, mdef.deathGas);
+      // M5.6 SOUL WISP — a kill may release a soul drifting to the crypt.
+      if (self.realmDef && self.realmDef.kind === 'graveyard' && self.maybeReleaseWisp && !mob.mob.cinematic)
+        self.maybeReleaseWisp(mob.x, mob.y);
+      // BLOOM PIXIE DEATH BLOOM — resurrects every corpse in the radius
+      if (mdef.reviveOnDeath) {
+        var rr = mdef.reviveOnDeath.radius, raised = 0;
+        for (var ci = 0; ci < self.corpses.length; ci++) {
+          var co2 = self.corpses[ci];
+          if (!co2.used && Math.hypot(co2.x - mob.x, co2.y - mob.y) < rr) {
+            co2.used = true; raised++;
+            self.queueSpawn({ key: co2.key, x: co2.x, y: co2.y, revive: true });
+          }
+        }
+        if (raised) {
+          var ring2 = self.add.ellipse(mob.x, mob.y, 40, 40).setStrokeStyle(4, 0x8fd6ff, 0.9).setDepth(41);
+          self.tweens.add({ targets: ring2, scaleX: rr / 20, scaleY: rr / 20, alpha: 0, duration: 600,
+            onComplete: function () { try { ring2.destroy(); } catch (e) {} } });
+          try { AUDIO.play('revive'); } catch (e) {}
+        }
+      }
       // M2 (F8): kill quota met → the boss portal opens (clear mode only — E6)
       if (self.mode === 'clear' && !self.bossPortal && !self.boss && !self.closing &&
           self.player.state.kills >= DATA.realm.killQuota) self.openBossPortal();
+    });
+    // M5.0: warded Bumblebrute shrugging off a hit — show it, rate-limited
+    this.events.on('mob-immune', function (mob) {
+      var t = self.time.now;
+      if (self._immuneAt[mob.id] && t - self._immuneAt[mob.id] < 350) return;
+      self._immuneAt[mob.id] = t;
+      self.damageNumber(mob.x, mob.y - 16, 'IMMUNE', '#9aa7b8');
     });
     this.events.on('boss-hurt', function (boss, dmg) {
       self.damageNumber(boss.x, boss.y - 30, dmg, '#f4f4f4');
@@ -2211,7 +3078,14 @@ var RealmScene = new Phaser.Class({
       AUDIO.play('bossHit');
     });
     this.events.on('boss-pattern', function () { AUDIO.play('volley'); });
-    this.events.on('boss-died', function (boss) { if (self.player.state.alive) self.onBossDown(boss); });   // E1: chest, not auto-award
+    // E1: chest, not auto-award. M5.0: the Grovekeeper's FIRST death triggers
+    // PHASE TWO instead — the pixies fly in and resurrect him (kill him twice).
+    this.events.on('boss-died', function (boss) {
+      if (!self.player.state.alive) return;
+      var bd = boss.boss;
+      if (bd.def.phaseTwo && !bd.phase2done && !bd.resurrecting) self.grovekeeperResurrection(boss);
+      else self.onBossDown(boss);
+    });
     this.events.on('player-hurt', function (dmg) {
       self.cameras.main.shake(90, 0.006);
       self.damageNumber(self.player.x, self.player.y - 20, dmg, '#b13e53');
@@ -2249,6 +3123,21 @@ var RealmScene = new Phaser.Class({
   buildHud: function () {
     var T = { fontFamily: 'monospace', color: '#f4f4f4' };
     this.hudG = this.add.graphics().setScrollFactor(0).setDepth(50);
+    // HI-FI HUD FRAME (2026-07-14, user: the bottom HUD read as disconnected
+    // floating pieces): a beveled ring housing crowns each orb and a conduit
+    // plate runs the full span behind the XP bar, docking into both rings via
+    // glowing end caps — one connected console, in the chamber's art language.
+    // Positioned every frame in updateHud (RESIZE-safe). Classic fallback:
+    // if the art module is absent these keys don't exist and nothing changes.
+    if (this.textures.exists('hudOrbFrame')) {
+      this.hudPlate = this.add.tileSprite(0, 0, 64, 36, 'hudPlateMid').setScrollFactor(0).setDepth(48);
+      this.hudCapL = this.add.image(0, 0, 'hudPlateCap').setScrollFactor(0).setDepth(48.5);
+      this.hudCapR = this.add.image(0, 0, 'hudPlateCap').setScrollFactor(0).setDepth(48.5).setFlipX(true);
+      this.hudFrameL = this.add.image(0, 0, 'hudOrbFrame').setScrollFactor(0).setDepth(51.5);
+      this.hudFrameR = this.add.image(0, 0, 'hudOrbFrame').setScrollFactor(0).setDepth(51.5);
+    } else {
+      this.hudPlate = this.hudCapL = this.hudCapR = this.hudFrameL = this.hudFrameR = null;
+    }
     // M4 berserker rework: a class with a `resource` (the Knight's RAGE) gets a
     // MOLTEN glow behind its right orb — it breathes, and burns brighter the
     // fuller the pool (alpha driven in updateHud). Hidden for mana classes.
@@ -2329,15 +3218,35 @@ var RealmScene = new Phaser.Class({
     var bh = 16;
     var bx = hpX + r + 12, bxR = mpX - r - 12, bw = Math.max(40, bxR - bx);
     var by = H - bh - 6;
+    // HI-FI HUD FRAME: dock the conduit plate + caps between the orb rings.
+    // The plate's dark groove (rows 9..27 of 36) is where the XP bar renders,
+    // so the bar reads as energy flowing through the housing.
+    if (this.hudFrameL) {
+      this.hudFrameL.setPosition(hpX, orbY);
+      this.hudFrameR.setPosition(mpX, orbY);
+      var pcy = by + bh / 2;
+      var plateL = hpX + r + 2, plateR = mpX - r - 2;      // tuck under the rings
+      var pw = Math.max(64, plateR - plateL);
+      this.hudPlate.setPosition((plateL + plateR) / 2, pcy).setSize(pw, 36);
+      this.hudCapL.setPosition(plateL + 14, pcy);
+      this.hudCapR.setPosition(plateR - 14, pcy);
+    }
     var maxed = st.level >= DATA.xp.cap;
     var need = DATA.xp.needed(st.level);
     var xpPct = maxed ? 1 : Math.max(0, Math.min(1, st.xp / need));
     g.fillStyle(HUD.glass, 0.92); g.fillRect(bx, by, bw, bh);           // dark track
     g.fillStyle(0xffcd75, 1); g.fillRect(bx, by, bw * xpPct, bh);       // gold fill
-    // 5 segments = 4 interior blue dividers
-    g.fillStyle(0x41a6f6, 1);
-    for (var s5 = 1; s5 < 5; s5++) { g.fillRect(bx + Math.round(bw * s5 / 5) - 1, by, 2, bh); }
-    g.lineStyle(2, 0x41a6f6, 1); g.strokeRect(bx, by, bw, bh);          // blue border
+    if (this.hudFrameL) {
+      // hi-fi housing: the plate's groove IS the border — subdued steel-blue
+      // dividers only, no bright frame fighting the bezel (2026-07-14).
+      g.fillStyle(0x1d5fa8, 0.9);
+      for (var s5 = 1; s5 < 5; s5++) { g.fillRect(bx + Math.round(bw * s5 / 5) - 1, by, 2, bh); }
+    } else {
+      // classic floating bar keeps its own blue frame
+      g.fillStyle(0x41a6f6, 1);
+      for (var s5c = 1; s5c < 5; s5c++) { g.fillRect(bx + Math.round(bw * s5c / 5) - 1, by, 2, bh); }
+      g.lineStyle(2, 0x41a6f6, 1); g.strokeRect(bx, by, bw, bh);        // blue border
+    }
     this.xpText.setPosition(bx + bw / 2, by + bh / 2)
       .setText(maxed ? 'MAX' : (Math.floor(st.xp) + ' / ' + need));
 
@@ -2484,18 +3393,32 @@ var RealmScene = new Phaser.Class({
   meleeSwing: function (p, intent, st, weapon, wDmg) {
     var self = this, now = this.time.now, hits = 0;
     var dmg = SIM.damage(wDmg, st.stats.att, 0);
-    var aim = intent.aimAngle, half = Phaser.Math.DegToRad((weapon.arcDeg || 100) / 2);
-    var range = weapon.range || 76, r2 = range * range;
-    var inArc = function (x, y) {
-      var dx = x - p.x, dy = y - p.y;
-      if (dx * dx + dy * dy > r2) return false;
-      return Math.abs(Phaser.Math.Angle.Wrap(Math.atan2(dy, dx) - aim)) <= half;
+    // M5.1: the epic Ragefang OVERRIDES the arc — 360° = the whole circle
+    var arcDeg = SIM.weaponMod(st.equipment).arcDeg || weapon.arcDeg || 100;
+    var aim = intent.aimAngle, half = Phaser.Math.DegToRad(arcDeg / 2);
+    var range = weapon.range || 76;
+    // TARGET-SIZE-AWARE arc test (2026-07-14, user: "every other hit isn't
+    // doing damage"): the old test checked the mob's CENTER POINT only, so a
+    // hi-fi brute (40px wide on screen) visually overlapping the slash still
+    // whiffed whenever its center sat just past the range or arc edge — the
+    // eye said hit, the math said miss. Now each target contributes its own
+    // radius: reach extends by it, and the angular window widens by the angle
+    // it subtends. If the blade visually clips a body, it connects.
+    var inArc = function (x, y, rad) {
+      rad = rad || 0;
+      var dx = x - p.x, dy = y - p.y, reach = range + rad;
+      var d2 = dx * dx + dy * dy;
+      if (d2 > reach * reach) return false;
+      var d = Math.sqrt(d2);
+      if (d <= rad) return true;                          // standing inside it
+      var slack = Math.atan(rad / d);                     // angular size of the target
+      return Math.abs(Phaser.Math.Angle.Wrap(Math.atan2(dy, dx) - aim)) <= half + slack;
     };
     this.mobs.children.iterate(function (m) {
       if (!m || !m.active) return;
-      if (inArc(m.x, m.y)) { Entities.hurtMob(self, m, dmg, now); hits++; }
+      if (inArc(m.x, m.y, m.displayWidth * 0.45)) { Entities.hurtMob(self, m, dmg, now); hits++; }
     });
-    if (this.boss && this.boss.active && inArc(this.boss.x, this.boss.y)) { Entities.hurtBoss(this, this.boss, dmg); hits++; }
+    if (this.boss && this.boss.active && inArc(this.boss.x, this.boss.y, this.boss.displayWidth * 0.45)) { Entities.hurtBoss(this, this.boss, dmg); hits++; }
     // BERSERKER REWORK: every enemy the cleave connects with BANKS RAGE
     // (weapon.rageGain each, clamped to the pool) — the auto attack is how the
     // Knight fuels his whirlwind.
@@ -2594,6 +3517,218 @@ var RealmScene = new Phaser.Class({
     }
   },
 
+  // M4.8: RANGER DODGE-REGEN cue — a soft green aura on the player + slow
+  // rising '+' motes while st.regenning (set in Entities.updatePlayer). The
+  // orb already shows HP climbing; this makes it felt in the world. Cosmetic
+  // (Math.random jitter OK — seam rule 4). The mote clock is cosmetic + self-
+  // correcting, so it needs no unfreeze shift.
+  updateRegenGlow: function (time) {
+    var st = this.player && this.player.state;
+    var on = st && st.alive && st.regenning;
+    if (on) {
+      // M4.9: tint by class accent — Ranger green, Wizard blue — so the aura
+      // reads as "this class's out-of-combat mend", not a generic effect.
+      var accent = (DATA.classes[st.cls] && DATA.classes[st.cls].accent) || 0x8fe07a;
+      if (!this.regenFx) {
+        this.regenFx = this.add.sprite(this.player.x, this.player.y, 'softglow')
+          .setDepth(9).setBlendMode(Phaser.BlendModes.ADD);
+      }
+      var breathe = 0.5 + 0.3 * Math.sin(time / 180);
+      this.regenFx.setTint(accent).setVisible(true).setPosition(this.player.x, this.player.y)
+        .setScale(1.5).setAlpha(0.32 * breathe);
+      if (time - (this._lastRegenMoteAt || 0) > 420) {
+        this._lastRegenMoteAt = time;
+        var mx = this.player.x + (Math.random() * 22 - 11), my = this.player.y - 6;
+        var col = '#' + ('00000' + accent.toString(16)).slice(-6);
+        var mote = this.add.text(mx, my, '+', { fontFamily: 'monospace', fontSize: 15,
+          fontStyle: 'bold', color: col }).setOrigin(0.5).setDepth(11);
+        this.tweens.add({ targets: mote, y: my - 28, alpha: 0, duration: 720,
+          onComplete: function () { try { mote.destroy(); } catch (e) {} } });
+      }
+    } else if (this.regenFx) {
+      this.regenFx.setVisible(false);
+    }
+  },
+
+  // ---------------------- M4.9: DYNAMITE MOLE (telegraphed bomb) -------------
+  // A pulsing warning ring shows the blast radius while the fuse burns (created
+  // lazily, cleared by Entities.clearNameTag on every removal path).
+  ensureMoleWarn: function (m, radius) {
+    if (!m.warnCircle) {
+      m.warnCircle = this.add.circle(m.x, m.y, radius, 0xff3b30, 0.10)
+        .setStrokeStyle(2, 0xff5a3c, 0.9).setDepth(4);
+    }
+    var pulse = 0.85 + 0.15 * Math.sin(this.time.now / 90);
+    m.warnCircle.setPosition(m.x, m.y).setScale(pulse);
+  },
+
+  // Detonate: an AoE that catches EVERYTHING in the radius (user 2026-07-14) —
+  // the player AND other mobs. Mobs that die to the blast credit the player
+  // (Entities.hurtMob emits mob-died → kills + XP + quota). The mole itself is
+  // removed UNCREDITED (it blew itself up; only a defusing shot pays out).
+  moleExplode: function (m, fuse) {
+    var x = m.x, y = m.y, self = this;
+    this.fireballFx(x, y, fuse.radius);          // M4.9: think FIRE (user)
+    this.burst(x, y, 14, 0xffcd75);
+    this.cameras.main.shake(150, 0.011);         // brief thump (user: keep it short, not a train)
+    try { AUDIO.play('boom'); } catch (e) {}     // M4.9: real explosion sound (user)
+    var p = this.player;
+    if (p.state.alive && Math.hypot(p.x - x, p.y - y) < fuse.radius) {
+      Entities.hurtPlayer(this, p, fuse.dmg, this.time.now, 'a dynamite mole');
+    }
+    // catch nearby mobs (skip other fuse mobs so a blast can't chain-detonate)
+    this.mobs.children.iterate(function (mob) {
+      if (!mob || !mob.active || mob === m || mob.mob.def.fuse) return;
+      if (Math.hypot(mob.x - x, mob.y - y) < fuse.radius) Entities.hurtMob(self, mob, fuse.dmg, self.time.now);
+    });
+    if (m.active) { Entities.clearNameTag(m); m.body.enable = false; this.mobs.killAndHide(m); }   // ring cleared too
+  },
+
+  // M4.9: a FIREBALL for the mole detonation (user: "think fire") — a bright
+  // core flash, an expanding orange fire body, a gold shockwave ring, an additive
+  // ember glow, and flung sparks, all self-destructing via tweens (pause-safe).
+  fireballFx: function (x, y, radius) {
+    var self = this;
+    var core = this.add.circle(x, y, radius * 0.34, 0xfff2b0, 0.95).setDepth(42);
+    this.tweens.add({ targets: core, scale: 2.3, alpha: 0, duration: 240, ease: 'Cubic.Out',
+      onComplete: function () { try { core.destroy(); } catch (e) {} } });
+    var ball = this.add.circle(x, y, radius * 0.5, 0xff7d3a, 0.8).setDepth(41);
+    this.tweens.add({ targets: ball, scale: 2.0, alpha: 0, duration: 430, ease: 'Cubic.Out',
+      onComplete: function () { try { ball.destroy(); } catch (e) {} } });
+    var ring = this.add.circle(x, y, radius * 0.4).setStrokeStyle(4, 0xffd34d, 0.9).setDepth(42);
+    this.tweens.add({ targets: ring, scale: 2.5, alpha: 0, duration: 430, ease: 'Cubic.Out',
+      onComplete: function () { try { ring.destroy(); } catch (e) {} } });
+    if (this.textures.exists('softglow')) {
+      var glow = this.add.sprite(x, y, 'softglow').setTint(0xff5a1f).setDepth(40)
+        .setBlendMode(Phaser.BlendModes.ADD).setScale(radius / 32 * 1.2).setAlpha(0.85);
+      this.tweens.add({ targets: glow, alpha: 0, scale: radius / 32 * 2.2, duration: 460,
+        onComplete: function () { try { glow.destroy(); } catch (e) {} } });
+    }
+    for (var i = 0; i < 12; i++) {
+      (function () {
+        var a = Math.random() * Math.PI * 2, d = radius * (0.4 + Math.random() * 0.6);
+        var e = self.add.circle(x, y, 2 + Math.random() * 2, i % 2 ? 0xffd34d : 0xff5a1f).setDepth(42);
+        self.tweens.add({ targets: e, x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, alpha: 0,
+          duration: 340 + Math.random() * 260, ease: 'Cubic.Out',
+          onComplete: function () { try { e.destroy(); } catch (er) {} } });
+      })();
+    }
+  },
+
+  // M5.1 (user): FULL-LEGENDARY-SET EXPLOSIVE ARROWS — every arrow that
+  // connects blasts a small AoE. DELIBERATELY stacking ("the damage can
+  // overlap from explosives"): each arrow's blast is its own event, no
+  // shared-hit guard — a shotgunned pack eats every overlapping boom. The
+  // direct-hit target is excluded (it already took the arrow).
+  arrowExplode: function (x, y, cfg, directHit) {
+    var self = this;
+    // small fiery pop (a scaled-down fireballFx)
+    var core = this.add.circle(x, y, cfg.radius * 0.3, 0xfff2b0, 0.9).setDepth(42);
+    this.tweens.add({ targets: core, scale: 2, alpha: 0, duration: 200, ease: 'Cubic.Out',
+      onComplete: function () { try { core.destroy(); } catch (e) {} } });
+    var ring = this.add.circle(x, y, cfg.radius * 0.4).setStrokeStyle(3, 0xff8c2e, 0.85).setDepth(42);
+    this.tweens.add({ targets: ring, scale: 2.2, alpha: 0, duration: 260, ease: 'Cubic.Out',
+      onComplete: function () { try { ring.destroy(); } catch (e) {} } });
+    this.mobs.children.iterate(function (m) {
+      if (!m || !m.active || m === directHit) return;
+      if (Math.hypot(m.x - x, m.y - y) < cfg.radius) Entities.hurtMob(self, m, cfg.dmg, self.time.now);
+    });
+    if (this.boss && this.boss.active && this.boss !== directHit &&
+        Math.hypot(this.boss.x - x, this.boss.y - y) < cfg.radius) {
+      Entities.hurtBoss(this, this.boss, cfg.dmg);
+    }
+  },
+
+  // M4.9: environmental kills (the ambush train's mow) CREDIT the player —
+  // route through mob-died so they tick the kill count, quota, XP + bounty,
+  // exactly like a shot kill (user 2026-07-14).
+  killMobCredited: function (m) {
+    if (!m || !m.active) return;
+    this.events.emit('mob-died', m);
+    if (!m.active) return;                        // a quota-triggered wipe may have taken it
+    Entities.clearNameTag(m);
+    m.body.enable = false;
+    this.mobs.killAndHide(m);
+  },
+
+  // ---------------------- M4.9: CONDUCTOR ZOMBIE (slime trail) ---------------
+  // Drop a lingering green patch; it fades + self-destructs via tween (pause-
+  // safe). updateSlime ticks damage on a player standing in any live patch.
+  dropSlime: function (x, y, cfg) {
+    var patch = this.add.ellipse(x, y, cfg.radius * 2, cfg.radius * 1.5, 0x49e83b, 0.32)
+      .setDepth(3).setStrokeStyle(1, 0x8ff0a5, 0.5);
+    var rec = { obj: patch, x: x, y: y, r: cfg.radius, dmg: cfg.dmg, tickMs: cfg.tickMs,
+                dieAt: this.time.now + cfg.lifeMs };
+    this.slimePatches.push(rec);
+    this.tweens.add({ targets: patch, alpha: 0.08, duration: cfg.lifeMs, ease: 'Sine.In',
+      onComplete: function () { rec.dead = true; try { patch.destroy(); } catch (e) {} } });
+  },
+
+  updateSlime: function (time) {
+    if (!this.slimePatches || !this.slimePatches.length) return;
+    var live = [], p = this.player, inSlime = false, dmg = 0, tickMs = 480;
+    for (var i = 0; i < this.slimePatches.length; i++) {
+      var s = this.slimePatches[i];
+      if (s.dead || time >= s.dieAt) { if (s.obj && s.obj.active) { try { s.obj.destroy(); } catch (e) {} } continue; }
+      live.push(s);
+      if (p.state.alive && Math.hypot(p.x - s.x, p.y - s.y) < s.r) { inSlime = true; dmg = s.dmg; tickMs = s.tickMs; }
+    }
+    this.slimePatches = live;
+    if (inSlime && time - (this._lastSlimeTickAt || 0) >= tickMs) {
+      this._lastSlimeTickAt = time;
+      Entities.hurtPlayer(this, p, dmg, time, 'toxic slime');
+    }
+  },
+
+  // ---------------------- M4.9: SMOG SERPENT (concealment fog) ---------------
+  // Each serpent pulses a cloud 5s on / 5s off. While ON, every mob inside the
+  // cloud (the serpent too, if concealSelf) gets m.mob.concealed = true — the
+  // shot→mob overlap then refuses hits from OUTSIDE the cloud. playerInFog is
+  // set when the player stands in ANY live cloud. Fog clocks are absolute →
+  // shifted in unfreeze().
+  updateFog: function (time) {
+    var self = this, anyPlayerInFog = false;
+    // clear last frame's concealment first
+    this.mobs.children.iterate(function (m) { if (m && m.active && m.mob) m.mob.concealed = false; });
+    this.mobs.children.iterate(function (caster) {
+      if (!caster || !caster.active || !caster.mob) return;
+      var fog = caster.mob.def.fog; if (!fog) return;
+      if (!caster.mob.fogPhaseAt) { caster.mob.fogPhaseAt = time + fog.onMs; caster.mob.fogOn = true; }
+      if (time >= caster.mob.fogPhaseAt) {                 // flip the phase
+        caster.mob.fogOn = !caster.mob.fogOn;
+        caster.mob.fogPhaseAt = time + (caster.mob.fogOn ? fog.onMs : fog.offMs);
+      }
+      if (caster.mob.fogOn) {
+        if (!caster.mob.fogSprite) {
+          // depth 7: above mobs (5) so it veils them, below shots (8) + player
+          // (10) so you can still see yourself and your fire inside the smog.
+          caster.mob.fogSprite = self.add.sprite(caster.x, caster.y, 'softglow')
+            .setTint(0x9aa2b2).setDepth(7).setBlendMode(Phaser.BlendModes.NORMAL);
+        }
+        var breathe = 0.9 + 0.1 * Math.sin(time / 260);
+        caster.mob.fogSprite.setVisible(true).setPosition(caster.x, caster.y)
+          .setScale(fog.radius / 32 * 2.0 * breathe).setAlpha(0.42);
+        var pIn = self.player.state.alive && Math.hypot(self.player.x - caster.x, self.player.y - caster.y) < fog.radius;
+        if (pIn) anyPlayerInFog = true;
+        self.mobs.children.iterate(function (m) {
+          if (!m || !m.active || !m.mob) return;
+          if (m === caster && !fog.concealSelf) return;
+          if (Math.hypot(m.x - caster.x, m.y - caster.y) < fog.radius) m.mob.concealed = true;
+        });
+      } else if (caster.mob.fogSprite) {
+        caster.mob.fogSprite.setVisible(false);
+      }
+    });
+    this.playerInFog = anyPlayerInFog;
+    // paint concealment: a concealed mob you CAN'T reach fades to a ghost; once
+    // you're in the fog it (and its cloud-mates) resolve back to solid.
+    this.mobs.children.iterate(function (m) {
+      if (!m || !m.active || !m.mob) return;
+      if (m.mob.concealed && !anyPlayerInFog) m.setAlpha(0.22);
+      else if (m.mob.hp > 0) m.setAlpha(1);
+    });
+  },
+
   update: function (time, delta) {
     if (this.paused || this.closing) return;              // M1 pause / M2 realm-closed screen
     if (this.scanning || this.looting) return;            // M2.1: scouter scan / loot overlay hold the world
@@ -2615,8 +3750,1435 @@ var RealmScene = new Phaser.Class({
     Entities.updateProjectiles(this, this.enemyShots, time);
     this.updateTornadoes(time);                            // M4: Knight whirlwind tornadoes
     this.updateWhirlwind(time);                            // M4: Knight whirlwind ring VFX
-    if (this.hifiWorld) this.updateTrainYard(time, delta); // ART TEST: the ambush train
+    this.updateRegenGlow(time);                            // M4.8: Ranger dodge-regen aura
+    this.updateSlime(time);                                // M4.9: conductor-zombie slime hazard
+    this.updateFog(time);                                  // M4.9: smog-serpent concealment fog
+    // Train runs unless HITSTOP has physics (and the player's dodge) frozen —
+    // the train moves manually, so without this gate it advanced ~42px per
+    // hitstop into a player who couldn't move (audit fix 2026-07-14).
+    if (this.hifiWorld && !this.hitstopActive) this.updateTrainYard(time, delta);
+    // M4.7: a rolling GHOST EXPRESS finishes its pass even if the player just
+    // died (same rule as the ambush train); frozen during hitstop the same way.
+    if (!this.hitstopActive) this.updateGhostTrain(time, delta);
+    this.updateGrove(time, delta);                         // M5.0: grove hazard/queues/revive
+    this.updateGraveyard(time, delta);                     // M5.6: witching cycle + gate/fences
+    if (!this.player.state.alive && this.lanternG) this.lanternG.clear();   // no beam over the death screen
+    if (!this.player.state.alive && this.sunG) this.sunG.clear();           // M5.0: sunlance too
     this.updateHud();
+  },
+
+  // ============================ M5.0 — THE GROVE ============================
+  // The enchanted forest realm (user picks 2026-07-14/15): lush grass arena
+  // ringed by canopy, scattered trees + glowshrooms, drifting fireflies, the
+  // HEARTWOOD at the north clearing (the Grovekeeper's tree), and the
+  // FALLING ANCIENT TREES hazard — telegraph → crush (mows credit) → the
+  // trunk LINGERS as a wall, then crumbles. Ambient falls stop while the
+  // boss lives: TIMBER is his verb.
+  setupGrove: function (WW, HH) {
+    var self = this;
+    this.add.tileSprite(WW / 2, HH / 2, WW, HH, 'grovegrass').setDepth(-20);
+    // dappled clearings (deterministic scatter, like the yard's oil stains)
+    for (var i = 0; i < 40; i++) {
+      var ox = (i * 811 % WW), oy = ((i * 677 + 401) % HH);
+      this.add.ellipse(ox, oy, 40 + (i % 5) * 26, 26 + (i % 3) * 16, 0x63b25a, 0.10).setDepth(-19);
+    }
+    // border canopy band
+    var wt = 26;
+    this.add.tileSprite(WW / 2, wt / 2, WW, wt, 'grovewall').setDepth(-18);
+    this.add.tileSprite(WW / 2, HH - wt / 2, WW, wt, 'grovewall').setDepth(-18).setFlipY(true);
+    this.add.tileSprite(wt / 2, HH / 2, HH, wt, 'grovewall').setDepth(-18).setAngle(90);
+    this.add.tileSprite(WW - wt / 2, HH / 2, HH, wt, 'grovewall').setDepth(-18).setAngle(-90);
+    // THE HEARTWOOD — the great tree, north-center; the boss arrives FROM it
+    this.heartwood = this.add.image(WW * 0.5, HH * 0.2, 'heartwood').setDepth(2).setScale(1.4);
+    // DECORATION PASS (user picks 2026-07-15: oak willow toadstool fairy-ring
+    // pond boulders stump flowers lanterns arch runestone log spring obelisk).
+    // Deterministic scatter per type; everything stays clear of the center
+    // start and the heartwood clearing. Visual-only (the grove has no walls —
+    // only fallen trunks block).
+    // PLANNED LAYOUT (user 2026-07-15: "dont just place randomly") — the map
+    // is COMPOSED, not scattered. Zones, each a deliberate scene:
+    //  · THE SHRINE — runestones ring the Heartwood clearing, twin arches
+    //    gate the approach, flower beds at the roots
+    //  · THE LANTERN TRAIL — pixie lanterns stagger from spawn to the shrine
+    //    (they literally light the way to the boss)
+    //  · POND GLADES (W / E / NE) — a willow leans over each pond, a wisp
+    //    spring or log at the bank
+    //  · TREE COPSES (NW / NE / W / E / S) — oaks + grove trees grouped like
+    //    real woods, toadstools + stumps + logs in their shade
+    //  · THE FAIRY MEADOW (SW) — fairy rings among the wildflowers
+    //  · THE OLD RUINS (SE) — obelisks, an arch, a runestone, rubble
+    // Coordinates are FRACTIONS of the world; nothing overlaps by design.
+    var PLAN = [
+      // — the shrine —
+      ['dcArch', .44, .30, 1.5], ['dcArch', .56, .30, 1.5],
+      ['dcRunestone', .36, .26, 1.2], ['dcRunestone', .64, .26, 1.2],
+      ['dcRunestone', .335, .165, 1.2], ['dcRunestone', .665, .165, 1.2],
+      ['dcRunestone', .50, .335, 1.15],
+      ['dcFlowers', .445, .205, 1.2], ['dcFlowers', .555, .205, 1.2],
+      // — the lantern trail (spawn → shrine) —
+      ['dcLanterns', .487, .435, 1.2], ['dcLanterns', .515, .395, 1.2],
+      ['dcLanterns', .487, .355, 1.2], ['dcLanterns', .515, .315, 1.2],
+      // — west pond glade —
+      ['dcPond', .20, .42, 1.7], ['dcWillow', .143, .378, 1.4],
+      ['dcSpring', .247, .478, 1.3], ['dcFlowers', .158, .468, 1.1],
+      ['dcLog', .263, .398, 1.2],
+      // — east pond glade —
+      ['dcPond', .80, .60, 1.6], ['dcWillow', .857, .562, 1.35],
+      ['dcBoulders', .752, .655, 1.2], ['dcFlowers', .833, .663, 1.1],
+      // — north-east pond —
+      ['dcPond', .625, .135, 1.5], ['dcWillow', .668, .095, 1.25],
+      ['dcLog', .578, .175, 1.15],
+      // — NW copse —
+      ['dcOak', .14, .14, 1.6], ['dcOak', .225, .098, 1.35],
+      ['grovetree', .187, .193, 1.1], ['dcToadstool', .112, .215, 1.15],
+      ['dcStump', .248, .168, 1.1], ['dcLog', .163, .255, 1.2],
+      // — NE copse —
+      ['dcOak', .84, .12, 1.5], ['dcOak', .92, .175, 1.3],
+      ['grovetree', .882, .225, 1.05], ['dcToadstool', .935, .098, 1.2],
+      ['dcBoulders', .795, .185, 1.15],
+      // — west copse —
+      ['dcOak', .095, .60, 1.5], ['dcWillow', .155, .652, 1.3],
+      ['grovetree', .078, .682, 1.0], ['dcToadstool', .142, .722, 1.1],
+      // — east copse —
+      ['dcOak', .90, .355, 1.55], ['grovetree', .858, .298, 1.05],
+      ['dcWillow', .942, .418, 1.3], ['dcStump', .843, .413, 1.1],
+      // — SW fairy meadow —
+      ['dcFairyRing', .17, .80, 1.3], ['dcFairyRing', .30, .872, 1.15],
+      ['dcFlowers', .222, .758, 1.2], ['dcFlowers', .113, .862, 1.1],
+      ['dcToadstool', .268, .792, 1.1], ['dcLanterns', .198, .905, 1.2],
+      // — SE old ruins —
+      ['dcObelisk', .82, .83, 1.4], ['dcObelisk', .877, .872, 1.25],
+      ['dcArch', .845, .788, 1.45], ['dcRunestone', .788, .875, 1.2],
+      ['dcBoulders', .906, .812, 1.25], ['dcStump', .773, .798, 1.05],
+      // — south copse —
+      ['dcOak', .46, .862, 1.5], ['dcOak', .552, .888, 1.4],
+      ['dcWillow', .506, .818, 1.3], ['grovetree', .418, .902, 1.05],
+      ['dcLog', .582, .843, 1.2], ['dcToadstool', .49, .928, 1.15],
+      // — open-field accents (each alone, breathing room; nudged clear of
+      //   the treeline dividers below) —
+      ['dcFairyRing', .64, .48, 1.2], ['dcFlowers', .74, .415, 1.1],
+      ['dcSpring', .60, .552, 1.25], ['dcRunestone', .375, .552, 1.2],
+      ['dcFlowers', .382, .625, 1.15], ['dcBoulders', .27, .488, 1.15],
+      ['dcToadstool', .72, .27, 1.1], ['dcStump', .30, .38, 1.05],
+      ['dcFlowers', .60, .78, 1.1], ['dcBoulders', .40, .79, 1.15],
+      ['dcOak', .66, .89, 1.45], ['grovetree', .74, .77, 1.05]
+    ];
+    // TREELINE DIVIDERS (user: "rows of trees to section off areas") — hedge
+    // rows that carve the map into rooms, each with a deliberate GAP doorway:
+    //  · north wall (either side of the shrine approach — the arch gate)
+    //  · west wall (gap mid-row → the west pond glade)
+    //  · east wall (gap → the east meadow)
+    //  · south wall (gap → the fairy meadow / ruins / south woods)
+    var treeRow = function (x0, y0, x1, y1, gaps) {
+      var dx2 = x1 - x0, dy2 = y1 - y0;
+      var len = Math.hypot(dx2 * WW, dy2 * HH);
+      var steps = Math.max(1, Math.round(len / 104));
+      for (var i3 = 0; i3 <= steps; i3++) {
+        var t3 = i3 / steps;
+        var skip = false;
+        (gaps || []).forEach(function (g2) { if (t3 >= g2[0] && t3 <= g2[1]) skip = true; });
+        if (skip) continue;
+        var key3 = (i3 % 3 === 2) ? 'grovetree' : 'dcOak';
+        var wob = ((i3 * 37) % 5 - 2) * 9;                  // organic stagger, deterministic
+        PLAN.push([key3, x0 + dx2 * t3 + wob / WW, y0 + dy2 * t3 + ((i3 * 53) % 5 - 2) * 7 / HH,
+                   1.15 + (i3 % 3) * 0.14]);
+      }
+    };
+    treeRow(.06, .34, .40, .34, []);                        // north wall, west span
+    treeRow(.60, .34, .94, .34, []);                        //   (shrine gate between)
+    treeRow(.32, .44, .32, .70, [[0.42, 0.62]]);            // west wall + doorway
+    treeRow(.705, .30, .705, .56, [[0.38, 0.62]]);          // east wall + doorway
+    treeRow(.34, .735, .66, .735, [[0.42, 0.62]]);          // south wall + doorway
+    var DECOR_DEPTH = { dcPond: 0.5, dcFlowers: 0.6, dcFairyRing: 1, dcLog: 1, dcSpring: 1 };
+    PLAN.forEach(function (d2) {
+      if (!self.textures.exists(d2[0])) return;
+      self.add.image(d2[1] * WW, d2[2] * HH, d2[0])
+        .setDepth(DECOR_DEPTH[d2[0]] !== undefined ? DECOR_DEPTH[d2[0]] : 2)
+        .setScale(d2[3]);
+    });
+    // glowshrooms — planned too: shade of the copses + along the trail edges
+    [[.325, .225], [.675, .225], [.245, .555], [.755, .49], [.135, .485],
+     [.875, .655], [.435, .69], [.565, .69], [.29, .93], [.71, .935]].forEach(function (gp, s2) {
+      var shroom = self.add.image(gp[0] * WW, gp[1] * HH, 'glowshroom').setDepth(1).setScale(1.1);
+      self.tweens.add({ targets: shroom, alpha: { from: 1, to: 0.72 }, duration: 1400 + (s2 % 4) * 300,
+                        yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    });
+    // fireflies — slow wandering warm motes (cosmetic; tween-driven, pause-safe)
+    this.fireflies = [];
+    for (var f2 = 0; f2 < 14; f2++) {
+      var fx = Math.random() * WW, fy = Math.random() * HH;
+      var fly = this.add.image(fx, fy, 'glowdot').setTint(0xffe3a8).setScale(1.4)
+        .setDepth(15).setAlpha(0.7).setBlendMode(Phaser.BlendModes.ADD);
+      this.fireflies.push(fly);
+      (function wander(spr) {
+        if (!spr.active) return;
+        self.tweens.add({ targets: spr,
+          x: Phaser.Math.Clamp(spr.x + (Math.random() * 300 - 150), 40, WW - 40),
+          y: Phaser.Math.Clamp(spr.y + (Math.random() * 300 - 150), 40, HH - 40),
+          alpha: { from: 0.75, to: 0.25 + Math.random() * 0.5 },
+          duration: 2200 + Math.random() * 2200, ease: 'Sine.inOut',
+          onComplete: function () { wander(spr); } });
+      })(fly);
+    }
+    // fallen-trunk WALLS — a static group; colliders wire in create() once the
+    // player + mob groups exist (wireGroveColliders).
+    this.trunkGroup = this.physics.add.staticGroup();
+    this._trunkColliderPending = true;
+    // the ambient fall scheduler
+    var TF = this.realmDef.treeFall;
+    this.groveFall = { phase: 'idle', nextAt: this.time.now + 6000 + Math.random() * 6000, cfg: TF };
+  },
+
+  // Colliders need the player, which is created after the world — finish here.
+  wireGroveColliders: function () {
+    if (!this._trunkColliderPending) return;
+    this._trunkColliderPending = false;
+    this.physics.add.collider(this.player, this.trunkGroup);
+    this.physics.add.collider(this.mobs, this.trunkGroup);
+  },
+
+  // ============================ M5.6 — THE GRAVEYARD =======================
+  // Biome 3 (user design 2026-07-15, graveyard-map-plan.md). A PLANNED moonlit
+  // cemetery: south IRON GATE spawn (auto-opens) → winding lantern path → four
+  // fence-divided plots (old graves / monument garden / crypt+angel / celtic
+  // shrine+fungus) → north boss arena with the OPEN GRAVE (the Gravekeeper
+  // climbs out). Signature system: THE WITCHING CYCLE — witching fog + restless
+  // graves + soul wisps, all conducted by the CURSED BELL (~45s tolls). Iron
+  // fences are DESTRUCTIBLE. Ambient cycle stands down during arrival/boss.
+  setupGraveyard: function (WW, HH) {
+    var self = this;
+    // SPAWN at the south gate (create() reads this._realmStart).
+    this._realmStart = { x: WW * 0.5, y: HH * 0.90 };
+    // ground + soft vignette (dark, moonlit)
+    this.add.tileSprite(WW / 2, HH / 2, WW, HH, 'gravedirt').setDepth(-20);
+    for (var i = 0; i < 44; i++) {
+      var ox = (i * 811 % WW), oy = ((i * 677 + 401) % HH);
+      this.add.ellipse(ox, oy, 50 + (i % 5) * 30, 30 + (i % 3) * 18, 0x1a2438, 0.12).setDepth(-19);
+    }
+    // border murk band
+    this.add.rectangle(WW / 2, 14, WW, 28, 0x0a0c14, 0.85).setDepth(-18);
+    this.add.rectangle(WW / 2, HH - 14, WW, 28, 0x0a0c14, 0.85).setDepth(-18);
+    this.add.rectangle(14, HH / 2, 28, HH, 0x0a0c14, 0.85).setDepth(-18);
+    this.add.rectangle(WW - 14, HH / 2, 28, HH, 0x0a0c14, 0.85).setDepth(-18);
+
+    // ---- winding LANTERN PATH (pale band) from the gate up to the arena ----
+    var pathPts = [[.50, .93], [.50, .80], [.44, .70], [.52, .58], [.47, .46],
+                   [.52, .34], [.50, .24], [.50, .17]];
+    for (var p = 0; p < pathPts.length - 1; p++) {
+      var a2 = pathPts[p], b2 = pathPts[p + 1];
+      var seg = self.add.line(0, 0, a2[0] * WW, a2[1] * HH, b2[0] * WW, b2[1] * HH, 0x5a4a36, 0.55)
+        .setOrigin(0, 0).setLineWidth(20).setDepth(-17);
+    }
+
+    // ---- PLANNED DECOR (composed, not scattered) — see graveyard_scene_plan ----
+    // [key, xFrac, yFrac, scale]
+    var PLAN = [
+      // — south iron GATE (spawn) —
+      ['gyGate', .50, .955, 1.5],
+      ['gyDeadTree', .10, .92, 1.4], ['gyDeadTree', .90, .93, 1.4],
+      // — SW plot: THE OLD GRAVES (headstone / cross rows, cemetery grid) —
+      ['gyHeadstone', .10, .60, 1.1], ['gyCross', .18, .60, 1.1], ['gyHeadstone', .26, .60, 1.1], ['gyBroken', .34, .60, 1.1],
+      ['gyCross', .10, .68, 1.1], ['gyHeadstone', .18, .68, 1.1], ['gyBroken', .26, .68, 1.1], ['gyHeadstone', .34, .68, 1.1],
+      ['gyHeadstone', .10, .76, 1.1], ['gyBroken', .18, .76, 1.1], ['gyHeadstone', .26, .76, 1.1], ['gyCross', .34, .76, 1.1],
+      ['gyWreath', .14, .84, 1.0], ['gyCandles', .30, .84, 1.0], ['gyDeadTree', .06, .70, 1.2],
+      // — SE plot: THE MONUMENT GARDEN (obelisks / tomb / coffin / candles) —
+      ['gyObelisk', .66, .60, 1.3], ['gyObelisk', .86, .60, 1.3],
+      ['gySarcophagus', .76, .70, 1.25], ['gyCoffin', .64, .78, 1.15],
+      ['gyCandles', .86, .78, 1.0], ['gyHeadstone', .90, .66, 1.05], ['gyBroken', .60, .68, 1.0],
+      ['gyDeadTree', .94, .84, 1.3],
+      // — NW plot: THE CRYPT + angel plaza (the bell lives here) —
+      ['gyCrypt', .18, .28, 1.5], ['gyAngel', .10, .42, 1.25], ['gyAngel', .30, .42, 1.25],
+      ['gyHeadstone', .08, .30, 1.0], ['gyCross', .30, .30, 1.0], ['gyCandles', .18, .44, 1.0],
+      ['gyCobweb', .045, .18, 1.4],
+      // — NE plot: CELTIC SHRINE + fungus glade —
+      ['gyCeltic', .74, .30, 1.35], ['gyObelisk', .88, .30, 1.2],
+      ['gyFungus', .66, .40, 1.15], ['gyFungus', .84, .42, 1.15], ['gyFungus', .78, .34, 1.0],
+      ['gyDeadTree', .94, .22, 1.3], ['gyCobweb', .955, .18, 1.4],
+      // — the ARENA (north): open grave the boss climbs from + candle ring —
+      ['gyCandles', .42, .12, 1.0], ['gyCandles', .58, .12, 1.0],
+      ['gyCross', .40, .20, 1.0], ['gyCross', .60, .20, 1.0]
+    ];
+    // lamp posts stagger up the path (they light the way to the boss)
+    pathPts.forEach(function (pp, i2) { if (i2 % 1 === 0) PLAN.push(['gyLamp', pp[0] + (i2 % 2 ? .05 : -.05), pp[1], 1.15]); });
+    var DECOR_DEPTH = { gyCandles: 1, gyFungus: 1, gyCobweb: 0.5, gyWreath: 1 };
+    PLAN.forEach(function (d2) {
+      if (!self.textures.exists(d2[0])) return;
+      self.add.image(d2[1] * WW, d2[2] * HH, d2[0])
+        .setDepth(DECOR_DEPTH[d2[0]] !== undefined ? DECOR_DEPTH[d2[0]] : 2)
+        .setScale(d2[3]);
+    });
+    // the ARENA OPEN GRAVE — dark pit the Gravekeeper hauls himself out of
+    this.arenaGrave = { x: WW * 0.5, y: HH * 0.15 };
+    this.add.ellipse(this.arenaGrave.x, this.arenaGrave.y, 96, 60, 0x0a0a10, 0.9).setDepth(0);
+    this.add.ellipse(this.arenaGrave.x, this.arenaGrave.y, 96, 60, 0x14201a, 0.5).setDepth(0).setStrokeStyle(3, 0x3a4a30);
+
+    // ---- DESTRUCTIBLE IRON FENCES — carve the plots, doorway gaps ----------
+    this.fenceGroup = this.physics.add.staticGroup();
+    this.graveFences = [];
+    // fences are SOLID barriers now — no doorway gaps (user: they're
+    // destructible, so you smash through wherever you like).
+    var fenceRow = function (x0, y0, x1, y1) {
+      var dx2 = x1 - x0, dy2 = y1 - y0;
+      var vertical = Math.abs(dy2 * HH) > Math.abs(dx2 * WW);   // a vertical (top-view) divider run
+      var len = Math.hypot(dx2 * WW, dy2 * HH);
+      var steps = Math.max(1, Math.round(len / (vertical ? 40 : 58)));
+      for (var k = 0; k <= steps; k++) {
+        var t = k / steps;
+        var px = (x0 + dx2 * t) * WW, py = (y0 + dy2 * t) * HH;
+        var tex = vertical ? 'gyFenceV' : 'gyFence';
+        var panel = self.fenceGroup.create(px, py, tex).setDepth(2).setScale(1.0);
+        var bw = vertical ? 22 : 52, bh = vertical ? 52 : 22;   // collision box matches orientation
+        panel.body.setSize(bw, bh); panel.body.setOffset((64 - bw) / 2, (64 - bh) / 2);
+        var fhp = (self.realmDef.fence && self.realmDef.fence.hp) || 24;   // balance knob (data.js)
+        self.graveFences.push({ spr: panel, hp: fhp, vertical: vertical });
+      }
+    };
+    fenceRow(.06, .52, .94, .52);                          // mid divider (solid — smash the path panel)
+    fenceRow(.28, .55, .28, .86);                          // SW / path divider
+    fenceRow(.72, .55, .72, .86);                          // SE / path divider
+    fenceRow(.28, .18, .28, .48);                          // NW divider
+    fenceRow(.72, .18, .72, .48);                          // NE divider
+    this._fenceColliderPending = true;
+
+    // the GATE auto-opens as you approach (cosmetic swing/fade)
+    this.graveGate = { x: WW * 0.5, y: HH * 0.955, opened: false };
+
+    // ---- drifting GREEN MOTES (cosmetic) ----
+    this.motes = [];
+    for (var f2 = 0; f2 < 14; f2++) {
+      var fx = Math.random() * WW, fy = Math.random() * HH;
+      var mote = this.add.image(fx, fy, 'glowdot').setTint(0x78ff96).setScale(1.2)
+        .setDepth(15).setAlpha(0.6).setBlendMode(Phaser.BlendModes.ADD);
+      this.motes.push(mote);
+      (function wander(spr) {
+        if (!spr.active) return;
+        self.tweens.add({ targets: spr,
+          x: Phaser.Math.Clamp(spr.x + (Math.random() * 260 - 130), 40, WW - 40),
+          y: Phaser.Math.Clamp(spr.y + (Math.random() * 260 - 130), 40, HH - 40),
+          alpha: { from: 0.6, to: 0.2 + Math.random() * 0.4 },
+          duration: 2400 + Math.random() * 2200, ease: 'Sine.inOut',
+          onComplete: function () { wander(spr); } });
+      })(mote);
+    }
+
+    // ---- lamp glow anchors (fog burns clear holes here) ----
+    this.lampGlows = [];
+    PLAN.forEach(function (d2) { if (d2[0] === 'gyLamp' || d2[0] === 'gyCandles' || d2[0] === 'gyFungus')
+      self.lampGlows.push({ x: d2[1] * WW, y: d2[2] * HH, r: d2[0] === 'gyLamp' ? 150 : 90 }); });
+
+    // ---- THE WITCHING CYCLE scheduler ----
+    var w = this.realmDef.witching;
+    this.witching = {
+      cfg: w,
+      fog: [],                                            // drifting conceal banks
+      nextGraveAt: this.time.now + 5000 + Math.random() * 5000,
+      grave: null,                                        // active restless-grave telegraph
+      nextBellAt: this.time.now + w.bell.everyMs,
+      bellTollsLeft: 0, nextTollAt: 0,
+      surgeUntil: 0
+    };
+    // spawn the fog banks
+    for (var fb = 0; fb < w.fog.banks; fb++) {
+      var ang = Math.random() * Math.PI * 2;
+      var fog = this.add.sprite(Math.random() * WW, Math.random() * HH, 'softglow')
+        .setDepth(16).setAlpha(0.16).setTint(0x8fd6ff).setBlendMode(Phaser.BlendModes.ADD)
+        .setScale(w.fog.radius / 32);
+      this.witching.fog.push({ spr: fog, x: fog.x, y: fog.y, vx: Math.cos(ang) * w.fog.driftSpeed, vy: Math.sin(ang) * w.fog.driftSpeed });
+    }
+    this.soulWisps = [];
+    this.gasPatches = [];
+  },
+
+  // colliders need the player (created after the world)
+  wireGraveyardColliders: function () {
+    if (!this._fenceColliderPending) return;
+    this._fenceColliderPending = false;
+    this.physics.add.collider(this.player, this.fenceGroup);
+    // BALANCE ROUND 2026-07-15: mobs CHEW panels open while pressed against
+    // them (the locked design: "shots/mobs can smash panels") — the swarm
+    // never dead-ends on a fence, and hiding in a plot only buys seconds.
+    this.physics.add.collider(this.mobs, this.fenceGroup, this.mobChewFence, null, this);
+    this.physics.add.overlap(this.playerShots, this.fenceGroup, this.hitFence, null, this);
+    // symmetry (Red: unavoidable damage): ENEMY shots die on fences too — an
+    // archer can no longer snipe you through a wall your own arrows can't pass.
+    this.physics.add.overlap(this.enemyShots, this.fenceGroup, this.enemyShotFence, null, this);
+  },
+
+  // shared fence damage path (player shots + mob chew) — degradation frames,
+  // then the panel smashes open
+  damageFence: function (panel, dmg) {
+    var rec = null;
+    for (var i = 0; i < this.graveFences.length; i++) if (this.graveFences[i].spr === panel) { rec = this.graveFences[i]; break; }
+    if (!rec || rec.dead) return;
+    if (!rec.maxHp) rec.maxHp = rec.hp;
+    rec.hp -= dmg;
+    this.burst(panel.x, panel.y, 4, 0x9296a6);
+    try { AUDIO.play('thud'); } catch (e0) {}
+    if (rec.hp <= 0) {
+      this.burst(panel.x, panel.y, 12, 0x9296a6);
+      try { AUDIO.play('crash'); } catch (e) {}
+      panel.body.enable = false; this.fenceGroup.killAndHide(panel); try { panel.destroy(); } catch (e2) {}
+      rec.dead = true;
+    } else {
+      // DEGRADATION — swap in the bent / mangled frame as HP drops (the
+      // vertical/top-view fences have their own damage family)
+      var frac = rec.hp / rec.maxHp;
+      var fam = rec.vertical ? ['gyFenceV', 'gyFenceVDmg1', 'gyFenceVDmg2'] : ['gyFence', 'gyFenceDmg1', 'gyFenceDmg2'];
+      var want = frac > 0.62 ? fam[0] : (frac > 0.3 ? fam[1] : fam[2]);
+      if (panel.texture && panel.texture.key !== want && this.textures.exists(want)) panel.setTexture(want);
+    }
+  },
+
+  // a player shot smashes an iron fence panel. BUGFIX (Red: "fences sometimes
+  // not hittable"): the once-guard now lives on shot.proj — a FRESH object per
+  // fire — instead of the pooled sprite, where a stale flag from a recycled
+  // shot's past life let it sail through panels without damaging them.
+  hitFence: function (shot, panel) {
+    if (!shot.active || !panel.active || !shot.proj || shot.proj._hitFence) return;
+    shot.proj._hitFence = true;                 // one hit per shot (overlap re-fires)
+    shot.proj.dieAt = 0;                        // the arrow dies on the iron
+    this.damageFence(panel, shot.proj.dmg || 8);
+  },
+
+  // an ENEMY shot dies on the iron too (no fence damage — mobs break fences
+  // by CHEWING, below)
+  enemyShotFence: function (shot, panel) {
+    if (!shot.active || !panel.active || !shot.proj || shot.proj._hitFence) return;
+    shot.proj._hitFence = true;
+    shot.proj.dieAt = 0;
+  },
+
+  // a mob pressed against a panel gnaws it open (per-panel cadence — a pack
+  // chews faster only because more panels are being hit at once)
+  mobChewFence: function (mob, panel) {
+    if (!mob.active || !panel.active || !mob.mob) return;
+    var cfg = (this.realmDef && this.realmDef.fence) || { chewDmg: 8, chewMs: 450 };
+    var rec = null;
+    for (var i = 0; i < this.graveFences.length; i++) if (this.graveFences[i].spr === panel) { rec = this.graveFences[i]; break; }
+    if (!rec || rec.dead) return;
+    var t = this.time.now;
+    if (rec.lastChewAt && t - rec.lastChewAt < cfg.chewMs) return;
+    rec.lastChewAt = t;
+    this.damageFence(panel, cfg.chewDmg);
+  },
+
+  // CORPSE BLOATER death gas — a lingering poison cloud (slime-patch tech)
+  dropGas: function (x, y, cfg) {
+    if (!this.gasPatches) this.gasPatches = [];
+    var g = this.add.ellipse(x, y, cfg.radius * 2, cfg.radius * 2, 0x78dc96, 0.28).setDepth(1);
+    this.tweens.add({ targets: g, alpha: { from: 0.32, to: 0.12 }, duration: 700, yoyo: true, repeat: -1 });
+    this.gasPatches.push({ obj: g, x: x, y: y, r: cfg.radius, dmg: cfg.dmg, tickMs: cfg.tickMs,
+                           dieAt: this.time.now + cfg.lifeMs, lastTick: 0 });
+    try { AUDIO.play('crash'); } catch (e) {}
+  },
+
+  // SOUL WISP — a kill may free a soul that drifts toward the crypt; a pickup
+  // grants a stacking buff. A Banshee that touches one EATS it (buffs instead).
+  maybeReleaseWisp: function (x, y) {
+    var w = this.witching && this.witching.cfg.wisps; if (!w) return;
+    if (Math.random() > w.chance) return;
+    var target = this.arenaGrave ? { x: this.worldW * 0.18, y: this.worldH * 0.28 } : { x: this.worldW / 2, y: this.worldH / 2 };  // the crypt
+    var spr = this.add.image(x, y, 'glowdot').setTint(0x8fd6ff).setScale(1.6).setDepth(17)
+      .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.9);
+    this.soulWisps.push({ spr: spr, x: x, y: y, tx: target.x, ty: target.y, dieAt: this.time.now + w.lifeMs });
+  },
+
+  applyWispBuff: function () {
+    var w = this.witching.cfg.wisps.buff, st = this.player.state;
+    st._wispStacks = Math.min((st._wispStacks || 0) + 1, w.maxStacks);
+    // reuse the move-mult mechanism (updatePlayer reads slowUntil/slowMult):
+    // slowMult > 1 = a HASTE window. TUNE ME.
+    st.slowUntil = this.time.now + w.hasteMs; st.slowMult = w.hasteMult;
+    var cap = (st.stats && st.stats.hp) || st.hp;
+    var heal = Math.round(cap * w.healPct);
+    st.hp = Math.min(cap, st.hp + heal);
+    this.burst(this.player.x, this.player.y, 10, 0x8fd6ff);
+    try { AUDIO.play('chime'); } catch (e) {}
+  },
+
+  // ---- per-frame graveyard upkeep: gate, fences, gas, the Witching Cycle ----
+  updateGraveyard: function (time, delta) {
+    if (!this.realmDef || this.realmDef.kind !== 'graveyard') return;
+    var self = this, W = this.witching; if (!W) return;
+    var player = this.player, alive = player.state.alive;
+    this.wrapGraveyard();                                   // toroidal map — off one edge, on the other
+    var ambient = alive && !this.closing && !this.graveArrivalActive && !this.boss;
+
+    // MUMMY CURSE — a contact curse ticks the player until it wears off
+    var ps = player.state;
+    if (alive && ps.curseUntil && time < ps.curseUntil) {
+      if (time >= (ps.curseNextAt || 0)) {
+        ps.curseNextAt = time + (ps.curseTickMs || 600);
+        Entities.hurtPlayer(this, player, ps.curseDmg || 4, time, 'a mummy curse');
+      }
+    } else if (ps.curseUntil) { ps.curseUntil = 0; }
+
+    // GATE auto-open
+    if (this.graveGate && !this.graveGate.opened &&
+        Math.hypot(player.x - this.graveGate.x, player.y - this.graveGate.y) < 150) {
+      this.graveGate.opened = true;
+      // (cosmetic — the gate is decor; flag it open so it only fires once)
+      this.burst(this.graveGate.x, this.graveGate.y, 8, 0x9296a6);
+      try { AUDIO.play('creak'); } catch (e) {}
+    }
+
+    // GAS PATCHES — tick the player standing inside
+    if (this.gasPatches && this.gasPatches.length) {
+      for (var gi = this.gasPatches.length - 1; gi >= 0; gi--) {
+        var gp = this.gasPatches[gi];
+        if (time >= gp.dieAt) { if (gp.obj) { try { gp.obj.destroy(); } catch (e) {} } this.gasPatches.splice(gi, 1); continue; }
+        if (alive && Math.hypot(player.x - gp.x, player.y - gp.y) < gp.r && time - gp.lastTick >= gp.tickMs) {
+          gp.lastTick = time; Entities.hurtPlayer(this, player, gp.dmg, time, gp.boss ? 'a curse sigil' : 'corpse gas', !!gp.boss);
+        }
+      }
+    }
+
+    // WITCHING FOG — drift banks; conceal mobs inside (lamps/candles burn holes)
+    this.mobs.children.iterate(function (m) { if (m && m.active && m.mob) m.mob._gyConceal = false; });
+    var thick = time < W.surgeUntil ? 1.5 : 1;
+    var pInFog = false;
+    for (var fi = 0; fi < W.fog.length; fi++) {
+      var fk = W.fog[fi];
+      fk.x += fk.vx * delta / 1000; fk.y += fk.vy * delta / 1000;
+      if (fk.x < 0) fk.x += this.worldW; if (fk.x > this.worldW) fk.x -= this.worldW;
+      if (fk.y < 0) fk.y += this.worldH; if (fk.y > this.worldH) fk.y -= this.worldH;
+      fk.spr.setPosition(fk.x, fk.y).setScale(W.cfg.fog.radius * thick / 32).setAlpha(0.14 * thick);
+      var rad = W.cfg.fog.radius * thick;
+      if (alive && Math.hypot(player.x - fk.x, player.y - fk.y) < rad) pInFog = true;
+      this.mobs.children.iterate(function (m) {
+        if (!m || !m.active || !m.mob) return;
+        if (Math.hypot(m.x - fk.x, m.y - fk.y) >= rad) return;
+        var lit = false;
+        for (var li = 0; li < self.lampGlows.length; li++) { var lg = self.lampGlows[li]; if (Math.hypot(m.x - lg.x, m.y - lg.y) < lg.r) { lit = true; break; } }
+        if (!lit) m.mob._gyConceal = true;
+      });
+    }
+    // apply concealment (reuse the smog-serpent flag + paint)
+    this.mobs.children.iterate(function (m) {
+      if (!m || !m.active || !m.mob) return;
+      if (m.mob._gyConceal) { m.mob.concealed = true; if (!pInFog) m.setAlpha(0.24); else m.setAlpha(1); }
+    });
+    if (pInFog) this.playerInFog = true;
+
+    // SOUL WISPS — drift toward the crypt; player pickup buffs; banshee eats
+    if (this.soulWisps && this.soulWisps.length) {
+      var wc = W.cfg.wisps;
+      for (var wi = this.soulWisps.length - 1; wi >= 0; wi--) {
+        var sw = this.soulWisps[wi];
+        if (time >= sw.dieAt) { if (sw.spr) { try { sw.spr.destroy(); } catch (e) {} } this.soulWisps.splice(wi, 1); continue; }
+        var dxw = sw.tx - sw.x, dyw = sw.ty - sw.y, dw = Math.hypot(dxw, dyw) || 1;
+        sw.x += (dxw / dw) * wc.driftSpeed * delta / 1000; sw.y += (dyw / dw) * wc.driftSpeed * delta / 1000;
+        sw.spr.setPosition(sw.x, sw.y);
+        if (alive && Math.hypot(player.x - sw.x, player.y - sw.y) < 30) {
+          this.applyWispBuff(); if (sw.spr) { try { sw.spr.destroy(); } catch (e2) {} } this.soulWisps.splice(wi, 1); continue;
+        }
+        var eaten = false;
+        this.mobs.children.iterate(function (m) {
+          if (eaten || !m || !m.active || !m.mob || !m.mob.def.eatsWisps) return;
+          if (Math.hypot(m.x - sw.x, m.y - sw.y) < 34) { eaten = true; m.mob.wispFed = (m.mob.wispFed || 0) + 1;
+            m.mob.dmgMult = 1 + m.mob.wispFed * 0.25; m.setTint(0x8fd6ff); self.burst(m.x, m.y, 8, 0x8fd6ff); }
+        });
+        if (eaten) { if (sw.spr) { try { sw.spr.destroy(); } catch (e3) {} } this.soulWisps.splice(wi, 1); }
+      }
+    }
+
+    // RESTLESS GRAVES — a plot cracks (green warn) → hands erupt (dmg + slow) +
+    // a roster mob claws out. Hands hit mobs too (killMobCredited).
+    if (ambient && !W.grave && time >= W.nextGraveAt) {
+      var gx = Phaser.Math.Clamp(player.x + (Math.random() * 2 - 1) * 320, 80, this.worldW - 80);
+      var gy = Phaser.Math.Clamp(player.y + (Math.random() * 2 - 1) * 320, 80, this.worldH - 80);
+      var ring = this.add.ellipse(gx, gy, W.cfg.graves.handRadius * 2, W.cfg.graves.handRadius * 2, 0x78ff96, 0.28)
+        .setDepth(1).setStrokeStyle(2, 0x78ff96);
+      W.grave = { x: gx, y: gy, ring: ring, eruptAt: time + W.cfg.graves.warnMs };
+    }
+    if (W.grave && time >= W.grave.eruptAt) { this.eruptGrave(W.grave.x, W.grave.y);
+      if (W.grave.ring) { try { W.grave.ring.destroy(); } catch (e) {} }
+      W.grave = null;
+      W.nextGraveAt = time + W.cfg.graves.everyMinMs + Math.random() * (W.cfg.graves.everyMaxMs - W.cfg.graves.everyMinMs);
+    } else if (W.grave && !ambient) { if (W.grave.ring) { try { W.grave.ring.destroy(); } catch (e) {} } W.grave = null; }
+
+    // THE CURSED BELL — every ~45s, three tolls; the final toll rings the wave
+    if (ambient && time >= W.nextBellAt && W.bellTollsLeft === 0) {
+      W.bellTollsLeft = W.cfg.bell.tolls; W.nextTollAt = time;
+    }
+    if (W.bellTollsLeft > 0 && time >= W.nextTollAt) {
+      W.bellTollsLeft--;
+      try { AUDIO.play('belltoll'); } catch (e) {}
+      this.banner('THE CURSED BELL TOLLS', '#78ff96');
+      if (W.bellTollsLeft === 0) { this.bellPeal(); W.nextBellAt = time + W.cfg.bell.everyMs; }
+      else W.nextTollAt = time + W.cfg.bell.tollGapMs;
+    }
+    if (!ambient) { W.bellTollsLeft = 0; }
+
+    // corpse ledger ages out (mirror updateGrove)
+    for (var c3 = this.corpses.length - 1; c3 >= 0; c3--) {
+      if (this.corpses[c3].used || time - this.corpses[c3].at > 8000) this.corpses.splice(c3, 1);
+    }
+  },
+
+  // SCREEN WRAP (Red 2026-07-15): the graveyard is TOROIDAL — the player, the
+  // swarm, and the reaper that walk off one edge reappear on the opposite side.
+  // This kills the edge pile-up (nothing can stack against a wall that isn't
+  // there) and gives the "pop up on the other side" the player asked for. The
+  // Gravekeeper himself is pinned to his arena, so he never wraps.
+  wrapGraveyard: function () {
+    var WW = this.worldW, HH = this.worldH;
+    // body-aware teleport: an Arcade body must be reset, not just re-x'd, or the
+    // body snaps the sprite straight back. Velocity is preserved across the wrap.
+    var wrap = function (o) {
+      if (!o) return;
+      var nx = o.x, ny = o.y, moved = false;
+      if (o.x < 0) { nx = o.x + WW; moved = true; } else if (o.x >= WW) { nx = o.x - WW; moved = true; }
+      if (o.y < 0) { ny = o.y + HH; moved = true; } else if (o.y >= HH) { ny = o.y - HH; moved = true; }
+      if (!moved) return;
+      if (o.body && o.body.reset) { var vx = o.body.velocity.x, vy = o.body.velocity.y; o.body.reset(nx, ny); o.body.velocity.x = vx; o.body.velocity.y = vy; }
+      else { o.x = nx; o.y = ny; }               // plain object (the reaper)
+    };
+    wrap(this.player);
+    this.mobs.children.iterate(function (m) { if (m && m.active && m.mob && !m.mob.bossWave) wrap(m); });
+    if (this.reaper) wrap(this.reaper);
+  },
+
+  // hands erupt at (x,y): damage + brief slow on the player; a roster mob claws
+  // out; hands hit mobs too (credited to the player).
+  eruptGrave: function (x, y) {
+    var self = this, cfg = this.witching.cfg.graves;
+    this.burst(x, y, 14, 0xe6dcc0);
+    try { AUDIO.play('crash'); } catch (e) {}
+    // hand VFX — bony hands claw up out of the dirt, then sink + fade
+    for (var h = 0; h < 5; h++) {
+      var hx = x + (Math.random() * 2 - 1) * cfg.handRadius, hy = y + (Math.random() * 2 - 1) * cfg.handRadius;
+      var hand = this.add.rectangle(hx, hy + 10, 4, 16, 0xe6dcc0).setDepth(2).setAlpha(0);
+      (function (hnd, topY) {
+        self.tweens.add({ targets: hnd, y: topY, alpha: 1, duration: 260, ease: 'Back.out',
+          onComplete: function () {
+            self.tweens.add({ targets: hnd, y: topY + 12, alpha: 0, duration: 520, delay: 220,
+              onComplete: function () { try { hnd.destroy(); } catch (e) {} } });
+          } });
+      })(hand, hy - 6);
+    }
+    // hit player (grab-slow)
+    if (this.player.state.alive && Math.hypot(this.player.x - x, this.player.y - y) < cfg.handRadius + 20) {
+      Entities.hurtPlayer(this, this.player, cfg.handDmg, this.time.now, 'grasping hands');
+      this.player.state.slowUntil = this.time.now + cfg.grabMs; this.player.state.slowMult = 0.5;
+    }
+    // hands hit mobs too (kill CREDITS the player)
+    this.mobs.children.iterate(function (m) {
+      if (m && m.active && m.mob && Math.hypot(m.x - x, m.y - y) < cfg.handRadius + 10) {
+        Entities.hurtMob(self, m, cfg.handDmg, self.time.now, {});
+        if (m.active && m.mob.hp <= 0) self.killMobCredited(m);
+      }
+    });
+    // a roster mob claws out (queued spawn — never group.get in an iterate)
+    var roster = DATA.biomes.graveyard.mobs;
+    var key = roster[Math.floor(Math.random() * roster.length)];
+    this.queueSpawn({ key: key, x: x, y: y });
+  },
+
+  // the bell's final toll: fog thickens, ALL corpses rise, mobs surge, a grave wave
+  bellPeal: function () {
+    var self = this, W = this.witching, time = this.time.now;
+    this.banner('THE DEAD ANSWER THE BELL', '#78ff96');
+    this.cameras.main.shake(240, 0.006);
+    try { AUDIO.play('revive'); } catch (e) {}
+    W.surgeUntil = time + W.cfg.bell.surgeMs;
+    // rise every field corpse as a Rattlebones (acolyte tech via queueSpawn)
+    for (var c = 0; c < this.corpses.length; c++) {
+      var co = this.corpses[c];
+      if (co.used) continue; co.used = true;
+      this.queueSpawn({ key: 'rattlebones', x: co.x, y: co.y, revive: true });
+    }
+    // mob eyes flare + short speed surge
+    this.mobs.children.iterate(function (m) {
+      if (!m || !m.active || !m.mob) return;
+      m.mob.surgeUntil = W.surgeUntil; m.mob.surgeMult = W.cfg.bell.surgeMult; m.setTint(0xff6a2c);
+    });
+    // a grave wave — a few graves erupt around the player
+    for (var g = 0; g < 3; g++) {
+      var a = Math.PI * 2 * g / 3 + Math.random();
+      this.eruptGrave(Phaser.Math.Clamp(this.player.x + Math.cos(a) * 220, 80, this.worldW - 80),
+                      Phaser.Math.Clamp(this.player.y + Math.sin(a) * 220, 80, this.worldH - 80));
+    }
+  },
+
+  // NECRO ACOLYTE — raise nearby field corpses as Rattlebones, capped by how
+  // many raised minions of his are already alive (queueSpawn — never group.get
+  // inside an iterate).
+  raiseCorpses: function (m, cfg) {
+    var alive = 0, self = this;
+    this.mobs.children.iterate(function (b) { if (b && b.active && b.mob && b.mob.raisedBy === m.id) alive++; });
+    if (alive >= cfg.maxAlive) return;
+    var raised = 0;
+    for (var i = 0; i < this.corpses.length && alive + raised < cfg.maxAlive; i++) {
+      var co = this.corpses[i];
+      if (co.used) continue;
+      if (Math.hypot(co.x - m.x, co.y - m.y) > cfg.radius) continue;
+      co.used = true; raised++;
+      this.queueSpawn({ key: cfg.key, x: co.x, y: co.y, revive: true, raisedBy: m.id });
+    }
+    if (raised) { this.burst(m.x, m.y, 10, 0x78ff96); try { AUDIO.play('revive'); } catch (e) {} }
+  },
+
+  // BANSHEE WAIL TELEGRAPH — the cone locks to the cast direction and burns
+  // on the ground for the whole windup: what's lit is what gets hit. She's
+  // rooted mid-cast, so the drawn cone is always honest.
+  bansheeWailCastFx: function (m, dir, cfg) {
+    var g = this.add.graphics().setDepth(5);
+    g.fillStyle(0x8fd6ff, 0.16);
+    g.slice(m.x, m.y, cfg.range, dir - Phaser.Math.DegToRad(cfg.halfDeg), dir + Phaser.Math.DegToRad(cfg.halfDeg), false);
+    g.fillPath();
+    g.lineStyle(2, 0x8fd6ff, 0.5);
+    g.slice(m.x, m.y, cfg.range, dir - Phaser.Math.DegToRad(cfg.halfDeg), dir + Phaser.Math.DegToRad(cfg.halfDeg), false);
+    g.strokePath();
+    this.tweens.add({ targets: g, alpha: { from: 0.5, to: 1 }, duration: cfg.windupMs, ease: 'Sine.In',
+      onComplete: function () { try { g.destroy(); } catch (e) {} } });
+    try { AUDIO.play('frost'); } catch (e2) {}
+  },
+
+  // small cosmetic FX (optional hooks referenced by entities.updateMob)
+  bansheeWailFx: function (m, player) {
+    var a = Math.atan2(player.y - m.y, player.x - m.x), self = this;
+    for (var r = 0; r < 3; r++) {
+      (function (rad) {
+        var ring = self.add.arc(m.x, m.y, rad, Phaser.Math.RadToDeg(a) - 34, Phaser.Math.RadToDeg(a) + 34, false, 0x8fd6ff, 0.22).setDepth(6);
+        self.tweens.add({ targets: ring, alpha: 0, scale: 1.4, duration: 420, onComplete: function () { try { ring.destroy(); } catch (e) {} } });
+      })(20 + r * 14);
+    }
+  },
+  regenTickFx: function (m) {
+    if (Math.random() < 0.4) this.burst(m.x, m.y - m.displayHeight * 0.2, 2, 0x78ff96);
+  },
+
+  // ======================= M5.6 — THE GRAVEKEEPER (boss) ===================
+  // Climbs out of the arena grave; IMMUNE while a minion wave walks; 5 waves,
+  // each cleared strips 20% max HP (he keeps BONE STORM / SOUL VOLLEY via the
+  // generic driver + three telegraphed Necronomicon verbs here). REAPER'S
+  // MARCH fires once. During the fight the ambient cycle is quiet — the bell
+  // is HIS (each wave opens with a toll). All verb clocks ride unfreeze().
+  gravekeeperArrival: function (def) {
+    var self = this, g = this.arenaGrave;
+    this.graveArrivalActive = true;
+    // deliver the player to the arena, south of the open grave
+    this.player.setPosition(g.x, g.y + 150);
+    this.cameras.main.centerOn(g.x, g.y + 60);
+    this.banner('THE GRAVEKEEPER STIRS\nsomething claws up from the earth', '#78ff96');
+    this.cameras.main.shake(def.graveArrival.rumbleMs, 0.006);
+    // dirt + green flame churn out of the grave
+    var churn = this.time.addEvent({ delay: 90, repeat: 14, callback: function () {
+      self.burst(g.x + (Math.random() * 2 - 1) * 40, g.y + (Math.random() * 2 - 1) * 24, 4, Math.random() < 0.5 ? 0x624630 : 0x78ff96);
+    } });
+    var total = def.graveArrival.rumbleMs + def.graveArrival.crackMs + def.graveArrival.climbMs;
+    this.time.delayedCall(total, function () {
+      if (self.closing || !self.player.state.alive) { self.graveArrivalActive = false; return; }
+      self.spawnBossNow(def, g.x, g.y);         // spawns + initGravekeeper (wave 1)
+      self.showScouter(def);
+      self.graveArrivalActive = false;
+    });
+  },
+
+  initGravekeeper: function (b, time) {
+    var gd = b.boss;
+    gd.nextExplodeAt = time + 5200;
+    gd.nextHandsAt = time + 4200;
+    gd.nextSigilAt = time + 6600;
+    gd.wave = -1; gd.immune = false; gd.waveClearing = false; gd.waveSeen = false; gd.reaperSpawned = false;
+    this.graveFx = this.graveFx || [];
+    this.spawnGraveWave(b, 0);
+  },
+
+  // spawn wave `idx`: the boss goes IMMUNE, the mobs are queued (bossWave-tagged)
+  spawnGraveWave: function (b, idx) {
+    var W = b.boss.def.waves, set = W.sets[idx], self = this;
+    b.boss.wave = idx; b.boss.immune = true; b.boss.waveClearing = false; b.boss.waveSeen = false;
+    this.waveReveal(idx, set.label);          // GTA-VI-style undead wave card
+    try { AUDIO.play('belltoll'); } catch (e) {}
+    this.cameras.main.flash(180, 40, 90, 60);
+    var n = 0;
+    set.spawn.forEach(function (sp) {
+      for (var i = 0; i < sp.n; i++) {
+        var a = Math.PI * 2 * n / 12 + idx;
+        self.queueSpawn({ key: sp.key, bossWave: true,
+          x: b.x + Math.cos(a) * (110 + (n % 4) * 22), y: b.y + Math.sin(a) * (110 + (n % 4) * 22) });
+        n++;
+      }
+    });
+  },
+
+  // the frame a wave hits zero: strip a chunk (routes through hurtBoss so the
+  // 5th chunk KILLS him), then the next wave opens after a short beat
+  breakGraveWave: function (b) {
+    var bs = b.boss, W = bs.def.waves, self = this;
+    this.cameras.main.shake(260, 0.007);
+    this.banner('WAVE BROKEN — a fifth of him crumbles', '#e6dcc0');
+    try { AUDIO.play('crash'); } catch (e) {}
+    this.burst(b.x, b.y, 26, 0x78ff96);
+    bs.immune = false;
+    Entities.hurtBoss(this, b, bs.maxHp * W.hpChunkPct);
+    if (!b.active || bs.hp <= 0) return;              // he fell on the final chunk
+    var next = bs.wave + 1;
+    if (next < W.count) this.time.delayedCall(1500, function () { if (b.active && !self.closing && self.boss === b) self.spawnGraveWave(b, next); });
+  },
+
+  // scene-owned per-frame boss loop (dispatched from Entities.updateBoss)
+  gravekeeperUpdate: function (b, player, time) {
+    var bs = b.boss, def = bs.def, W = def.waves, self = this;
+    if (bs.wave == null || bs.wave < 0) return;
+    var alive = 0, mcx = 0, mcy = 0;
+    this.mobs.children.iterate(function (m) { if (m && m.active && m.mob && m.mob.bossWave) { alive++; mcx += m.x; mcy += m.y; } });
+    bs.immune = alive > 0;
+    if (alive > 0) bs.waveSeen = true;
+    if (bs.waveSeen && alive === 0 && !bs.waveClearing && bs.wave < W.count) { bs.waveClearing = true; this.breakGraveWave(b); }
+    // REAPER'S MARCH — armed the moment the fight starts; rises after a short
+    // beat with a camera reveal (early, not near-death).
+    if (!bs.reaperArmed) { bs.reaperArmed = true; bs.reaperAt = time + (def.reaper.delayMs || 1600); }
+    if (!bs.reaperSpawned && time >= bs.reaperAt) { bs.reaperSpawned = true; this.spawnReaper(def.reaper); }
+    this.updateReaper(time);
+    // COWARD MOVEMENT — override the generic chase updateBoss set this frame
+    this.gravekeeperSkulk(b, player, alive, mcx, mcy);
+    this.gravekeeperVerbs(b, player, time);
+    // keep the HP bar tinted while immune (readout of the mechanic)
+    if (this.bossBar) this.bossBar.setFillStyle(bs.immune ? 0x4a4e5c : 0x78ff96);
+  },
+
+  // COWARD MOVEMENT — the Gravekeeper skulks behind his wave instead of chasing:
+  // flee (fast) when the player is close, HIDE toward his minion cluster at
+  // mid-range so bodies stay between you and him, and only amble back if you've
+  // drifted far. Gives the chasing minions room to separate from the boss.
+  gravekeeperSkulk: function (b, player, alive, mcx, mcy) {
+    if (!b.active || !b.body) return;            // mid-death / body gone — no move
+    var sk = b.boss.def.skulk || { fleeNear: 230, driftFar: 560, fleeMult: 1.4, holdMult: 0.6 };
+    var spd = b.boss.def.spd;
+    var dx = player.x - b.x, dy = player.y - b.y, d = Math.hypot(dx, dy) || 1;
+    var vx = 0, vy = 0, mult = sk.holdMult;
+    if (d < sk.fleeNear) {                       // too close → FLEE, biased behind the swarm
+      vx = -dx / d; vy = -dy / d; mult = sk.fleeMult;
+      if (alive > 0) { var cx = mcx / alive - b.x, cy = mcy / alive - b.y, cl = Math.hypot(cx, cy) || 1; vx += (cx / cl) * 0.6; vy += (cy / cl) * 0.6; }
+    } else if (d > sk.driftFar) {                // drifted far → amble back so the fight continues
+      vx = dx / d; vy = dy / d; mult = sk.holdMult;
+    } else if (alive > 0) {                       // mid-range → HIDE toward the minion cluster
+      var hx = mcx / alive - b.x, hy = mcy / alive - b.y, hl = Math.hypot(hx, hy) || 1;
+      vx = hx / hl; vy = hy / hl; mult = sk.holdMult * 0.7;
+    }                                            // else: no minions mid-range → hold still (no chase)
+    var nl = Math.hypot(vx, vy);
+    if (nl > 0.01) b.setVelocity(vx / nl * spd * mult, vy / nl * spd * mult); else b.setVelocity(0, 0);
+    b.setFlipX(dx < 0);
+    b.x = Phaser.Math.Clamp(b.x, 60, this.worldW - 60);   // he never wraps — stays on the field
+    b.y = Phaser.Math.Clamp(b.y, 60, this.worldH - 60);
+  },
+
+  gravekeeperVerbs: function (b, player, time) {
+    var P = b.boss.def.patterns;
+    if (time >= b.boss.nextExplodeAt) { b.boss.nextExplodeAt = time + P.explodeCorpse.everyMs; this.explodeCorpses(b, P.explodeCorpse); }
+    if (time >= b.boss.nextHandsAt) { b.boss.nextHandsAt = time + P.graspingHands.everyMs; this.graspingHands(b, player, P.graspingHands); }
+    if (time >= b.boss.nextSigilAt) { b.boss.nextSigilAt = time + P.curseSigils.everyMs; this.curseSigils(b, player, P.curseSigils); }
+  },
+
+  // EXPLODE CORPSE — detonate up to `chain` field corpses in a stagger; if the
+  // ground is clean, a bone-blast spawns near the player so the verb still bites
+  explodeCorpses: function (b, cfg) {
+    var self = this, done = 0;
+    for (var i = 0; i < this.corpses.length && done < cfg.chain; i++) {
+      var co = this.corpses[i]; if (co.used) continue; co.used = true; done++;
+      (function (cx, cy, d) {
+        var warn = self.add.ellipse(cx, cy, cfg.radius * 2, cfg.radius * 2, 0xff6a2c, 0.2).setDepth(1);
+        self.time.delayedCall(cfg.warnMs * d, function () {
+          try { warn.destroy(); } catch (e) {}
+          if (self.closing) return;
+          self.burst(cx, cy, 16, 0xff6a2c); self.cameras.main.shake(120, 0.004);
+          try { AUDIO.play('boom'); } catch (e) {}
+          if (self.player.state.alive && Math.hypot(self.player.x - cx, self.player.y - cy) < cfg.radius)
+            Entities.hurtPlayer(self, self.player, cfg.dmg, self.time.now, 'an exploding corpse', true);
+        });
+      })(co.x, co.y, done);
+    }
+    if (done === 0) {
+      var a = Math.random() * Math.PI * 2;
+      var cx = Phaser.Math.Clamp(this.player.x + Math.cos(a) * 70, 60, this.worldW - 60);
+      var cy = Phaser.Math.Clamp(this.player.y + Math.sin(a) * 70, 60, this.worldH - 60);
+      var warn2 = this.add.ellipse(cx, cy, cfg.radius * 2, cfg.radius * 2, 0xff6a2c, 0.2).setDepth(1);
+      this.time.delayedCall(cfg.warnMs, function () {
+        try { warn2.destroy(); } catch (e) {}
+        self.burst(cx, cy, 14, 0xff6a2c); try { AUDIO.play('boom'); } catch (e) {}
+        if (self.player.state.alive && Math.hypot(self.player.x - cx, self.player.y - cy) < cfg.radius)
+          Entities.hurtPlayer(self, self.player, cfg.dmg, self.time.now, 'a corpse blast', true);
+      });
+    }
+  },
+
+  // GRASPING HANDS — telegraphed circles erupt into bony hands (dmg + grab-slow)
+  graspingHands: function (b, player, cfg) {
+    var self = this;
+    for (var i = 0; i < cfg.count; i++) {
+      var a = Math.PI * 2 * i / cfg.count + Math.random();
+      var hx = Phaser.Math.Clamp(player.x + Math.cos(a) * (Math.random() * cfg.scatter), 60, this.worldW - 60);
+      var hy = Phaser.Math.Clamp(player.y + Math.sin(a) * (Math.random() * cfg.scatter), 60, this.worldH - 60);
+      var ring = this.add.ellipse(hx, hy, cfg.radius * 2, cfg.radius * 2, 0xe6dcc0, 0.22).setDepth(1).setStrokeStyle(2, 0xe6dcc0);
+      (function (x, y, r) {
+        self.time.delayedCall(cfg.warnMs, function () {
+          try { r.destroy(); } catch (e) {}
+          self.burst(x, y, 12, 0xe6dcc0); try { AUDIO.play('crash'); } catch (e) {}
+          for (var h = 0; h < 4; h++) {
+            var hnd = self.add.rectangle(x + (Math.random() * 2 - 1) * cfg.radius * 0.7, y + 10, 4, 16, 0xe6dcc0).setDepth(2).setAlpha(0);
+            (function (hh, ty) { self.tweens.add({ targets: hh, y: ty, alpha: 1, duration: 220, onComplete: function () { self.tweens.add({ targets: hh, y: ty + 12, alpha: 0, duration: 500, delay: 200, onComplete: function () { try { hh.destroy(); } catch (e) {} } }); } }); })(hnd, y - 6);
+          }
+          if (self.player.state.alive && Math.hypot(self.player.x - x, self.player.y - y) < cfg.radius) {
+            Entities.hurtPlayer(self, self.player, cfg.dmg, self.time.now, 'grasping hands', true);
+            self.player.state.slowUntil = self.time.now + cfg.grabMs; self.player.state.slowMult = 0.5;
+          }
+        });
+      })(hx, hy, ring);
+    }
+  },
+
+  // CURSE SIGILS — rune circles bloom, then blast + leave a ticking sigil patch
+  curseSigils: function (b, player, cfg) {
+    var self = this;
+    for (var i = 0; i < cfg.count; i++) {
+      var a = Math.PI * 2 * i / cfg.count + Math.random();
+      var sx = Phaser.Math.Clamp(player.x + Math.cos(a) * (40 + Math.random() * 160), 60, this.worldW - 60);
+      var sy = Phaser.Math.Clamp(player.y + Math.sin(a) * (40 + Math.random() * 160), 60, this.worldH - 60);
+      var ring = this.add.ellipse(sx, sy, cfg.radius * 2, cfg.radius * 2, 0xb060ec, 0.2).setDepth(1).setStrokeStyle(2, 0xb060ec);
+      (function (x, y, r) {
+        self.time.delayedCall(cfg.warnMs, function () {
+          try { r.destroy(); } catch (e) {}
+          self.burst(x, y, 12, 0xb060ec);
+          var g = self.add.ellipse(x, y, cfg.radius * 2, cfg.radius * 2, 0xb060ec, 0.26).setDepth(1);
+          self.tweens.add({ targets: g, alpha: { from: 0.3, to: 0.12 }, duration: 500, yoyo: true, repeat: -1 });
+          if (!self.gasPatches) self.gasPatches = [];
+          self.gasPatches.push({ obj: g, x: x, y: y, r: cfg.radius, dmg: cfg.sigil.dmg, tickMs: cfg.sigil.tickMs, dieAt: self.time.now + cfg.sigil.lifeMs, lastTick: 0, boss: true });
+        });
+      })(sx, sy, ring);
+    }
+  },
+
+  // REAPER'S MARCH — a Grim Reaper rises at the map edge and crawls at the
+  // player forever. Touch = instant death (fromBoss). Manual mover (respects
+  // hitstop/pause via the loop delta being 0 while frozen).
+  spawnReaper: function (cfg) {
+    var self = this;
+    // rise in the CORNER FARTHEST from the player (the dread creeps in from afar)
+    var corners = [[80, 80], [this.worldW - 80, 80], [80, this.worldH - 80], [this.worldW - 80, this.worldH - 80]];
+    var px = this.player.x, py = this.player.y, x = corners[0][0], y = corners[0][1], bd = -1;
+    corners.forEach(function (c) { var dd = Math.hypot(c[0] - px, c[1] - py); if (dd > bd) { bd = dd; x = c[0]; y = c[1]; } });
+    var spr = this.add.image(x, y, 'reaperHi').setDepth(22).setScale(0.12).setBlendMode(Phaser.BlendModes.NORMAL);
+    var aura = this.add.ellipse(x, y, 90, 60, 0x78ff96, 0.14).setDepth(21);
+    this.reaper = { spr: spr, aura: aura, x: x, y: y, spd: cfg.spd, rising: true };
+    // he CLIMBS OUT of the corner, then begins his march
+    this.tweens.add({ targets: spr, scale: 112 / 48, duration: 800, ease: 'Back.Out', onComplete: function () { if (self.reaper) self.reaper.rising = false; } });
+    for (var ri = 0; ri < 8; ri++) this.burst(x + (Math.random() * 2 - 1) * 40, y + (Math.random() * 2 - 1) * 30, 4, 0x78ff96);
+    // CAMERA REVEAL — glance to the corner, hold, then snap back to the player
+    var cam = this.cameras.main;
+    cam.stopFollow(); cam.pan(x, y, 560, 'Sine.easeInOut');
+    this.time.delayedCall(1400, function () {
+      cam.pan(self.player.x, self.player.y, 460, 'Sine.easeInOut');
+      self.time.delayedCall(480, function () { if (self.player && self.player.active && !self.closing) cam.startFollow(self.player, true, 0.12, 0.12); });
+    });
+    this.cameras.main.shake(300, 0.006);
+    this.banner("THE SPAWN OF DEATH RISES\nits touch is death - never let it reach you", '#78ff96');
+    try { AUDIO.play('reaperdrone'); } catch (e) {}
+  },
+
+  updateReaper: function (time) {
+    var R = this.reaper; if (!R || !R.spr || !R.spr.active) return;
+    if (R.rising) { R.aura.setPosition(R.x, R.y); return; }   // still climbing out - no walk, no kill yet
+    if (!this.player.state.alive || this.closing) return;
+    var dt = this.game.loop.delta / 1000;
+    var dx = this.player.x - R.x, dy = this.player.y - R.y, d = Math.hypot(dx, dy) || 1;
+    R.x += (dx / d) * R.spd * dt; R.y += (dy / d) * R.spd * dt;
+    R.spr.setPosition(R.x, R.y).setFlipX(dx < 0);
+    R.aura.setPosition(R.x, R.y).setAlpha(0.1 + 0.06 * Math.sin(time / 200));
+    if (d < 32) Entities.hurtPlayer(this, this.player, 99999, time, 'the reaper', true);
+  },
+
+  clearReaper: function () {
+    if (this.reaper) { try { this.reaper.spr.destroy(); } catch (e) {} try { this.reaper.aura.destroy(); } catch (e2) {} this.reaper = null; }
+  },
+
+  // 'IMMUNE' popup over the boss while a wave still walks (rate-limited)
+  bossImmunePopup: function (b) {
+    var t = this.time.now;
+    if (this._bossImmuneAt && t - this._bossImmuneAt < 650) return;
+    this._bossImmuneAt = t;
+    var txt = this.add.text(b.x, b.y - b.displayHeight / 2 - 14, 'IMMUNE', { fontFamily: 'monospace', fontSize: 12, fontStyle: 'bold', color: '#78ff96' }).setOrigin(0.5).setDepth(60);
+    this.tweens.add({ targets: txt, y: txt.y - 18, alpha: 0, duration: 700, onComplete: function () { try { txt.destroy(); } catch (e) {} } });
+  },
+
+
+
+  // -------- falling trees: shared by the AMBIENT hazard and the TIMBER verb --
+  // Telegraph a lane near/through (px,py), then drop the trunk across it.
+  startTreeFall: function (px, py, warnMs, dmg, trunkLifeMs, fromBoss) {
+    var self = this;
+    var horiz = Math.random() < 0.6;                      // cosmetic orientation
+    var len = 430, half = 34;
+    var cx = Phaser.Math.Clamp(px, len / 2 + 30, this.worldW - len / 2 - 30);
+    var cy = Phaser.Math.Clamp(py, 80, this.worldH - 80);
+    if (!horiz) { cx = Phaser.Math.Clamp(px, 80, this.worldW - 80); cy = Phaser.Math.Clamp(py, len / 2 + 30, this.worldH - len / 2 - 30); }
+    var shadow = this.add.rectangle(cx, cy, horiz ? len : half * 2, horiz ? half * 2 : len,
+                                    0x14231a, 0.0).setDepth(3);
+    this.tweens.add({ targets: shadow, fillAlpha: 0.45, duration: warnMs * 0.8 });
+    try { AUDIO.play('creak'); } catch (e) {}
+    this.cameras.main.shake(260, 0.003);
+    return { phase: 'warn', warnUntil: this.time.now + warnMs, shadow: shadow,
+             cx: cx, cy: cy, horiz: horiz, len: len, half: half,
+             dmg: dmg, trunkLifeMs: trunkLifeMs, fromBoss: !!fromBoss };
+  },
+
+  dropTree: function (fall) {
+    var self = this, cx = fall.cx, cy = fall.cy;
+    try { fall.shadow.destroy(); } catch (e) {}
+    // the trunk slams in: spawn slightly "above" and drop fast
+    var img = this.add.image(cx, cy - 26, 'fallenTrunk').setDepth(6)
+      .setScale(fall.len / 260, (fall.half * 2) / 56).setAlpha(0.85);
+    if (!fall.horiz) img.setAngle(90);
+    this.tweens.add({ targets: img, y: cy, alpha: 1, duration: 130, ease: 'Quad.In' });
+    this.cameras.main.shake(220, 0.012);
+    try { AUDIO.play('crash'); } catch (e) {}
+    this.burst(cx, cy, 18, 0x63b25a);                    // leaf burst
+    this.burst(cx, cy, 10, 0x7d6450);                    // dust
+    // CRUSH — everything under the lane. Mobs credit the player (m4s rule);
+    // the player takes the hit through hurtPlayer (gear + class mults apply).
+    var w2 = fall.horiz ? fall.len / 2 : fall.half, h2 = fall.horiz ? fall.half : fall.len / 2;
+    var p = this.player;
+    if (p.state.alive && Math.abs(p.x - cx) < w2 + 8 && Math.abs(p.y - cy) < h2 + 8) {
+      Entities.hurtPlayer(this, p, fall.dmg, this.time.now,
+        fall.fromBoss ? "the Grovekeeper's TIMBER" : 'a falling tree', fall.fromBoss);
+      // shove the survivor clear so the new wall doesn't swallow them
+      if (fall.horiz) p.y = cy + (p.y >= cy ? 1 : -1) * (fall.half + 26);
+      else p.x = cx + (p.x >= cx ? 1 : -1) * (fall.half + 26);
+    }
+    this.mobs.children.iterate(function (m) {
+      if (m && m.active && Math.abs(m.x - cx) < w2 && Math.abs(m.y - cy) < h2) self.killMobCredited(m);
+    });
+    // the trunk LINGERS as a wall, then crumbles
+    var body = this.add.rectangle(cx, cy, w2 * 2, h2 * 2, 0, 0);
+    this.physics.add.existing(body, true);
+    if (this.trunkGroup) this.trunkGroup.add(body);
+    var rec = { img: img, body: body, dieAt: this.time.now + fall.trunkLifeMs };
+    this.groveTrunks.push(rec);
+    return rec;
+  },
+
+  crumbleTrunk: function (rec) {
+    var self = this;
+    this.burst(rec.img.x, rec.img.y, 12, 0x63b25a);
+    try { rec.body.destroy(); } catch (e) {}
+    this.tweens.add({ targets: rec.img, alpha: 0, duration: 600,
+      onComplete: function () { try { rec.img.destroy(); } catch (e) {} } });
+  },
+
+  // ---------------- grove mechanics: cast bars, queues, glow, blink ---------
+  // The Bumblebrute's SUMMON bar (user: "very short half second cast bar
+  // above his head with summon"). Pieces ride the sprite; every death path
+  // clears them (Entities.clearNameTag).
+  updateCastBar: function (m, pct, label) {
+    pct = Phaser.Math.Clamp(pct, 0, 1);
+    var y = m.y - m.displayHeight / 2 - 14;
+    if (!m.castBarBg) {
+      m.castBarBg = this.add.rectangle(m.x, y, 34, 6, 0x1a1c2c, 0.9).setDepth(21).setStrokeStyle(1, 0xffd23e, 0.9);
+      m.castBar = this.add.rectangle(m.x - 16, y, 1, 4, 0xffd23e, 1).setOrigin(0, 0.5).setDepth(22);
+      m.castText = this.add.text(m.x, y - 9, label || 'SUMMON',
+        { fontFamily: 'monospace', fontSize: 8, fontStyle: 'bold', color: '#ffd23e' }).setOrigin(0.5).setDepth(22);
+    }
+    m.castBarBg.setPosition(m.x, y);
+    m.castBar.setPosition(m.x - 16, y).width = Math.max(1, 32 * pct);
+    m.castText.setPosition(m.x, y - 9);
+  },
+
+  // Mechanic-driven spawns are QUEUED and drained once per frame — group.get
+  // inside the physics/update iterates is the documented splitter hazard.
+  queueSpawn: function (entry) { this._spawnQueue.push(entry); },
+
+  queueGuardSummon: function (brute) {
+    var g = brute.mob.def.guard;
+    for (var i = 0; i < g.count; i++) {
+      var a = Math.PI * 2 * i / g.count;
+      this.queueSpawn({ key: g.key, x: brute.x + Math.cos(a) * g.ring, y: brute.y + Math.sin(a) * g.ring,
+                        guardianOf: brute.id });
+    }
+    try { AUDIO.play('volley'); } catch (e) {}
+    this.burst(brute.x, brute.y, 10, 0xffd23e);
+  },
+
+  queuePixieSummon: function (pixie, cfg) {
+    var count = 0;
+    this.mobs.children.iterate(function (m) { if (m && m.active && m.mob.key === cfg.key) count++; });
+    if (count >= (cfg.maxAlive || 2)) return;
+    this.queueSpawn({ key: cfg.key, x: pixie.x, y: pixie.y + 26 });
+    this.burst(pixie.x, pixie.y, 8, 0x8fd6ff);
+    try { AUDIO.play('chime'); } catch (e) {}
+  },
+
+  drainSpawnQueue: function () {
+    if (!this._spawnQueue.length) return;
+    var q = this._spawnQueue; this._spawnQueue = [];
+    var self = this;
+    // no mechanic spawns once the fight is decided or the swarm was wiped
+    if (this.closing || this.pendingLoot) return;
+    q.forEach(function (e) {
+      var x = Phaser.Math.Clamp(e.x, 30, self.worldW - 30);
+      var y = Phaser.Math.Clamp(e.y, 30, self.worldH - 30);
+      var m = Entities.spawnMob(self, e.key, x, y);
+      if (!m) return;
+      if (e.guardianOf) {
+        m.mob.guardianOf = e.guardianOf;
+        self.mobs.children.iterate(function (b) {
+          if (b && b.active && b.id === e.guardianOf) b.mob.ward++;
+        });
+      }
+      if (e.cinematic) { m.mob.cinematic = true; }
+      if (e.raisedBy) { m.mob.raisedBy = e.raisedBy; }    // M5.6: acolyte-raised (alive cap)
+      if (e.bossWave) { m.mob.bossWave = true; }          // M5.6: gravekeeper wave (immunity gate)
+      if (e.revive) self.burst(x, y, 10, 0x8ff0a5);       // the bloom / the risen take
+    });
+  },
+
+  // Bloom-pixie GLOW TRAIL — patches that RESURRECT enemies that died nearby.
+  dropGlow: function (x, y, cfg) {
+    var patch = this.add.ellipse(x, y, cfg.radius * 2, cfg.radius * 1.5, 0x8fd6ff, 0.30)
+      .setDepth(3).setStrokeStyle(1, 0xc8fff4, 0.6);
+    var rec = { obj: patch, x: x, y: y, r: cfg.radius, dieAt: this.time.now + cfg.lifeMs };
+    this.glowPatches.push(rec);
+    this.tweens.add({ targets: patch, alpha: 0.08, duration: cfg.lifeMs, ease: 'Sine.In',
+      onComplete: function () { rec.dead = true; try { patch.destroy(); } catch (e) {} } });
+  },
+
+  blinkFx: function (x0, y0, x1, y1, tint) {
+    this.burst(x0, y0, 6, tint || 0xff77a8);
+    this.burst(x1, y1, 6, tint || 0xff77a8);
+    try { AUDIO.play('chime'); } catch (e) {}
+  },
+
+  // ---------------- THE GROVEKEEPER: verbs, arrival, PHASE TWO --------------
+  initGrovekeeper: function (b, time) {
+    var gd = b.boss;
+    gd.nextTimberAt = time + 6000;
+    gd.nextMortarAt = time + 3200;
+    gd.nextOvergrowthAt = time + 8000;
+    gd.nextSunlanceAt = time + 5000;
+    gd.nextSurgeAt = time + 10000;
+    gd.sunUntil = 0; gd.nextSunTickAt = 0; gd.sunAng = 0; gd.lastSunAt = 0; gd.sunDir = 1;
+    this.timberFall = this.timberFall || null;
+    this.groveFx = this.groveFx || [];           // re-init (phase two) keeps live fx tracked
+  },
+
+  grovekeeperUpdate: function (b, player, time) {
+    var gd = b.boss, P = gd.def.patterns, rate = gd.rateMult || 1;
+    // TIMBER — his ghost train: an ancient tree across YOUR lane
+    if (this.timberFall && this.timberFall.phase === 'warn') {
+      this.timberFall.shadow.setAlpha(Math.floor(time / 110) % 2 === 0 ? 0.5 : 0.3);
+      if (time >= this.timberFall.warnUntil) {
+        var tf = this.timberFall; this.timberFall = null;
+        this.dropTree(tf);
+      }
+    } else if (!this.timberFall && time >= gd.nextTimberAt) {
+      gd.nextTimberAt = time + P.timber.everyMs * rate;
+      this.timberFall = this.startTreeFall(player.x, player.y, P.timber.warnMs,
+                                           P.timber.dmg, P.timber.trunkLifeMs, true);
+    }
+    // THORN MORTAR — marked lobs + lingering brier patches
+    if (time >= gd.nextMortarAt) { gd.nextMortarAt = time + P.mortar.everyMs * rate; this.throwMortar(b, P.mortar); }
+    // OVERGROWTH — vines grip: the schedule slow, grove-flavored
+    if (time >= gd.nextOvergrowthAt) { gd.nextOvergrowthAt = time + P.overgrowth.everyMs * rate; this.snapOvergrowth(b, P.overgrowth, time); }
+    // SUNLANCE — the sweeping canopy beam
+    this.updateSunlance(b, player, time);
+    // SPORE SURGE — a ring of mini puffcaps sprouts around the player
+    if (P.sporeSurge && time >= gd.nextSurgeAt) {
+      gd.nextSurgeAt = time + P.sporeSurge.everyMs * rate;
+      for (var i = 0; i < P.sporeSurge.count; i++) {
+        var a = Math.PI * 2 * i / P.sporeSurge.count;
+        this.queueSpawn({ key: 'puffcapMini', x: player.x + Math.cos(a) * P.sporeSurge.ring,
+                          y: player.y + Math.sin(a) * P.sporeSurge.ring });
+      }
+      this.burst(b.x, b.y, 12, 0xd95763);
+      try { AUDIO.play('volley'); } catch (e) {}
+    }
+  },
+
+  throwMortar: function (b, T) {
+    var self = this;
+    for (var i = 0; i < T.count; i++) {
+      var tx = i === 0 ? this.player.x : this.player.x + (SIM.rng() * 2 - 1) * T.scatter;
+      var ty = i === 0 ? this.player.y : this.player.y + (SIM.rng() * 2 - 1) * T.scatter;
+      tx = Phaser.Math.Clamp(tx, 60, this.worldW - 60);
+      ty = Phaser.Math.Clamp(ty, 60, this.worldH - 60);
+      (function (tx, ty) {
+        var marker = self.add.ellipse(tx, ty, T.radius * 2, T.radius * 2)
+          .setStrokeStyle(3, 0x8ff0a5, 0.9).setFillStyle(0x38b764, 0.12).setDepth(4);
+        self.groveFx.push(marker);
+        self.tweens.add({ targets: marker, scaleX: { from: 0.4, to: 1 }, scaleY: { from: 0.4, to: 1 },
+          duration: T.warnMs, ease: 'Sine.In' });
+        // the pod: a tinted orb lobbed on a rise-and-fall
+        var pod = self.add.image(b.x, b.y - 24, 'orbShot').setDepth(40).setScale(3).setTint(0x38b764);
+        self.groveFx.push(pod);
+        self.tweens.add({ targets: pod, scale: 4.4, duration: T.flightMs * 0.5, yoyo: true });
+        self.tweens.add({
+          targets: pod, x: tx, y: ty, angle: 540, duration: T.flightMs, delay: T.warnMs - T.flightMs,
+          onComplete: function () {
+            try { AUDIO.play('thud'); } catch (e) {}
+            self.cameras.main.shake(120, 0.004);
+            self.burst(tx, ty, 10, 0x38b764);
+            var p = self.player;
+            if (p.state.alive && Math.hypot(p.x - tx, p.y - ty) < T.radius) {
+              Entities.hurtPlayer(self, p, T.dmg, self.time.now, 'a seed mortar', true);
+            }
+            // the BRIER lingers — slime-patch tech in grove colors
+            if (T.brier) {
+              var patch = self.add.ellipse(tx, ty, T.radius * 2, T.radius * 1.5, 0x2e9e57, 0.34)
+                .setDepth(3).setStrokeStyle(1, 0x8ff0a5, 0.5);
+              var rec2 = { obj: patch, x: tx, y: ty, r: T.radius, dmg: T.brier.dmg,
+                           tickMs: T.brier.tickMs, dieAt: self.time.now + T.brier.lifeMs };
+              self.slimePatches.push(rec2);       // rides the existing hazard pool
+              self.tweens.add({ targets: patch, alpha: 0.08, duration: T.brier.lifeMs, ease: 'Sine.In',
+                onComplete: function () { rec2.dead = true; try { patch.destroy(); } catch (e) {} } });
+            }
+            try { marker.destroy(); } catch (e) {}
+            self.tweens.add({ targets: pod, alpha: 0, duration: 300,
+              onComplete: function () { try { pod.destroy(); } catch (e) {} } });
+          }
+        });
+      })(tx, ty);
+    }
+  },
+
+  snapOvergrowth: function (b, S, time) {
+    var st = this.player.state;
+    st.slowUntil = time + S.durMs;
+    st.slowMult = S.slowMult;
+    try { AUDIO.play('creak'); } catch (e) {}
+    // vines burst up around your ankles
+    var p = this.player, self = this;
+    for (var i = 0; i < 5; i++) {
+      var a = Math.PI * 2 * i / 5;
+      var vine = this.add.ellipse(p.x + Math.cos(a) * 16, p.y + 10 + Math.sin(a) * 6, 5, 16, 0x2e9e57, 0.9).setDepth(9);
+      this.groveFx.push(vine);
+      this.tweens.add({ targets: vine, scaleY: { from: 0.2, to: 1 }, alpha: 0, duration: S.durMs,
+        onComplete: (function (v) { return function () { try { v.destroy(); } catch (e) {} }; })(vine) });
+    }
+    var fx = this.add.sprite(p.x, p.y, 'softglow')
+      .setTint(0x38b764).setScale(1.6).setAlpha(0.5).setDepth(9).setBlendMode(Phaser.BlendModes.ADD);
+    this.groveFx.push(fx);
+    this.tweens.add({ targets: fx, alpha: 0.12, duration: S.durMs, ease: 'Sine.In',
+      onUpdate: function () { fx.setPosition(p.x, p.y); },
+      onComplete: function () { try { fx.destroy(); } catch (e) {} } });
+  },
+
+  updateSunlance: function (b, player, time) {
+    var gd = b.boss, L = gd.def.patterns.sunlance;
+    if (!gd.sunUntil && time >= gd.nextSunlanceAt) {
+      gd.sunUntil = time + L.durMs;
+      gd.sunAng = Math.atan2(player.y - b.y, player.x - b.x) - 0.6;
+      gd.sunDir = SIM.rng() < 0.5 ? 1 : -1;
+      gd.lastSunAt = time;
+      gd.nextSunTickAt = time;
+      if (!this.sunG) this.sunG = this.add.graphics().setDepth(7);
+      try { AUDIO.play('charge'); } catch (e) {}
+    }
+    if (!gd.sunUntil) return;
+    if (time >= gd.sunUntil) {
+      gd.sunUntil = 0;
+      gd.nextSunlanceAt = time + L.everyMs * (gd.rateMult || 1);
+      if (this.sunG) this.sunG.clear();
+      return;
+    }
+    var dtL = Math.min(120, time - (gd.lastSunAt || time));
+    gd.lastSunAt = time;
+    gd.sunAng += gd.sunDir * Phaser.Math.DegToRad(L.degPerSec) * dtL / 1000;
+    var x2 = b.x + Math.cos(gd.sunAng) * L.length, y2 = b.y + Math.sin(gd.sunAng) * L.length;
+    var g = this.sunG;
+    g.clear();
+    g.lineStyle(26, 0xffd23e, 0.20); g.lineBetween(b.x, b.y, x2, y2);
+    g.lineStyle(10, 0xffe3a8, 0.5);  g.lineBetween(b.x, b.y, x2, y2);
+    if (time >= gd.nextSunTickAt) {
+      gd.nextSunTickAt = time + L.tickMs;
+      var pd = Math.hypot(player.x - b.x, player.y - b.y);
+      if (player.state.alive && pd < L.length && pd > 10) {
+        var pa = Math.atan2(player.y - b.y, player.x - b.x);
+        var diff = Phaser.Math.Angle.Wrap(pa - gd.sunAng);
+        var halfRad = Phaser.Math.DegToRad(L.halfDeg) + 14 / Math.max(40, pd);
+        if (Math.abs(diff) < halfRad) {
+          Entities.hurtPlayer(this, player, L.dmg, time, "the Grovekeeper's sunlance", true);
+        }
+      }
+    }
+  },
+
+  clearGrovekeeperFx: function () {
+    if (this.sunG) { try { this.sunG.destroy(); } catch (e) {} this.sunG = null; }
+    if (this.timberFall) { try { this.timberFall.shadow.destroy(); } catch (e) {} this.timberFall = null; }
+    (this.groveFx || []).forEach(function (o) { try { o.destroy(); } catch (e) {} });
+    this.groveFx = [];
+    var st = this.player && this.player.state;
+    if (st) { st.slowUntil = 0; st.slowMult = 1; }
+    this._reviveTarget = null; this._reviveState = null;
+  },
+
+  // THE HEARTWOOD WAKES — camera to the clearing; the ground splits and the
+  // Grovekeeper GROWS OUT OF THE GROUND (user 2026-07-15), sprouting from a
+  // sapling to his full height at the great tree's feet. Tween-driven,
+  // pause-safe; ambient tree-falls gate on arrivalGrove.
+  grovekeeperArrival: function (def) {
+    var self = this, A = def.treeArrival, hw = this.heartwood;
+    this.arrivalGrove = true;
+    var bx = hw.x, by = hw.y + 150;                      // the clearing before the tree
+    this.cameras.main.stopFollow();
+    this.cameras.main.pan(bx, by - 30, 700, 'Sine.easeInOut');
+    try { AUDIO.play('creak'); } catch (e) {}
+    this.cameras.main.shake(A.shakeMs, 0.005);
+    // the canopy shudders + the soil churns where he'll sprout
+    this.tweens.add({ targets: hw, scaleX: { from: 1.4, to: 1.46 }, duration: A.shakeMs / 2, yoyo: true, repeat: 1 });
+    var mound = this.add.ellipse(bx, by + 16, 60, 22, 0x5b4636, 0.9).setDepth(3);
+    this.tweens.add({ targets: mound, scaleX: { from: 0.2, to: 1 }, scaleY: { from: 0.2, to: 1 }, duration: A.shakeMs });
+    this.time.delayedCall(300, function () { self.burst(bx, by, 12, 0x7d6450); });   // dirt
+    this.time.delayedCall(A.shakeMs, function () {
+      try { AUDIO.play('portal'); } catch (e) {}
+      // HE GROWS — spawn tiny at the ground line and swell to full height,
+      // feet planted (y tracks the scale so the base never moves)
+      self.spawnBossNow(def, bx, by);
+      if (self.boss) {
+        var b = self.boss, fullScale = b.scaleX, fullH = b.displayHeight;
+        var groundY = by + fullH / 2;
+        var grow = { t: 0 };
+        b.setScale(fullScale * 0.12);
+        b.y = groundY - b.displayHeight / 2;
+        self.tweens.add({ targets: grow, t: 1, duration: A.splitMs + A.stepMs, ease: 'Back.Out',
+          onUpdate: function () {
+            if (!b.active) return;
+            var s = fullScale * (0.12 + 0.88 * grow.t);
+            b.setScale(s);
+            b.y = groundY - b.displayHeight / 2;         // roots stay rooted
+          },
+          onComplete: function () { if (b.active) { b.setScale(fullScale); b.y = by; } } });
+        // leaves + dirt burst as he breaches, twice
+        self.burst(bx, by + 10, 16, 0x63b25a);
+        self.time.delayedCall(Math.round((A.splitMs + A.stepMs) * 0.5), function () {
+          self.burst(bx, by - 10, 14, 0x8ff0a5);
+          self.cameras.main.shake(180, 0.006);
+          try { AUDIO.play('thud'); } catch (e) {}
+        });
+      }
+      self.time.delayedCall(A.splitMs + A.stepMs + 150, function () {
+        self.tweens.add({ targets: mound, alpha: 0, duration: 800,
+          onComplete: function () { try { mound.destroy(); } catch (e) {} } });
+        self.arrivalGrove = false;
+        self.cameras.main.startFollow(self.player);
+        self.showScouter(def);
+      });
+    });
+  },
+
+  // PHASE TWO (user 2026-07-15): on his first death the pixies come. Real
+  // pixie mobs fly in from the clearing's edges and channel the bloom; every
+  // one killed mid-channel cuts the restored HP. Then you kill him AGAIN.
+  grovekeeperResurrection: function (boss) {
+    var P2 = boss.boss.def.phaseTwo, self = this;
+    boss.boss.resurrecting = true;
+    boss.boss.hp = 1;
+    boss.setVelocity(0, 0);
+    boss.setTint(0x9aa7b8);
+    // his verbs die with him mid-channel (the beam/telegraphs don't haunt the corpse)
+    if (this.timberFall) { try { this.timberFall.shadow.destroy(); } catch (e) {} this.timberFall = null; }
+    if (this.sunG) this.sunG.clear();
+    boss.boss.sunUntil = 0;
+    this.banner('THE GROVE ANSWERS\nkill the pixies before the bloom completes!', '#8fd6ff');
+    try { AUDIO.play('revive'); } catch (e) {}
+    this._reviveTarget = { x: boss.x, y: boss.y };
+    this._reviveState = { until: this.time.now + P2.channelMs, boss: boss };
+    // the pixies fly in from a wide ring (queued spawns — real, killable mobs)
+    for (var i = 0; i < P2.pixies; i++) {
+      var a = Math.PI * 2 * i / P2.pixies + 0.3;
+      this.queueSpawn({ key: 'pixie',
+        x: Phaser.Math.Clamp(boss.x + Math.cos(a) * 520, 40, this.worldW - 40),
+        y: Phaser.Math.Clamp(boss.y + Math.sin(a) * 520, 40, this.worldH - 40),
+        cinematic: true });
+    }
+  },
+
+  finishRevive: function () {
+    var rs = this._reviveState; if (!rs) return;
+    this._reviveState = null; this._reviveTarget = null;
+    var boss = rs.boss, self = this;
+    if (!boss || !boss.active) return;
+    var P2 = boss.boss.def.phaseTwo;
+    // surviving channelers power the bloom — corpses cut it
+    var alive = 0;
+    this.mobs.children.iterate(function (m) {
+      if (m && m.active && m.mob.cinematic) { alive++; m.mob.cinematic = false; }  // they turn HOSTILE
+    });
+    var pct = Math.min(1, P2.basePct + P2.perPixiePct * alive);
+    boss.boss.hp = Math.round(boss.boss.maxHp * pct);
+    boss.boss.resurrecting = false;
+    boss.boss.phase2done = true;
+    boss.boss.spdMult = P2.spdMult;
+    boss.boss.rateMult = P2.rateMult;
+    boss.clearTint();
+    // re-arm every clock with a short grace
+    var t = this.time.now;
+    boss.boss.nextRadialAt = t + 1400; boss.boss.nextStreamAt = t + 2600;
+    this.initGrovekeeper(boss, t + 1000);
+    this.burst(boss.x, boss.y, 30, 0x8ff0a5);
+    this.burst(boss.x, boss.y, 16, 0x8fd6ff);
+    try { AUDIO.play('revive'); } catch (e) {}
+    this.cameras.main.shake(300, 0.008);
+    this.banner('THE GROVEKEEPER RISES AGAIN\nhis stride quickens', '#38b764');
+  },
+
+  // per-frame grove upkeep — spawn queue, hazard, trunks, glow, corpses, revive
+  updateGrove: function (time, delta) {
+    this.drainSpawnQueue();
+    if (!this.realmDef || this.realmDef.kind !== 'grove') return;
+    // phase-two channel completion
+    if (this._reviveState && time >= this._reviveState.until) this.finishRevive();
+    // ambient falling trees (quiet while the boss owns the clearing)
+    var gf = this.groveFall;
+    if (gf) {
+      var fightOver = !this.player.state.alive || this.closing;
+      if (gf.phase === 'idle') {
+        if (time >= gf.nextAt && !fightOver && !this.boss && !this.arrivalGrove && !this.bossPortal) {
+          var px = this.player.x + (Math.random() * 2 - 1) * 220;
+          var py = this.player.y + (Math.random() * 2 - 1) * 220;
+          gf.fall = this.startTreeFall(px, py, gf.cfg.warnMs, gf.cfg.crushDmg, gf.cfg.trunkLifeMs, false);
+          gf.phase = 'warn';
+        } else if (fightOver) gf.nextAt = Infinity;
+      } else if (gf.phase === 'warn') {
+        gf.fall.shadow.setAlpha(Math.floor(time / 120) % 2 === 0 ? 0.45 : 0.28);
+        if (time >= gf.fall.warnUntil) {
+          this.dropTree(gf.fall);
+          gf.fall = null;
+          gf.phase = 'idle';
+          gf.nextAt = time + gf.cfg.everyMinMs + Math.random() * (gf.cfg.everyMaxMs - gf.cfg.everyMinMs);
+        }
+      }
+    }
+    // trunks crumble
+    for (var i = this.groveTrunks.length - 1; i >= 0; i--) {
+      if (time >= this.groveTrunks[i].dieAt) {
+        this.crumbleTrunk(this.groveTrunks[i]);
+        this.groveTrunks.splice(i, 1);
+      }
+    }
+    // glow patches expire + RESURRECT corpses that fell in them
+    if (this.glowPatches.length) {
+      var live = [];
+      for (var g2 = 0; g2 < this.glowPatches.length; g2++) {
+        var gp = this.glowPatches[g2];
+        if (gp.dead || time >= gp.dieAt) { if (gp.obj && gp.obj.active) { try { gp.obj.destroy(); } catch (e) {} } continue; }
+        live.push(gp);
+        for (var c2 = 0; c2 < this.corpses.length; c2++) {
+          var co = this.corpses[c2];
+          if (!co.used && Math.hypot(co.x - gp.x, co.y - gp.y) < gp.r + 14) {
+            co.used = true;
+            this.queueSpawn({ key: co.key, x: co.x, y: co.y, revive: true });
+            try { AUDIO.play('revive'); } catch (e) {}
+          }
+        }
+      }
+      this.glowPatches = live;
+    }
+    // corpse ledger TTL
+    for (var c3 = this.corpses.length - 1; c3 >= 0; c3--) {
+      if (this.corpses[c3].used || time - this.corpses[c3].at > 6000) this.corpses.splice(c3, 1);
+    }
   },
 
   // ======================= ART TEST — HI-FI TRAIN YARD =====================
@@ -2653,15 +5215,32 @@ var RealmScene = new Phaser.Class({
 
   updateTrainYard: function (time, delta) {
     var tr = this.train; if (!tr) return;
+    // AUDIT FIX 2026-07-14: no NEW trains once the fight is decided (death
+    // screen / realm closing) — they kept launching under "YOU DIED", shaking
+    // the camera and blasting horn SFX forever. A train already rolling
+    // finishes its pass (mows on, feels alive), but the yard then goes quiet.
+    // M4.7: + no fresh ambushes while the Styx Express cinematic runs (the
+    // camera is at the lane — an off-screen instakill would be plain unfair).
+    var fightOver = !this.player.state.alive || this.closing || !!this.arrivalTrain;
     if (tr.phase === 'idle') {
-      if (time >= tr.nextAt) this.startTrainWarning(time);
+      if (time >= tr.nextAt && !fightOver) this.startTrainWarning(time);
     } else if (tr.phase === 'warn') {
+      if (fightOver) {                                            // cancel a pending ambush
+        tr.lane.sigL.setVisible(false); tr.lane.sigR.setVisible(false);
+        tr.phase = 'idle';
+        // dead/closing → the yard goes quiet FOREVER; the arrival cinematic
+        // only borrows the yard — ambushes resume shortly after (M4.7).
+        tr.nextAt = (!this.player.state.alive || this.closing) ? Infinity : time + 9000;
+        return;
+      }
       var on = Math.floor(time / 110) % 2 === 0;                  // flashing crossing signals
       tr.lane.sigL.setVisible(on); tr.lane.sigR.setVisible(on);
       if (time >= tr.warnUntil) this.launchTrain(time);
     } else if (tr.phase === 'running') {
       var trn = tr.sprite;
       trn.x += tr.dir * tr.speed * (delta / 1000);
+      // M4.7: the consist trails the loco at fixed couplings
+      if (tr.cars) for (var i = 0; i < tr.cars.length; i++) tr.cars[i].spr.x = trn.x - tr.dir * tr.cars[i].off;
       if (tr.light) tr.light.x = trn.x + tr.dir * tr.halfLen;
       if (time - (tr.lastRumble || 0) > 230) {                   // rolling rumble + shake
         tr.lastRumble = time; try { AUDIO.play('trainpass'); } catch (e) {}
@@ -2670,6 +5249,7 @@ var RealmScene = new Phaser.Class({
       this.trainCollisions(tr);
       if ((tr.dir > 0 && trn.x > tr.endX) || (tr.dir < 0 && trn.x < tr.endX)) {
         try { trn.destroy(); } catch (e) {}
+        if (tr.cars) { tr.cars.forEach(function (c) { try { c.spr.destroy(); } catch (e) {} }); tr.cars = null; }
         if (tr.light) { try { tr.light.destroy(); } catch (e) {} tr.light = null; }
         tr.lane.sigL.setVisible(false); tr.lane.sigR.setVisible(false);
         tr.phase = 'idle'; tr.sprite = null; tr.nextAt = time + 5000 + Math.random() * 8000;
@@ -2694,8 +5274,27 @@ var RealmScene = new Phaser.Class({
     loco.setFlipX(dir < 0);
     var half = loco.displayWidth / 2;
     loco.x = dir > 0 ? -half : WW + half;
+    // M4.7 CONSIST (user, 2026-07-14): the loco hauls a random MIXED string of
+    // freight cars — grain hoppers + boxcars, one model each in 4 recolors,
+    // 2..15 cars per train. The whole consist is one death wall (collisions
+    // check every segment). Cosmetic randomness → Math.random, same as the
+    // ambush train's lane/dir (seam rule 4 applies to gameplay rolls only).
+    tr.cars = [];
+    var carScale = 108 / 88, gap = 10;
+    var nCars = this.textures.exists('carGrain0') ? 2 + Math.floor(Math.random() * 14) : 0;
+    var off = half;                                              // distance from loco center to car center
+    for (var ci = 0; ci < nCars; ci++) {
+      var key = (Math.random() < 0.5 ? 'carGrain' : 'carBox') + Math.floor(Math.random() * 4);
+      var car = this.add.image(0, lane.y, key).setDepth(30).setScale(carScale).setFlipX(dir < 0);
+      var cHalf = car.displayWidth / 2;
+      off += gap + cHalf;
+      tr.cars.push({ spr: car, off: off });
+      off += cHalf;
+    }
+    tr.tailLen = off - half;                                     // consist length behind the loco center
     tr.sprite = loco; tr.halfLen = half * 0.9; tr.speed = 1050;
-    tr.endX = dir > 0 ? WW + half : -half; tr.lastRumble = 0;
+    tr.endX = dir > 0 ? WW + half + tr.tailLen : -half - tr.tailLen;   // the TAIL must clear too
+    tr.lastRumble = 0;
     tr.light = this.add.image(loco.x + dir * half, lane.y, 'softglow')
       .setTint(0xfff2b0).setScale(3.2).setDepth(29).setBlendMode(Phaser.BlendModes.ADD);
     tr.phase = 'running';
@@ -2704,20 +5303,25 @@ var RealmScene = new Phaser.Class({
   },
 
   trainCollisions: function (tr) {
-    var trn = tr.sprite, self = this;
-    var halfW = trn.displayWidth / 2 * 0.9, halfH = trn.displayHeight / 2 * 0.78;
-    var p = this.player;
-    if (p.state.alive && Math.abs(p.x - trn.x) < halfW && Math.abs(p.y - trn.y) < halfH) this.trainKill();
-    this.mobs.children.iterate(function (m) {
-      if (m && m.active && Math.abs(m.x - trn.x) < halfW && Math.abs(m.y - trn.y) < halfH) {
-        self.burst(m.x, m.y, 8, m.mob.def.deathTint);
-        Entities.clearNameTag(m); m.body.enable = false; self.mobs.killAndHide(m);
-      }
-    });
+    // M4.7: the WHOLE CONSIST kills — loco + every car is a collision segment.
+    var self = this, p = this.player;
+    var segs = [tr.sprite];
+    if (tr.cars) for (var i = 0; i < tr.cars.length; i++) segs.push(tr.cars[i].spr);
+    for (var s = 0; s < segs.length; s++) {
+      var seg = segs[s];
+      var halfW = seg.displayWidth / 2 * 0.9, halfH = seg.displayHeight / 2 * 0.78;
+      if (p.state.alive && Math.abs(p.x - seg.x) < halfW && Math.abs(p.y - seg.y) < halfH) this.trainKill();
+      this.mobs.children.iterate(function (m) {
+        if (m && m.active && Math.abs(m.x - seg.x) < halfW && Math.abs(m.y - seg.y) < halfH) {
+          self.killMobCredited(m);               // M4.9: train mows now COUNT (kills/XP/quota)
+        }
+      });
+    }
   },
 
   trainKill: function () {
     var st = this.player.state; if (!st.alive) return;
+    if (devOn()) return;                                         // M5.3: immortality survives the train
     st.hp = 0; st.alive = false;                                 // instakill — no i-frames
     this.cameras.main.shake(500, 0.02);
     this.events.emit('player-died', 'the 5:15 express');

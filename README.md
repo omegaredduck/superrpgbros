@@ -30,9 +30,23 @@ out; walk to the screen + SPACE for the full records page) · **M** opens the **
 tool — paint layers, drop spawn zones & a boss arena, PLAYTEST ▶). The chamber has its own music —
 "The Chamber at Rest," an original chiptune.
 
-Current build (**?v=m3q**): **M2 "First Fun" + M2.1 scope patch + M3 nearly complete: MAP BUILDER,
+**NEW — Settings → ART TEST** (all optional, all default OFF, fully reversible — the classic art is
+untouched when off): a **Ranger model picker** [16·orig / 32 / 64 / 128 / 160] — higher-fidelity
+procedural redraws of the archer with idle/walk animation and an aim-tracking bow arm — and two
+independent **Hi-Fi toggles**: **World** turns realm 1 into the **TRAIN YARD** (hi-fi tiles + all
+mobs + boss, tunnels, and a telegraphed **ambush train** — touch it and you're dead) and **Chamber**
+remakes the portal room (door-shaped portal with a spinning swirl, animated platform + conduit, an
+always-on **records readout** that counts up when you exit a realm, and a keypad wall-safe vault).
+Change log: `ART_TEST_CHANGES.md` at the repo root. After any update, **hard-refresh
+(Ctrl+Shift+R)** — the browser caches `index.html` itself.
+
+Current build (**?v=m4m**): **M2 "First Fun" + M2.1 scope patch + M3 nearly complete: MAP BUILDER,
 EQUIPMENT, VAULT, the full AFFIX ENGINE, the PORTAL CHAMBER (portal works + machine, bestiary,
-records wall & lever, chamber music) and SETTINGS/ESC MENU/REMAPPABLE KEYBINDS all landed**
+records wall & lever, chamber music) and SETTINGS/ESC MENU/REMAPPABLE KEYBINDS all landed —
+plus the M4 ROSTER: RANGER (bow + volley), WIZARD (frost bolt + STORM BARRAGE with lightning-bolt
+procs, upright staff), KNIGHT the BERSERKER (cleave banks RAGE — a molten-lava orb, no mana —
+whirlwind drains it and LIFESTEALS), class select on the title screen per slot, and "SWARMFRONT",
+an original 8-bit battle theme that cuts to silence the moment the fight is decided**
 (M2's exit gate — Fun Gate 1, an outside tester — is still pending).
 Realms run on **painted maps**: real walls that block movement and shots, spawn zones, and a boss arena
 the portal delivers you to — realm 1 ships as a builder-format map you can repaint (press **M** in the
@@ -57,7 +71,7 @@ account only moves forward.
 
 | Path | What it is |
 |------|-----------|
-| `game/` | The game. `index.html` + `js/` (data, save, binds, audio, sim, maps, textures, entities, menu, scenes, builder, main) |
+| `game/` | The game. `index.html` + `js/` (data, save, binds, audio, sim, maps, ranger_art, world_art, nexus_art, textures, entities, menu, scenes, builder, main) |
 | `docs/MECHANICS_MANIFESTO.md` | Both games dissected mechanic-by-mechanic + the 10 Fusion Laws that define THIS game |
 | `docs/PRODUCT_PLAN.md` | The wargamed strategy (3 COAs + red-team), stack, MVP definition, road to 1.0, risks, alignment table |
 | `docs/MILESTONES.md` | **The tracker.** M0–M6 with checkboxes and exit gates. M0–M1 ✅ · M2/M2.1 features in (human gates pending) · M3 nearly complete (map builder + equipment + vault + affix v2 + portal chamber + settings/keybinds landed) |
@@ -67,6 +81,8 @@ account only moves forward.
 | `docs/EVENT_LOG.md` | Append-only history of every feature/decision. Newest on top |
 | `docs/NEXT_SESSION.md` | The copy-paste prompt to start the next work session in a fresh window (rewritten at each session end) |
 | `ASSET_CREDITS.md` | One line per imported asset (empty until M3 — everything is procedural today) |
+| `ART_TEST_CHANGES.md` | The reversible hi-fi ART TEST log (ranger models, train yard, hi-fi chamber) — what changed, how it's gated, how to undo it |
+| `_art_test_backup_*/`, `_map_train_backup_*/`, `_portal_room_backup_*/` | Timestamped pre-change backups for the art tests (gitignored) |
 | `START_SERVER.bat` | Local server for the M3+ asset era |
 | `0–4_*.bat`, `README_HOW_TO_USE.md` | Your existing two-person git workflow (unchanged) |
 | `_to_delete/` | The abandoned Project 7 spec, parked for deletion |

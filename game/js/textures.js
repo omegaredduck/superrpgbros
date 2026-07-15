@@ -45,16 +45,15 @@ var TEX = (function () {
   }
 
   // ==========================================================================
-  // ART-FIDELITY TEST (2026-07-13) — higher-resolution ANIMATED Ranger models.
-  // Purely ADDITIVE and gated behind Settings > Character Model. The classic
-  // 16x16 'ranger' texture below is the DEFAULT and is never touched, so with
-  // the default selection the game is byte-for-byte identical to before.
-  // Each model is drawn by RANGER_ART (js/ranger_art.js) as true pixel art at
-  // its native canvas size, with idle + walk frames, plus a matching bow+arrow.
-  // On-screen footprint (and therefore the hitbox) is kept equal to the classic
-  // ranger, so ONLY the art fidelity changes — gameplay is unaffected.
+  // HI-FI RANGER (2026-07-14: DEFAULT — the ex-ART-TEST won). The 64px animated
+  // model drawn by RANGER_ART (js/ranger_art.js) with idle + walk frames plus a
+  // matching bow/arrow/lead-arm IS the Ranger now; the Settings picker and the
+  // 32/128/160 variants were removed (only 64 is built — faster boot). The
+  // classic 16x16 'ranger' texture below remains as a code fallback only
+  // (used if ranger_art.js ever fails to load). On-screen footprint (and the
+  // hitbox) stay equal to the classic ranger — gameplay is unaffected.
   // ==========================================================================
-  var RANGER_SIZES = [32, 64, 128, 160];
+  var RANGER_SIZES = [64];
   var RANGER_TARGET = 64;                 // on-screen px — user 2026-07-13: "a
                                           // little bigger" (~2x the classic 32px)
   var IDLE_FRAMES = 4, WALK_FRAMES = 6;
@@ -82,18 +81,17 @@ var TEX = (function () {
       idleFrames: IDLE_FRAMES, walkFrames: WALK_FRAMES
     };
   }
-  // Descriptor for a model id ('16' | '32' | '64' | '128' | '160'); null = classic.
+  // Descriptor for a model id; null = classic fallback. ('16' still answers
+  // null so anything probing the classic path keeps working.)
   function modelFor(id) {
-    id = String(id == null ? '16' : id);
+    id = String(id == null ? '64' : id);
     if (id === '16') return null;
     var S = parseInt(id, 10);
     return RANGER_SIZES.indexOf(S) >= 0 ? rangerModelDesc(S) : null;
   }
-  // The currently-selected model id from settings (default '16' = classic).
-  function selectedModelId() {
-    try { var s = SAVE.settings(); return (s && s.rangerModel) || '16'; }
-    catch (e) { return '16'; }
-  }
+  // 2026-07-14: hi-fi is the game — the 64px model is simply what the Ranger
+  // looks like (no setting; the ART TEST picker was removed).
+  function selectedModelId() { return '64'; }
 
   // draw into a sub-cell of a canvas at x-offset ox, clipped to cw x ch so a
   // frame can never bleed into its neighbour on the strip.
@@ -172,29 +170,185 @@ var TEX = (function () {
   }
 
   // ==========================================================================
-  // HI-FI WORLD (train yard) — ART-FIDELITY TEST, gated on settings.hifiWorld.
-  // Textures are generated at boot (so the toggle is instant) but only USED
-  // when the setting is on (via mobModel/bossModel returning null when off, and
-  // RealmScene reading hifiWorldOn()). Classic mob/boss/tile art is untouched.
+  // HI-FI CLASS MODELS (2026-07-14): the WIZARD ("Starweaver" — user pick #3
+  // from the design grid, + stars on the hat) and the KNIGHT ("Dark Knight" —
+  // user pick #6). Drawn by CLASS_ART (js/class_art.js) at 64px with the same
+  // idle/walk frame contract as the Ranger, plus hi-fi held weapons (star
+  // staff, red-gem greatsword). Same footprint/body fractions as the Ranger
+  // model so all three classes hit identically.
   // ==========================================================================
-  var MOB_HI = { slime: 'slimeHi', brute: 'bruteHi', spitter: 'spitterHi', warlock: 'warlockHi' };
-  var MOB_HI_SIZE = 48, MOB_HI_DISPLAY = 40, MOB_BODY_WORLD = 22;     // keep classic 22px hitbox
-  var BOSS_HI_KEY = 'boss1Hi', BOSS_HI_SIZE = 96, BOSS_HI_DISPLAY = 76;
-  var BOSS_BODY_W = 42, BOSS_BODY_H = 36;                              // classic boss world body (14·3,12·3)
+  var CLASS_HI = {
+    wizard: { key: 'wizard64', heldKey: 'staff64', heldW: 64, heldH: 20, heldScale: 0.95,
+              heldOffset: 20,              // world px out to the OUTSTRETCHED hand (user ref: staff at arm's length, clear of the robe)
+              drawBody: 'drawWizardBody', drawHeld: 'drawStaffHi' },
+    knight: { key: 'knight64', heldKey: 'sword64', heldW: 64, heldH: 14, heldScale: 0.72,
+              drawBody: 'drawKnightBody', drawHeld: 'drawSwordHi' }
+  };
+  function classModelDesc(cls) {
+    var ch = CLASS_HI[cls]; if (!ch) return null;
+    var S = 64, scale = RANGER_TARGET / S;
+    return {
+      id: cls + '64', key: ch.key, size: S, scale: scale,
+      idle: ch.key + '_idle', walk: ch.key + '_walk',
+      body: { w: Math.round(0.625 * S), h: Math.round(0.75 * S),
+              ox: Math.round(0.1875 * S), oy: Math.round(0.1875 * S) },
+      heldKey: ch.heldKey, heldScale: ch.heldScale, heldOffset: ch.heldOffset,
+      idleFrames: IDLE_FRAMES, walkFrames: WALK_FRAMES
+    };
+  }
+  // THE class-model lookup (entities.applyModelSkin + the class picker):
+  // every class answers its hi-fi descriptor; null = classic fallback (art
+  // module missing). The Ranger routes through modelFor for its arm/bow extras.
+  function playerModel(cls) {
+    if (cls === 'ranger') return modelFor(selectedModelId());
+    return (typeof CLASS_ART !== 'undefined') ? classModelDesc(cls) : null;
+  }
+  function buildClassModels(scene) {
+    if (typeof CLASS_ART === 'undefined') return;      // art module absent → classic fallback
+    Object.keys(CLASS_HI).forEach(function (cls) {
+      var ch = CLASS_HI[cls], d = classModelDesc(cls), S = d.size, n = IDLE_FRAMES + WALK_FRAMES;
+      if (!scene.textures.exists(d.key)) {
+        var t = scene.textures.createCanvas(d.key, S * n, S), ctx = t.getContext();
+        for (var f = 0; f < n; f++) {
+          var isWalk = f >= IDLE_FRAMES, idx = isWalk ? f - IDLE_FRAMES : f;
+          var count = isWalk ? WALK_FRAMES : IDLE_FRAMES;
+          (function (ff, w, ii, cc) {
+            drawCell(ctx, ff * S, S, S, function (put) {
+              CLASS_ART[ch.drawBody](put, S, { frame: w ? 'walk' : 'idle', t: ii / cc });
+            });
+          })(f, isWalk, idx, count);
+        }
+        outlineCanvas(ctx, S * n, S);
+        for (var fi = 0; fi < n; fi++) {
+          t.add(fi < IDLE_FRAMES ? 'idle' + fi : 'walk' + (fi - IDLE_FRAMES), 0, fi * S, 0, S, S);
+        }
+        t.refresh();
+      }
+      if (!scene.textures.exists(ch.heldKey)) {
+        var th = scene.textures.createCanvas(ch.heldKey, ch.heldW, ch.heldH), hctx = th.getContext();
+        drawCell(hctx, 0, ch.heldW, ch.heldH, function (put) { CLASS_ART[ch.drawHeld](put, ch.heldW, ch.heldH); });
+        outlineCanvas(hctx, ch.heldW, ch.heldH); th.refresh();
+      }
+      if (!scene.anims.exists(d.idle)) {
+        var idleF = []; for (var a = 0; a < IDLE_FRAMES; a++) idleF.push({ key: d.key, frame: 'idle' + a });
+        scene.anims.create({ key: d.idle, frames: idleF, frameRate: 6, repeat: -1 });
+      }
+      if (!scene.anims.exists(d.walk)) {
+        var walkF = []; for (var b2 = 0; b2 < WALK_FRAMES; b2++) walkF.push({ key: d.key, frame: 'walk' + b2 });
+        scene.anims.create({ key: d.walk, frames: walkF, frameRate: 11, repeat: -1 });
+      }
+    });
+  }
 
-  function hifiWorldOn() { try { var s = SAVE.settings(); return !!(s && s.hifiWorld); } catch (e) { return false; } }
+  // ==========================================================================
+  // HI-FI WORLD (train yard) — 2026-07-14: the DEFAULT realm (user call; the
+  // ex-ART-TEST toggle was removed and hifiWorldOn() is hardwired true). The
+  // realm IS the train yard: hi-fi mobs + Grovekeeper, gravel/track tiles, and
+  // the telegraphed ambush train (instant death). Classic mob/boss art remains
+  // as a code fallback only (mobModel/bossModel return null if art is absent).
+  // ==========================================================================
+  var MOB_HI = { slime: 'slimeHi', brute: 'bruteHi', spitter: 'spitterHi', warlock: 'warlockHi',
+                 // M4.7 train-yard roster (user sheet)
+                 coalGolem: 'coalGolemHi', boxcarBrute: 'boxcarBruteHi',
+                 conductorZombie: 'conductorZombieHi', crossingCreep: 'crossingCreepHi',
+                 furnaceImp: 'furnaceImpHi', couplingChomper: 'couplingChomperHi',
+                 dynamiteMole: 'dynamiteMoleHi', smogSerpent: 'smogSerpentHi',
+                 // M5.0 THE GROVE roster (user picks 2026-07-15). Mobs with
+                 // `skins` in DATA override the texture at spawn (recolors).
+                 puffcap: 'puffcapHi', puffcapMini: 'puffcapMini0',
+                 pixie: 'pixieHi', bloomPixie: 'bloomPixieHi',
+                 mossGolem: 'mossGolemHi', seedlingTurret: 'seedlingTurretHi',
+                 snapdragon: 'snapdragonHi', bumblebrute: 'bumblebruteHi',
+                 bumblebruteMini: 'bbMini0', moonmoth: 'moonmothHi',
+                 // M5.6 THE GRAVEYARD roster (user picks 2026-07-15)
+                 ghoul: 'ghoulHi', rattlebones: 'rattlebonesHi', boneArcher: 'boneArcherHi',
+                 tombGolem: 'tombGolemHi', corpseBloater: 'corpseBloaterHi', banshee: 'bansheeHi',
+                 mummy: 'mummyHi', necroAcolyte: 'necroAcolyteHi', graveReaper: 'reaperHi' };
+  var MOB_HI_SIZE = 48, MOB_HI_DISPLAY = 40, MOB_BODY_WORLD = 22;     // keep classic 22px hitbox
+  // M4.8 (user, 2026-07-14): per-mob on-screen size overrides (default 40).
+  // The Furnace Imp read too small to parse in a swarm; the Crossing Creep a
+  // touch small. The HITBOX scales WITH the sprite (mobModel keeps the same
+  // art:body ratio), so a bigger mob is a fair-sized target, not a cheap one.
+  var MOB_DISPLAY = { furnaceImp: 58, crossingCreep: 47, conductorZombie: 60,   // M4.9: zombie reads elite
+                      // M5.0 grove: big slow shroom · tiny split babies · elite
+                      // guardian bee · small ward bees · fast small moth
+                      puffcap: 56, puffcapMini: 24, mossGolem: 56,
+                      seedlingTurret: 50, snapdragon: 52, bumblebrute: 62,
+                      bumblebruteMini: 26, pixie: 42, bloomPixie: 44, moonmoth: 36,
+                      // M5.6 graveyard (user: bump sizes so the hi-fi art reads):
+                      // chunky golem/bloater read elite; skeletons + swarm bones
+                      // a touch bigger; the reaper is a tall dread walker.
+                      ghoul: 62, rattlebones: 52, boneArcher: 60, tombGolem: 76,
+                      corpseBloater: 74, banshee: 64, mummy: 64, necroAcolyte: 62,
+                      graveReaper: 112 };
+  // M5.0 recolor palettes — mini-mob skins are data, not new art (user:
+  // "we will need recolours for the mini mobs").
+  var PUFF_PALS = [
+    { cap: '#d95763', capLt: '#f28d9a', capDk: '#9e2835' },   // classic red
+    { cap: '#41a6f6', capLt: '#8fd6ff', capDk: '#2569a8' },   // blue
+    { cap: '#8f3fb5', capLt: '#c078e0', capDk: '#5d275d' },   // purple
+    { cap: '#ffcd75', capLt: '#ffe3a8', capDk: '#d7a13a' }    // gold
+  ];
+  var BEE_PALS = [
+    { body: '#ffd23e', dk: '#c89a1e' },                        // classic gold
+    { body: '#ff9a3d', dk: '#c26a1e' },                        // amber
+    { body: '#8fd6ff', dk: '#4a8ec2' }                         // pale blue
+  ];
+  var PIXIE_PAL  = { main: '#ff77a8', lt: '#ffc2d8', dk: '#c2437a' };   // pink trickster
+  var BLOOM_PAL  = { main: '#41a6f6', lt: '#8fd6ff', dk: '#2569a8' };   // blue resurrectionist
+  // M4.7: per-boss hi-fi models — the Grovekeeper (96) and THE CONDUCTOR (128,
+  // user pick #6 "GRIM LINE"). Same world-body idea as before per boss.
+  var BOSS_HI = {
+    grovekeeper: { key: 'boss1Hi',     size: 96,  display: 76,  bodyW: 42, bodyH: 36 },
+    conductor:   { key: 'conductorHi', size: 128, display: 104, bodyW: 44, bodyH: 40 },
+    // M5.6 THE GRAVEKEEPER — ~2x the other bosses (user): a towering hooded
+    // dread. 96px canvas; big display, a fair mid-body hitbox.
+    gravekeeper: { key: 'gravekeeperHi', size: 96, display: 160, bodyW: 52, bodyH: 56 }
+  };
+  // M4.7 FREIGHT CAR RECOLORS — one grain-car model + one boxcar model, several
+  // palettes each (user: "1 model several recolors"). Data, not new art.
+  var CAR_W = 220, CAR_H = 88;
+  var GRAIN_PALS = [
+    { body: '#e6e9ee', bodyLt: '#f7f9fc', bodyDk: '#b9bfc9', mark: '#3b414f' },   // GBRX white
+    { body: '#8a4b2a', bodyLt: '#b76b3a', bodyDk: '#5a2f1a', mark: '#f4f4f4' },   // rust red
+    { body: '#d8c08a', bodyLt: '#ecdcb0', bodyDk: '#a8905e', mark: '#3b414f' },   // wheat tan
+    { body: '#6f7f4e', bodyLt: '#93a46c', bodyDk: '#4a5733', mark: '#f4f4f4' }    // olive
+  ];
+  var BOX_PALS = [
+    { body: '#8a3b2e', bodyLt: '#a85643', bodyDk: '#5e2117', door: '#93463a', mark: '#f4f4f4' }, // L&N oxide red
+    { body: '#6e4a30', bodyLt: '#8a6544', bodyDk: '#47301e', door: '#77523a', mark: '#f4f4f4' }, // brown
+    { body: '#3c5a44', bodyLt: '#55775c', bodyDk: '#26382b', door: '#46654e', mark: '#f0c96a' }, // dark green
+    { body: '#48607c', bodyLt: '#64809c', bodyDk: '#2e4054', door: '#52698a', mark: '#f4f4f4' }  // steel blue
+  ];
+
+  // Hardwired ON (2026-07-14): hi-fi world is the game, not a setting — but
+  // ONLY once its textures actually exist (_worldBuilt, mirrors the chamber's
+  // _chamberBuilt). Audit fix: without this, a missing world_art.js still
+  // routed the realm to the train yard + hi-fi mob descriptors with none of
+  // the textures built → a field of missing-texture squares and mobs with
+  // hi-fi bodies on 16px art, instead of the promised classic fallback.
+  var _worldBuilt = false;
+  function hifiWorldOn() { return _worldBuilt; }
 
   function mobModel(key) {
     if (!hifiWorldOn()) return null;
     var hi = MOB_HI[key]; if (!hi) return null;
-    var scale = MOB_HI_DISPLAY / MOB_HI_SIZE, bt = Math.round(MOB_BODY_WORLD / scale);
+    // M4.8: per-mob display size (default 40). The body stays a CONSTANT
+    // fraction of the 48px texture (22/40 = the base ratio), so world hitbox =
+    // bt × scale grows with the sprite — bigger art, proportionally bigger,
+    // still-fair target.
+    var disp = MOB_DISPLAY[key] || MOB_HI_DISPLAY;
+    var scale = disp / MOB_HI_SIZE;
+    var bt = Math.round(MOB_BODY_WORLD * MOB_HI_SIZE / MOB_HI_DISPLAY);   // constant 26px in texture space
     return { key: hi, scale: scale, body: { w: bt, h: bt, ox: Math.round((MOB_HI_SIZE - bt) / 2), oy: Math.round((MOB_HI_SIZE - bt) / 2) } };
   }
-  function bossModel() {
+  // M4.7: key-aware ('grovekeeper' | 'conductor'); no arg = grovekeeper (back-compat).
+  function bossModel(key) {
     if (!hifiWorldOn()) return null;
-    var scale = BOSS_HI_DISPLAY / BOSS_HI_SIZE;
-    return { key: BOSS_HI_KEY, scale: scale, body: { w: Math.round(BOSS_BODY_W / scale), h: Math.round(BOSS_BODY_H / scale),
-             ox: Math.round((BOSS_HI_SIZE - BOSS_BODY_W / scale) / 2), oy: Math.round((BOSS_HI_SIZE - BOSS_BODY_H / scale) / 2) } };
+    var d = BOSS_HI[key || 'grovekeeper']; if (!d) return null;
+    var scale = d.display / d.size;
+    return { key: d.key, scale: scale, body: { w: Math.round(d.bodyW / scale), h: Math.round(d.bodyH / scale),
+             ox: Math.round((d.size - d.bodyW / scale) / 2), oy: Math.round((d.size - d.bodyH / scale) / 2) } };
   }
 
   function buildHiFiWorld(scene) {
@@ -216,19 +370,137 @@ var TEX = (function () {
     spr('bruteHi', MOB_HI_SIZE, MOB_HI_SIZE, A.drawBrute);
     spr('spitterHi', MOB_HI_SIZE, MOB_HI_SIZE, A.drawSpitter);
     spr('warlockHi', MOB_HI_SIZE, MOB_HI_SIZE, A.drawWarlock);
-    spr('boss1Hi', BOSS_HI_SIZE, BOSS_HI_SIZE, A.drawBoss);
+    // M4.7 train-yard roster
+    spr('coalGolemHi', MOB_HI_SIZE, MOB_HI_SIZE, A.drawCoalGolem);
+    spr('boxcarBruteHi', MOB_HI_SIZE, MOB_HI_SIZE, A.drawBoxcarBrute);
+    spr('conductorZombieHi', MOB_HI_SIZE, MOB_HI_SIZE, A.drawConductorZombie);
+    spr('crossingCreepHi', MOB_HI_SIZE, MOB_HI_SIZE, A.drawCrossingCreep);
+    spr('furnaceImpHi', MOB_HI_SIZE, MOB_HI_SIZE, A.drawFurnaceImp);
+    spr('couplingChomperHi', MOB_HI_SIZE, MOB_HI_SIZE, A.drawCouplingChomper);
+    spr('dynamiteMoleHi', MOB_HI_SIZE, MOB_HI_SIZE, A.drawDynamiteMole);
+    spr('smogSerpentHi', MOB_HI_SIZE, MOB_HI_SIZE, A.drawSmogSerpent);
+    spr('boss1Hi', 96, 96, A.drawBoss);
+    spr('conductorHi', 128, 128, A.drawConductor);       // M4.7: THE CONDUCTOR (user pick #6)
     tex('gravel', 48, 48, A.drawGravel);
     tex('yardwall', 48, 28, A.drawYardWall);
     tex('track', 48, 96, A.drawTrack);
     spr('tunnel', 96, 120, A.drawTunnel);
     spr('loco', 240, 96, A.drawLoco);
+    // M4.7 freight cars — one model each, several recolors
+    GRAIN_PALS.forEach(function (pal, i) { spr('carGrain' + i, CAR_W, CAR_H, function (put, W, H) { A.drawGrainCar(put, W, H, pal); }); });
+    BOX_PALS.forEach(function (pal, i) { spr('carBox' + i, CAR_W, CAR_H, function (put, W, H) { A.drawBoxcar(put, W, H, pal); }); });
+    // M4.7 GHOST variants for the Conductor's spectral trains: draw the normal
+    // art, then remap every pixel to a blue-white by luminance (ghostify).
+    function ghost(key, W, H, fn) {
+      if (scene.textures.exists(key)) return;
+      var t = scene.textures.createCanvas(key, W, H), ctx = t.getContext();
+      drawCell(ctx, 0, W, H, function (put) { fn(put, W, H); });
+      outlineCanvas(ctx, W, H);
+      var img = ctx.getImageData(0, 0, W, H), d = img.data;
+      for (var i = 0; i < W * H; i++) {
+        if (d[i * 4 + 3] === 0) continue;
+        var lum = (0.3 * d[i * 4] + 0.6 * d[i * 4 + 1] + 0.1 * d[i * 4 + 2]) / 255;
+        d[i * 4]     = Math.round(29 + (216 - 29) * lum);      // #1d3a55 → #d8f3ff
+        d[i * 4 + 1] = Math.round(58 + (243 - 58) * lum);
+        d[i * 4 + 2] = Math.round(85 + (255 - 85) * lum);
+      }
+      ctx.putImageData(img, 0, 0); t.refresh();
+    }
+    ghost('ghostLoco', 240, 96, A.drawLoco);
+    ghost('ghostCar', CAR_W, CAR_H, function (put, W, H) { A.drawGrainCar(put, W, H, GRAIN_PALS[0]); });
+    // ---- M5.0 THE GROVE ----------------------------------------------------
+    // Fliers get TWO wing frames: <key> + <key>b (updateMob flips between them
+    // — the user's "flopping wings"). Minis get palette skins.
+    var MS = MOB_HI_SIZE;
+    spr('puffcapHi', MS, MS, A.drawPuffcap);
+    PUFF_PALS.forEach(function (pal, i) {
+      spr('puffcapMini' + i, MS, MS, function (put, S) { A.drawPuffcapMini(put, S, pal); });
+    });
+    spr('pixieHi', MS, MS, function (put, S) { A.drawPixie(put, S, PIXIE_PAL, 0); });
+    spr('pixieHib', MS, MS, function (put, S) { A.drawPixie(put, S, PIXIE_PAL, 1); });
+    spr('bloomPixieHi', MS, MS, function (put, S) { A.drawPixie(put, S, BLOOM_PAL, 0); });
+    spr('bloomPixieHib', MS, MS, function (put, S) { A.drawPixie(put, S, BLOOM_PAL, 1); });
+    spr('mossGolemHi', MS, MS, A.drawMossGolem);
+    spr('seedlingTurretHi', MS, MS, A.drawSeedlingTurret);
+    spr('snapdragonHi', MS, MS, A.drawSnapdragon);
+    spr('bumblebruteHi', MS, MS, function (put, S) { A.drawBumblebrute(put, S, 0); });
+    spr('bumblebruteHib', MS, MS, function (put, S) { A.drawBumblebrute(put, S, 1); });
+    BEE_PALS.forEach(function (pal, i) {
+      spr('bbMini' + i, MS, MS, function (put, S) { A.drawBumblebruteMini(put, S, pal, 0); });
+      spr('bbMini' + i + 'b', MS, MS, function (put, S) { A.drawBumblebruteMini(put, S, pal, 1); });
+    });
+    spr('moonmothHi', MS, MS, function (put, S) { A.drawMoonmoth(put, S, 0); });
+    spr('moonmothHib', MS, MS, function (put, S) { A.drawMoonmoth(put, S, 1); });
+    tex('grovegrass', 48, 48, A.drawGroveGrass);
+    tex('grovewall', 48, 28, A.drawGroveWall);
+    spr('grovetree', 112, 112, A.drawGroveTree);
+    spr('glowshroom', 48, 48, A.drawGlowShroom);
+    spr('heartwood', 192, 192, A.drawHeartwood);
+    spr('fallenTrunk', 260, 56, A.drawFallenTrunk);
+    // grove decor picks (user 2026-07-15: "1 3 4 5 6 7 8 9 10 11 12 13 17 19")
+    var DECOR_KEYS = { dcOak: 'dAncientOak', dcWillow: 'dWillow', dcToadstool: 'dToadstool',
+      dcFairyRing: 'dFairyRing', dcPond: 'dLilyPond', dcBoulders: 'dBoulders',
+      dcStump: 'dHollowStump', dcFlowers: 'dFlowerBed', dcLanterns: 'dLanterns',
+      dcArch: 'dStoneArch', dcRunestone: 'dRunestone', dcLog: 'dMossyLog',
+      dcSpring: 'dWispSpring', dcObelisk: 'dObelisk' };
+    Object.keys(DECOR_KEYS).forEach(function (key) {
+      var fn = A[DECOR_KEYS[key]];
+      if (fn) spr(key, 64, 64, function (put, S) { fn(put, S); });
+    });
+    // neutral greyscale shot orb — colored mob projectiles are TINTS of this
+    // (the classic 'bolt' art is purple; tints multiply — gotcha list).
+    spr('orbShot', 10, 10, function (put, S) {
+      for (var y = 1; y < 9; y++) for (var x = 1; x < 9; x++) {
+        var d = Math.hypot(x - 4.5, y - 4.5);
+        if (d < 3.6) put(x, y, d < 1.6 ? '#ffffff' : (d < 2.6 ? '#cfcfcf' : '#9a9a9a'));
+      }
+    });
+    // M4.7: the RAILROAD TIE the Conductor throws — a creosote-dark plank
+    // with spike heads (tiny; scaled up + spun in flight by the scene).
+    spr('railtie', 26, 8, function (put, W, H) {
+      for (var y = 1; y < H - 1; y++) for (var x = 1; x < W - 1; x++) {
+        var sh = (y < 3) ? '#7a4a2b' : (y < 5 ? '#5e3a22' : '#4d2f1c');
+        put(x, y, sh);
+      }
+      put(4, 3, '#cdd6e2'); put(13, 3, '#cdd6e2'); put(21, 3, '#cdd6e2');   // spike heads
+    });
+    // ---- M5.6 THE GRAVEYARD roster + boss + reaper + tiles + decor ----------
+    spr('ghoulHi', MS, MS, A.drawGhoul);
+    spr('rattlebonesHi', MS, MS, A.drawRattlebones);
+    spr('boneArcherHi', MS, MS, A.drawBoneArcher);
+    spr('tombGolemHi', MS, MS, A.drawTombGolem);
+    spr('corpseBloaterHi', MS, MS, A.drawCorpseBloater);
+    spr('bansheeHi', MS, MS, A.drawBanshee);
+    spr('mummyHi', MS, MS, A.drawMummy);
+    spr('necroAcolyteHi', MS, MS, A.drawNecroAcolyte);
+    spr('reaperHi', MS, MS, A.drawReaper);
+    spr('gravekeeperHi', 96, 96, A.drawGravekeeper);
+    tex('gravedirt', 48, 48, A.drawGraveGround);
+    tex('gravepath', 48, 48, A.drawGravePath);
+    // graveyard decor picks (user 2026-07-15: 17 of 20; cut stump/open-grave/bone-pile)
+    var GY_DECOR = { gyHeadstone: 'dHeadstone', gyCross: 'dCrossGrave', gyBroken: 'dBrokenStone',
+      gyCrypt: 'dCrypt', gyGate: 'dIronGate', gyFence: 'dIronFence', gyDeadTree: 'dDeadTree',
+      gyCoffin: 'dCoffin', gyAngel: 'dAngel', gyObelisk: 'dObeliskGY', gySarcophagus: 'dSarcophagus',
+      gyLamp: 'dLampPost', gyCandles: 'dCandles', gyCeltic: 'dCelticCross', gyWreath: 'dWreath',
+      gyCobweb: 'dCobweb', gyFungus: 'dGraveFungus' };
+    Object.keys(GY_DECOR).forEach(function (key) {
+      var fn = A[GY_DECOR[key]];
+      if (fn) spr(key, 64, 64, function (put, S) { fn(put, S); });
+    });
+    // M5.6 destructible fence damage frames (swapped in by RealmScene.hitFence)
+    spr('gyFenceDmg1', 64, 64, A.dIronFenceD1);
+    spr('gyFenceDmg2', 64, 64, A.dIronFenceD2);
+    spr('gyFenceV', 64, 64, A.dIronFenceTop);
+    spr('gyFenceVDmg1', 64, 64, A.dIronFenceTopD1);
+    spr('gyFenceVDmg2', 64, 64, A.dIronFenceTopD2);
+    _worldBuilt = true;
   }
 
   // ==========================================================================
-  // HI-FI PORTAL ROOM (chamber) — same gating as the yard (settings.hifiWorld).
-  // Textures built at boot; NexusScene routes its sprites through nexusKey()/
-  // nexusScale() so the on-screen size is unchanged and ONLY the fidelity rises.
-  // r = classicPx / hiPx, so (existing setScale × r) keeps the display identical.
+  // HI-FI PORTAL ROOM (chamber) — 2026-07-14: the DEFAULT chamber (hardwired,
+  // ex-ART-TEST). Textures built at boot; NexusScene routes its sprites through
+  // nexusKey()/nexusScale() so the on-screen size is unchanged and ONLY the
+  // fidelity rises. r = classicPx / hiPx (existing setScale × r = identical).
   // ==========================================================================
   var NEXUS_HI = {
     floor_nexus: { hi: 'floorNexusHi', tile: true },
@@ -244,7 +516,8 @@ var TEX = (function () {
     chest:       { hi: 'chestHi', r: 16 / 40 }
   };
   var _chamberBuilt = false;
-  function hifiChamberOn() { try { var s = SAVE.settings(); return !!(s && s.hifiChamber); } catch (e) { return false; } }
+  // Hardwired ON (2026-07-14): the hi-fi portal room is the game, not a setting.
+  function hifiChamberOn() { return true; }
   // chamber assets follow the Hi-Fi Chamber toggle; the PORTAL is shared with the
   // realm (boss-exit portal), so it turns hi-fi if EITHER toggle is on.
   function nexusOn(name) { return name === 'portal' ? (hifiChamberOn() || hifiWorldOn()) : hifiChamberOn(); }
@@ -270,6 +543,18 @@ var TEX = (function () {
     spr('leverHiDown', 34, 48, function (put, W, H) { A.drawLever(put, W, H, false); });
     spr('chestHi', 40, 40, A.drawChest);
     _chamberBuilt = true;
+  }
+
+  // HI-FI HUD (2026-07-14): orb ring housings + the conduit plate that
+  // connects them behind the XP bar. RealmScene.buildHud uses these when they
+  // exist; without the art module the classic floating HUD still works.
+  function buildHudArt(scene) {
+    if (typeof NEXUS_ART === 'undefined' || !NEXUS_ART.drawHudOrbFrame) return;
+    function spr(key, W, H, fn) { if (scene.textures.exists(key)) return; var t = scene.textures.createCanvas(key, W, H), c = t.getContext(); drawCell(c, 0, W, H, function (put) { fn(put, W, H); }); outlineCanvas(c, W, H); t.refresh(); }
+    function tex(key, W, H, fn) { if (scene.textures.exists(key)) return; var t = scene.textures.createCanvas(key, W, H), c = t.getContext(); drawCell(c, 0, W, H, function (put) { fn(put, W, H); }); t.refresh(); }
+    spr('hudOrbFrame', 116, 116, function (put, W) { NEXUS_ART.drawHudOrbFrame(put, W); });
+    tex('hudPlateMid', 32, 36, NEXUS_ART.drawHudPlateMid);
+    spr('hudPlateCap', 28, 36, NEXUS_ART.drawHudPlateCap);
   }
 
   function generateAll(scene) {
@@ -605,6 +890,32 @@ var TEX = (function () {
       '..kwwwwk..',
       '..kwwwwk..',
       '...kkkk...'
+    ]);
+    // M4.6 class-gear icons — TOME (wizard ability line) + WAR HORN (knight
+    // ability line). Neutral whites/greys like the rest: tier tint at draw.
+    grid(scene, 'tome', [
+      '..........',
+      '.kkkkkkk..',
+      '.kwwwwlkk.',
+      '.kwllwlwk.',
+      '.kwwwwlwk.',
+      '.kwllwlwk.',
+      '.kwwwwlwk.',
+      '.kwwwwlkk.',
+      '.kkkkkkk..',
+      '..........'
+    ]);
+    grid(scene, 'horn', [
+      '..........',
+      '......kkk.',
+      '.....kwwk.',
+      '....kwwlk.',
+      '...kwwlk..',
+      '..kwwlk...',
+      '.kwwwk....',
+      '.kwlwk....',
+      '..kkk.....',
+      '..........'
     ]);
     grid(scene, 'armor', [
       '..kk..kk..',
@@ -994,17 +1305,20 @@ var TEX = (function () {
     var t = scene.textures.createCanvas('px', 2, 2);
     t.getContext().fillStyle = '#ffffff'; t.getContext().fillRect(0, 0, 2, 2); t.refresh();
 
-    // ART-FIDELITY TEST: build the optional hi-fi animated Ranger models last
-    // (additive; the classic 'ranger' above is the default and is untouched).
-    buildRangerModels(scene);
-    buildHiFiWorld(scene);                 // hi-fi train-yard mobs/tiles/train (gated at use)
-    buildHiFiChamber(scene);               // hi-fi portal room (gated at use)
+    // HI-FI DEFAULT (2026-07-14): build the hi-fi art last — this IS the game's
+    // look now (the classic grids above survive only as code fallbacks).
+    buildRangerModels(scene);              // 64px animated Ranger + bow/arrow/arm
+    buildClassModels(scene);               // 64px Starweaver wizard + Dark Knight
+    buildHiFiWorld(scene);                 // train-yard mobs/tiles/train
+    buildHiFiChamber(scene);               // hi-fi portal room
+    buildHudArt(scene);                    // connected HUD housings (orb rings + XP conduit plate)
   }
 
   return {
     generateAll: generateAll,
-    // ART-FIDELITY TEST helpers (consumed by entities.js / scenes.js / menu.js)
+    // HI-FI model helpers (consumed by entities.js / scenes.js)
     modelFor: modelFor, selectedModelId: selectedModelId, RANGER_SIZES: RANGER_SIZES,
+    playerModel: playerModel,
     // HI-FI WORLD helpers
     hifiWorldOn: hifiWorldOn, mobModel: mobModel, bossModel: bossModel,
     // HI-FI CHAMBER helpers

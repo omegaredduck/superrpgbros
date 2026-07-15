@@ -26,12 +26,36 @@ var SIM = (function () {
   function fireRate(weapon, dex) { return weapon.baseRate + dex * weapon.dexRate; }
 
   // Stats at a given level: base + growth*(level-1), clamped to caps.
+  // M5.4 (user): LEVEL IS COSMETIC — unless DATA.xp.levelPower is true, the
+  // level term is dropped (effLevel 1), so a hero's base stats never change
+  // with level; power is GEAR + POTIONS only. Mobs scale with level instead
+  // (waves.mobLevelScale). Flip DATA.xp.levelPower to restore per-level growth.
   function statsAtLevel(cls, level) {
     var out = {};
+    var effLevel = (DATA.xp && DATA.xp.levelPower) ? level : 1;
     for (var k in cls.base) {
-      out[k] = Math.min(cls.caps[k], Math.round(cls.base[k] + cls.growth[k] * (level - 1)));
+      out[k] = Math.min(cls.caps[k], Math.round(cls.base[k] + cls.growth[k] * (effLevel - 1)));
     }
     return out;
+  }
+
+  // M5.4: the mob difficulty multiplier for a given player level — HP · damage
+  // · XP all scale by this at spawn. 1.0 at level 1; grows with waves.mobLevelScale.
+  function mobLevelMult(playerLevel) {
+    var k = (DATA.waves && DATA.waves.mobLevelScale) || 0;
+    return 1 + (Math.max(1, playerLevel || 1) - 1) * k;
+  }
+
+  // M5.5: the highest-tier COLLECTED item a class can use in a slot (weapons +
+  // abilities are class-locked; armor + rings are universal). null if none.
+  function bestCollected(collected, cls, slot) {
+    var best = null, bestTier = -1;
+    (collected || []).forEach(function (k) {
+      var it = DATA.items[k];
+      if (!it || it.slot !== slot || (it.cls && it.cls !== cls)) return;
+      if (it.tier > bestTier) { bestTier = it.tier; best = k; }
+    });
+    return best;
   }
 
   // M2: full character stats = level stats + drunk potions, clamped to caps
@@ -68,18 +92,63 @@ var SIM = (function () {
   }
 
   // The equipped weapon item's damage add (0 when the slot is empty).
+  // M5.1: + arcDeg — a melee arc OVERRIDE (the knight's epic Ragefang sweeps
+  // a full 360°); 0 = no override, the weapon's own arc applies.
   function weaponMod(equipment) {
     var it = equipment && equipment.weapon && DATA.items[equipment.weapon];
-    return { dmg: (it && it.mod && it.mod.dmg) || 0 };
+    return { dmg: (it && it.mod && it.mod.dmg) || 0,
+             arcDeg: (it && it.mod && it.mod.arcDeg) || 0,
+             homing: !!(it && it.mod && it.mod.homing),         // M5.1: wizard missiles
+             volleyShot: !!(it && it.mod && it.mod.volleyShot), // M5.1: ranger auto-volley
+             freeEnergy: !!(it && it.mod && it.mod.freeEnergy) };
   }
 
-  // The ability as modified by the equipped ability item: mpCost (floor 4,
-  // never free) and projectile count.
+  // M5.1 (user): the FULL-LEGENDARY SET — every equipped slot holds a T5.
+  // Powers the class-colored body aura and the knight's UNLIMITED RAGE.
+  function fullLegendSet(equipment) {
+    if (!equipment) return false;
+    var slots = DATA.equipSlots;
+    for (var i = 0; i < slots.length; i++) {
+      var it = equipment[slots[i]] && DATA.items[equipment[slots[i]]];
+      if (!it || it.tier !== 5) return false;
+    }
+    return true;
+  }
+
+  // The ability as modified by the equipped ability item. M4.6: generalized
+  // beyond the volley — every channel reads its own field. Floors keep gear
+  // from ever making an ability free: mpCost ≥ 4 (volley), mpPerShot ≥ 0.5
+  // (barrage tomes), mpDrainPerSec ≥ 6 (whirlwind war horns). Fields an
+  // ability doesn't define come back as their (floored) zero-case — harmless,
+  // nothing reads them.
   function abilityFor(ab, equipment) {
     var it = equipment && equipment.ability && DATA.items[equipment.ability];
     var mod = (it && it.mod) || {};
-    return { mpCost: Math.max(4, ab.mpCost + (mod.mpCost || 0)),
-             count: ab.count + (mod.count || 0) };
+    return { mpCost: Math.max(4, (ab.mpCost || 0) + (mod.mpCost || 0)),
+             count: (ab.count || 0) + (mod.count || 0),
+             mpPerShot: Math.max(0.5, (ab.mpPerShot || 0) + (mod.mpPerShot || 0)),
+             mpDrainPerSec: Math.max(6, (ab.mpDrainPerSec || 0) + (mod.mpDrainPerSec || 0)) };
+  }
+
+  // M4.6: CLASS-LOCKED DROPS — remap a rolled item key to the roller's class
+  // line (same slot, same tier) via DATA.classGear. Classless items (armor,
+  // rings) and own-class rolls pass through untouched. Pure + deterministic:
+  // it never touches the RNG stream, so existing loot sequences are preserved
+  // for the ranger (identity remap) and merely re-skinned for the others.
+  function resolveDrop(key, cls) {
+    var it = DATA.items[key];
+    if (!it || !it.cls || it.cls === cls) return key;
+    var line = DATA.classGear && DATA.classGear[cls] && DATA.classGear[cls][it.slot];
+    return (line && line[it.tier]) || key;
+  }
+
+  // M4.6: per-class INCOMING damage scaling (user: monsters should hit the
+  // Knight and Wizard harder, the boss hardest). Applied by Entities.hurtPlayer
+  // BEFORE the flat DEF subtraction. A class without dmgTaken takes 1x.
+  function incomingDmg(cls, dmg, fromBoss) {
+    var dt = cls && cls.dmgTaken;
+    if (!dt) return dmg;
+    return Math.round(dmg * ((fromBoss ? dt.boss : dt.mob) || 1));
   }
 
   // Weighted drop roll from DATA.dropTables entries (seam rule 4 — SIM.rng).
@@ -115,8 +184,11 @@ var SIM = (function () {
   function makeIntent() { return { moveX: 0, moveY: 0, aimAngle: 0, firing: false, ability: false }; }
 
   return { seed: seed, rng: rng, damage: damage, fireRate: fireRate,
-           statsAtLevel: statsAtLevel, statsFor: statsFor, potionWasted: potionWasted,
+           statsAtLevel: statsAtLevel, statsFor: statsFor, mobLevelMult: mobLevelMult,
+           bestCollected: bestCollected, potionWasted: potionWasted,
            equipBonus: equipBonus, weaponMod: weaponMod, abilityFor: abilityFor,
+           fullLegendSet: fullLegendSet,
+           resolveDrop: resolveDrop, incomingDmg: incomingDmg,
            rollDrop: rollDrop, applyXp: applyXp, makeIntent: makeIntent };
 })();
 

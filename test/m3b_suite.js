@@ -38,7 +38,7 @@ function check(name, ok, extra) {
   }))`);
   const mig = await page.evaluate(`SAVE.load(2)`);
   check('v2 save loads (not flagged corrupt)', mig.ok === true);
-  check('migrated to v3: equipment slots added empty, vault kept', mig.ok && mig.data.v === 3 &&
+  check('migrated to v4: equipment slots added empty, vault kept', mig.ok && mig.data.v === 4 &&
     mig.data.character.equipment && mig.data.character.equipment.weapon === null &&
     Array.isArray(mig.data.vault) && mig.data.vault.length === 0);
   check('migration is lossless (potions/records/level kept)', mig.ok &&
@@ -59,7 +59,25 @@ function check(name, ok, extra) {
     dirty.vault.length === 2 && dirty.vault[0] === 'w1' && dirty.vault[1] === 'r2');
   check('sanitizer clears wrong-slot equipment, keeps correct', dirty.weapon === null && dirty.ring === 'r0');
 
-  // -- 3. data integrity: 16 items, 4 per slot, tiers 0-3, tables reference real items
+  // -- 2b. M4.6: v3→v4 key renumbering + class-lock reflavor migration ------------
+  const v3mig = await page.evaluate(`(function(){
+    localStorage.setItem('srb_save_3', JSON.stringify({ v: 3,
+      account: { unlockedClasses: ['ranger','wizard','knight'], graveyard: [],
+                 potions: { hp:0,mp:0,att:0,def:0,spd:0,dex:0 },
+                 records: { bestLevel:5, deaths:0, totalKills:10, realmsEntered:1, realmsClosed:1 } },
+      vault: ['w3', 'r1'],
+      character: { cls: 'wizard', level: 5, xp: 0,
+                   potionsDrunk: { hp:0,mp:0,att:0,def:0,spd:0,dex:0 },
+                   equipment: { weapon: 'w1', ability: 'a2', armor: 'ar1', ring: null } },
+      meta: { createdAt: 1, savedAt: 2 } }));
+    var r = SAVE.load(3);
+    return r.ok && { v: r.data.v, vault: r.data.vault, eq: r.data.character.equipment };})()`);
+  check('v3→v4: vault keys renumbered, identity kept (w3→w4 Grovepiercer, r1→r2)',
+    v3mig && v3mig.v === 4 && v3mig.vault[0] === 'w4' && v3mig.vault[1] === 'r2');
+  check("v3→v4: a wizard's old ranger gear REFLAVORS to her line (w1→w2→ww2, a2→a3→wa3), armor untouched",
+    v3mig && v3mig.eq.weapon === 'ww2' && v3mig.eq.ability === 'wa3' && v3mig.eq.armor === 'ar2');
+
+  // -- 3. data integrity: 48 items — 6 tiers × 3 class weapon/ability lines + universal armor/rings
   const data = await page.evaluate(`(function(){
     var n = 0, bySlot = {}, bad = 0;
     for (var k in DATA.items) { n++;
@@ -72,29 +90,39 @@ function check(name, ok, extra) {
       if (!DATA.items[e.item] || !(e.w > 0)) tableBad++; });
     return { n: n, bySlot: bySlot, bad: bad, tableBad: tableBad,
              bossTable: DATA.bosses.grovekeeper.lootTable, trialTable: DATA.modes.survival.lootTable };})()`);
-  check('16 items, 4 per slot, all well-formed', data.n === 16 && data.bad === 0 &&
-    data.bySlot.weapon === 4 && data.bySlot.ability === 4 && data.bySlot.armor === 4 && data.bySlot.ring === 4);
+  check('48 items — 18 weapons + 18 ability (6 tiers × 3 classes) + 6 armor + 6 rings, all well-formed',
+    data.n === 48 && data.bad === 0 &&
+    data.bySlot.weapon === 18 && data.bySlot.ability === 18 && data.bySlot.armor === 6 && data.bySlot.ring === 6);
   check('drop tables reference real items; boss + trial wired', data.tableBad === 0 &&
     data.bossTable === 'grovekeeper' && data.trialTable === 'trial');
 
   // -- 4. SIM equipment math (pure — TM-2 spot checks) ---------------------------
   const math = await page.evaluate(`(function(){
     var cls = DATA.classes.ranger;
-    var eq = { weapon: 'w3', ability: 'a3', armor: 'ar3', ring: 'r3' };
+    var eq = { weapon: 'w5', ability: 'a5', armor: 'ar5', ring: 'r5' };   // full LEGENDARY kit
     var maxPots = { hp: 99, mp: 99, att: 99, def: 99, spd: 99, dex: 99 };
-    var bare = SIM.statsFor(cls, 20, maxPots);            // capped everywhere
-    var geared = SIM.statsFor(cls, 20, maxPots, eq);
+    var bare = SIM.statsFor(cls, DATA.xp.cap, maxPots);   // capped everywhere (cap 60 since M4.6)
+    var geared = SIM.statsFor(cls, DATA.xp.cap, maxPots, eq);
     var eb = SIM.equipBonus(eq);
-    return { atCap: bare.hp === cls.caps.hp,
-             pastCap: geared.hp === cls.caps.hp + 140 && geared.def === cls.caps.def + 14,
+    // M5.4: level is cosmetic, so base+potions may sit BELOW a cap — but GEAR is
+    // applied AFTER the clamp, so it still pushes the total PAST the caps.
+    return { atCap: geared.hp > cls.caps.hp && geared.def > cls.caps.def,
+             pastCap: geared.hp === bare.hp + eb.hp && geared.def === bare.def + eb.def,
              ebHp: eb.hp, wDmg: SIM.weaponMod(eq).dmg,
              ab: SIM.abilityFor(DATA.abilities.volley, eq),
              abFloor: SIM.abilityFor(DATA.abilities.volley, eq).mpCost >= 4,
-             abBare: SIM.abilityFor(DATA.abilities.volley, { ability: null }).mpCost };})()`);
+             abBare: SIM.abilityFor(DATA.abilities.volley, { ability: null }).mpCost,
+             // M4.6: efficiency mods for the OTHER classes' channels
+             tome: SIM.abilityFor(DATA.abilities.barrage, { ability: 'wa5' }).mpPerShot,
+             tomeFloor: SIM.abilityFor(DATA.abilities.barrage, { ability: 'wa5' }).mpPerShot >= 0.5,
+             horn: SIM.abilityFor(DATA.abilities.whirlwind, { ability: 'ka5' }).mpDrainPerSec,
+             hornBare: SIM.abilityFor(DATA.abilities.whirlwind, { ability: null }).mpDrainPerSec };})()`);
   check('gear pushes stats PAST the caps (that is the point)', math.atCap && math.pastCap,
     `+${math.ebHp} hp over cap`);
-  check('weaponMod + abilityFor: +11 dmg, volley 9 arrows @16 MP, floor respected',
-    math.wDmg === 11 && math.ab.count === 9 && math.ab.mpCost === 16 && math.abFloor && math.abBare === 22);
+  check('weaponMod + abilityFor: +15 dmg, volley 11 arrows @14 energy, floor respected',
+    math.wDmg === 15 && math.ab.count === 11 && math.ab.mpCost === 14 && math.abFloor && math.abBare === 22);
+  check('M4.6 efficiency mods: Tempest tome 1.25→0.6 MP/ball (floor 0.5) · Cataclysm horn 20→10 rage/s',
+    Math.abs(math.tome - 0.6) < 1e-9 && math.tomeFloor && math.horn === 10 && math.hornBare === 20);
 
   // -- 5. fresh account → realm → boss → THE CHEST HAS GEAR ----------------------
   await page.evaluate(`localStorage.clear()`);
@@ -119,57 +147,53 @@ function check(name, ok, extra) {
   })()`);
   await sleep(200);
   await page.evaluate(`(function(){var r=${scene('Realm')}; r.player.setPosition(r.bossPortal.x, r.bossPortal.y);})()`);
-  await sleep(300);
+  // M4.7: wait out the Conductor's train-arrival cinematic (boss + scouter)
+  await page.waitForFunction(`(function(){var r=${scene('Realm')}; return !!r.boss && r.scanning;})()`,
+    null, { timeout: 60000 });
   await page.keyboard.press('Enter');                     // dismiss the scouter
   await sleep(200);
   await page.evaluate(`(function(){var r=${scene('Realm')}; Entities.hurtBoss(r, r.boss, 99999);})()`);
   await sleep(200);
   const drop = await page.evaluate(`(function(){var r=${scene('Realm')};
-    return { chest: !!r.chest, items: r.pendingLoot.items, n: r.pendingLoot.items.length,
-             real: r.pendingLoot.items.every(function(k){ return !!DATA.items[k]; }) };})()`);
-  check('boss chest rolls gear from the drop table (2 rolls, real items)',
-    drop.chest && drop.n === 2 && drop.real, drop.items.join(', '));
+    var L = r.pendingLoot, total = L.items.length + (L.dupes || []).length;
+    return { chest: !!r.chest, items: L.items, total: total,
+             real: L.items.every(function(k){ return !!DATA.items[k]; }) };})()`);
+  check('boss chest rolls gear from the drop table (2 rolls, real items or dupe-XP)',
+    drop.chest && drop.total === 2 && drop.real, drop.items.join(', '));
 
-  // -- 6. SPACE opens it: item rows render; TAKE equips + persists ----------------
+  // -- 6. SPACE opens it: M5.5 COLLECTION — items auto-collected + auto-equipped ---
   await page.evaluate(`(function(){var r=${scene('Realm')}; r.player.setPosition(r.chest.x, r.chest.y);})()`);
   await sleep(150);
   await page.keyboard.press('Space');
   await sleep(250);
   const overlay = await page.evaluate(`(function(){var r=${scene('Realm')};
     var texts = []; r.children.list.forEach(function(c){ if (c.text) texts.push(c.text); });
-    return { looting: r.looting, rows: r.lootItems.length,
-             take: texts.join(' | ').indexOf('TAKE') >= 0 };})()`);
-  check('loot overlay lists the gear with TAKE actions', overlay.looting && overlay.rows === 2 && overlay.take);
+    var L = r.pendingLoot;
+    var owned = (L.items || []).every(function(k){ return ACCOUNT.collected.indexOf(k) >= 0; });
+    return { looting: r.looting, owned: owned,
+             summary: texts.join(' | ').indexOf('LOOT') >= 0 };})()`);
+  check('opening the chest COLLECTS its items (owned) and shows the summary',
+    overlay.looting && overlay.owned && overlay.summary);
   const took = await page.evaluate(`(function(){var r=${scene('Realm')};
-    var key = r.lootItems[0], slot = DATA.items[key].slot;
-    var hpBefore = r.player.state.stats.hp;
-    r.takeItemFromChest(0);
+    var L = r.pendingLoot, ok = true;
+    // every rolled item is either equipped (best) or a better piece is owned/equipped
+    (L.items || []).forEach(function(k){
+      var slot = DATA.items[k].slot, eq = CURRENT.equipment[slot];
+      if (!eq || DATA.items[eq].tier < DATA.items[k].tier) ok = false;
+    });
     var d = JSON.parse(localStorage.getItem('srb_save_1'));
-    return { key: key, slot: slot, equipped: CURRENT.equipment[slot] === key,
-             saved: d.character.equipment[slot] === key,
-             rowNow: r.lootItems[0],
-             statsMoved: r.player.state.stats.hp >= hpBefore };})()`);
-  check('TAKE equips the item and PERSISTS before any screen', took.equipped && took.saved,
-    took.key + ' → ' + took.slot);
-  check('taken row empties (nothing was equipped to swap back)', took.rowNow === null && took.statsMoved);
+    return { ok: ok, persisted: JSON.stringify(d.character.equipment) === JSON.stringify(CURRENT.equipment),
+             collectedSaved: JSON.stringify(d.account.collected) === JSON.stringify(ACCOUNT.collected) };})()`);
+  check('chest AUTO-EQUIPS the best owned gear + PERSISTS (equipment + collection)',
+    took.ok && took.persisted && took.collectedSaved);
 
-  // -- 7. ENTER takes upgrades & closes -------------------------------------------
-  const before2 = await page.evaluate(`(function(){var r=${scene('Realm')};
-    return { left: r.lootItems.filter(Boolean), eq: JSON.parse(JSON.stringify(CURRENT.equipment)) };})()`);
+  // -- 7. ENTER closes the chest summary ------------------------------------------
   await page.keyboard.press('Enter');
   await sleep(250);
   const closed = await page.evaluate(`(function(){var r=${scene('Realm')};
-    return { closing: r.closing, looting: r.looting,
-             eq: JSON.parse(JSON.stringify(CURRENT.equipment)) };})()`);
-  // ENTER equips each leftover whose slot was empty or lower-tier; verify every
-  // leftover either landed in its slot or the slot already held an equal/higher tier.
-  const tiers = await page.evaluate(`(function(){var t={}; for (var k in DATA.items) t[k]={slot:DATA.items[k].slot,tier:DATA.items[k].tier}; return t;})()`);
-  const leftoversResolved = before2.left.every(k => {
-    const now = closed.eq[tiers[k].slot];
-    return now === k || (now && tiers[now].tier >= tiers[k].tier);
-  });
-  check('ENTER takes remaining upgrades and closes the chest',
-    closed.closing && !closed.looting && leftoversResolved);
+    return { closing: r.closing, looting: r.looting };})()`);
+  check('ENTER closes the chest and moves to the realm-closed screen',
+    closed.closing && !closed.looting);
 
   // -- 8. back to the nexus: V opens the vault; bank the weapon (THE GATE CLAUSE) --
   await page.keyboard.press('Enter');
@@ -220,16 +244,16 @@ function check(name, ok, extra) {
     CURRENT.equipment.weapon = 'w1';
     n.buildVaultUi();
     n.bankItem('weapon');
-    return { vaultLen: GAME_SAVE.vault.length, stillEquipped: CURRENT.equipment.weapon === 'w1' };})()`);
-  check('a full vault refuses the 9th item (nothing lost)',
-    full.vaultLen === 8 && full.stillEquipped);
+    return { vaultLen: GAME_SAVE.vault.length, stillEquipped: CURRENT.equipment.weapon === 'w1', slots: DATA.vault.slots };})()`);
+  check('a full vault refuses one more item (nothing lost)',
+    full.vaultLen === full.slots && full.stillEquipped);
 
   // -- 11. equipment affects live stats (armor heals the delta, unequip clamps) -------
   const hpDelta = await page.evaluate(`(function(){var n=${scene('Nexus')};
     var st = n.player.state;
     CURRENT.equipment.armor = null; applyEquipmentChange(n);
     var base = st.stats.hp;
-    CURRENT.equipment.armor = 'ar3'; applyEquipmentChange(n);
+    CURRENT.equipment.armor = 'ar4'; applyEquipmentChange(n);   // M4.6: +60 HP lives at ar4 now
     var up = { max: st.stats.hp, cur: st.hp };
     CURRENT.equipment.armor = null; applyEquipmentChange(n);
     return { base: base, upMax: up.max, upFilled: up.cur === up.max,
@@ -272,9 +296,9 @@ function check(name, ok, extra) {
   }
   const rerun = await page.evaluate(`(function(){var r=${scene('Realm')};
     return { alive: r.player.state.alive, level: r.player.state.level,
-             vault: GAME_SAVE.vault.length };})()`);
+             vault: GAME_SAVE.vault.length, slots: DATA.vault.slots };})()`);
   check('a fresh level-1 character returns to a realm with the vault intact',
-    rerun.alive && rerun.level === 1 && rerun.vault === 8);
+    rerun.alive && rerun.level === 1 && rerun.vault === rerun.slots);
 
   // -- 14. zero console errors ----------------------------------------------------------
   check('zero console errors', consoleErrors.length === 0, consoleErrors.slice(0, 3).join(' ;; '));

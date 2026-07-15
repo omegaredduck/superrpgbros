@@ -10,3 +10,4 @@
 - Sun 07/12/2026 21:24:26  -  "knight emplemented and tested "
   - note: needs tuning
 - Tue 07/14/2026 13:08:41  -  "highfedelity asset upgrades for portal room and map"
+- Wed 07/15/2026 13:10:44  -  "gy added"

@@ -40,6 +40,12 @@ function check(name, ok, extra) {
 
   // walk to the console → it brightens (NO floating text — footer carries the
   // controls); open the board and slot affixes
+  // (m4n+ hi-fi chamber: the machine's BASE scale is ~1, not 3 — measure the
+  // brighten as far-vs-near delta instead of an absolute classic-era number)
+  await page.evaluate(`(function(){var n=${scene('Nexus')};
+    n.player.setPosition(n.consolePos.x - 400, n.consolePos.y - 200);})()`);
+  await sleep(600);                                       // let update() see the far position
+  const farC = await page.evaluate(`${scene('Nexus')}.consoleSprite.scaleX`);
   await page.evaluate(`(function(){var n=${scene('Nexus')};
     n.player.setPosition(n.consolePos.x, n.consolePos.y);})()`);
   await sleep(600);
@@ -47,7 +53,7 @@ function check(name, ok, extra) {
     return { scale: n.consoleSprite.scaleX,
              noPrompts: !n.consolePrompt && !n.portalPrompt };})()`);
   check('M3.5 in range the console brightens; NO floating prompt text (footer has SPACE hint)',
-    nearC.scale > 3 && nearC.noPrompts, 'scale ' + nearC.scale);
+    nearC.scale > farC && nearC.noPrompts, 'scale ' + farC + ' → ' + nearC.scale);
 
   // -- 0a2. station labels carry their hotkeys; P opens the PORTAL MACHINE ---------
   const labels = await page.evaluate(`(function(){var n=${scene('Nexus')};
@@ -69,33 +75,47 @@ function check(name, ok, extra) {
   check('P walks to the portal machine and opens the board', pkey);
 
   // -- 0b. M3.6 BESTIARY: field notes read straight from data.js -------------------
+  // M4.7: the book is biome-scoped now — the TRAIN YARD's 8 mobs + ALL bosses
+  // (Grovekeeper + Conductor + M5.6 Gravekeeper, all listed in the index) = 11.
   const beast = await page.evaluate(`(function(){var n=${scene('Nexus')};
     n.toggleBestiary();
     var t1=[]; n.bestiaryUi.forEach(function(c){ if (c.text) t1.push(c.text); });
     var first = t1.join(' | ');
-    n.bestiaryNav(1); n.bestiaryNav(1); n.bestiaryNav(1); n.bestiaryNav(1);   // → the boss
+    var nMobs = DATA.biomes[DATA.realm.biome].mobs.length;
+    for (var i = 0; i < nMobs; i++) n.bestiaryNav(1);                          // → first boss
     var t2=[]; n.bestiaryUi.forEach(function(c){ if (c.text) t2.push(c.text); });
     var boss = t2.join(' | ');
+    n.bestiaryNav(1);                                                          // → the Conductor
+    var t3=[]; n.bestiaryUi.forEach(function(c){ if (c.text) t3.push(c.text); });
+    var boss2 = t3.join(' | ');
+    n.bestiaryNav(1);                                                          // → M5.6 the Gravekeeper
+    var t4=[]; n.bestiaryUi.forEach(function(c){ if (c.text) t4.push(c.text); });
+    var boss3 = t4.join(' | ');
     n.bestiaryNav(1);                                                          // wraps → entry 1
     var wrapped = n.bestiaryIndex === 0;
     n.toggleBestiary();
     var closed = !n.bestiaryUi;
-    return { entries: n.bestiaryEntries().length, first: first, boss: boss,
+    return { entries: n.bestiaryEntries().length, first: first, boss: boss, boss2: boss2, boss3: boss3,
              wrapped: wrapped, closed: closed };})()`);
-  check('M3.6 bestiary opens on the mob roster (4 mobs + 1 boss = 5 entries)',
-    beast.entries === 5 && beast.first.indexOf('Slime') >= 0 && beast.first.indexOf('CHASER') >= 0 &&
+  check('M3.6 bestiary opens on the YARD roster (8 mobs + 3 bosses = 11 entries)',
+    beast.entries === 11 && beast.first.indexOf('Coal Golem') >= 0 && beast.first.indexOf('CHASER') >= 0 &&
     beast.first.indexOf('HP') >= 0, beast.entries + ' entries');
-  check('M3.6 arrows navigate to the boss: title, patterns and scouter hints shown',
-    beast.boss.indexOf('Grovekeeper') >= 0 && beast.boss.indexOf('GUARDIAN') >= 0 &&
-    beast.boss.indexOf('RADIAL') >= 0 && beast.boss.indexOf('STREAM') >= 0);
+  check('M3.6 arrows navigate the bosses: Grovekeeper · Conductor · Gravekeeper (title + hints)',
+    // M5.0: the Grovekeeper is WARDEN OF THE HEARTWOOD; M5.6 adds the Gravekeeper
+    beast.boss.indexOf('Grovekeeper') >= 0 && beast.boss.indexOf('HEARTWOOD') >= 0 &&
+    beast.boss2.indexOf('Conductor') >= 0 && beast.boss2.indexOf('STYX') >= 0 &&
+    beast.boss2.indexOf('GHOST TRACK') >= 0 &&
+    beast.boss3.indexOf('Gravekeeper') >= 0 && beast.boss3.indexOf('HOLLOW EARTH') >= 0);
   check('M3.6 navigation wraps around; B/ESC closes the book', beast.wrapped && beast.closed);
 
   // -- 0c. M3.7/3.8 RECORDS wall screen: login TYPES the readout out; live data,
   // no slot number, no floating header
   const midType = await page.evaluate(`(function(){var n=${scene('Nexus')};
     return { len: n.recordsText.text.length, typing: !!n.typeTimer };})()`);
+  // m4n+: ONE combined always-on readout — '· REALMS n · CLOSED n' (the old
+  // two-page 'REALMS CLOSED' literal is retired)
   await page.waitForFunction(`(function(){var n=${scene('Nexus')};
-    return !n.typeTimer && n.recordsText.text.indexOf('REALMS CLOSED') >= 0;})()`,
+    return !n.typeTimer && n.recordsText.text.indexOf('CLOSED') >= 0;})()`,
     null, { timeout: 30000 });
   check('M3.8 login boots the glass EMPTY then types the readout out', midType.typing || midType.len > 0);
   const records = await page.evaluate(`(function(){var n=${scene('Nexus')};
@@ -107,25 +127,22 @@ function check(name, ok, extra) {
     return { screen: n.recordsText.text, blob: blob, opens: open };})()`);
   check('M3.7 wall screen carries the readout (class/deaths/best/closed), NO slot number',
     records.screen.indexOf('RANGER LV') >= 0 && records.screen.indexOf('DEATHS') >= 0 &&
-    records.screen.indexOf('REALMS CLOSED') >= 0 && records.screen.indexOf('Slot') < 0 &&
-    records.blob.indexOf('Slot ') < 0, records.screen);
+    records.screen.indexOf('REALMS') >= 0 && records.screen.indexOf('CLOSED') >= 0 &&
+    records.screen.indexOf('Slot') < 0 && records.blob.indexOf('Slot ') < 0, records.screen);
   check('M3.7 the screen opens the full RECORDS page (graveyard merged)', records.opens);
 
-  // -- 0d. M3.8 the SWITCH: flips the readout to graveyard stats + re-types --------
+  // -- 0d. M3.8 the SWITCH (m4n+ combined readout: the lever flips + kicks a
+  // wire-pulse burst + RE-TYPES the same combined readout — no second page) ---------
   await page.evaluate(`(function(){var n=${scene('Nexus')}; n.setRecordsMode('grave');})()`);
-  await page.waitForFunction(`(function(){var n=${scene('Nexus')};
-    return !n.typeTimer && n.recordsText.text.indexOf('TOTAL KILLS') >= 0;})()`,
-    null, { timeout: 30000 });
   const sw = await page.evaluate(`(function(){var n=${scene('Nexus')};
-    var txt = n.recordsText.text;                        // capture BEFORE the flip re-types
     var down = n.leverSprite.texture.key;
     var chip = n.leverLabel.text;                        // v3: shows the OTHER page's key
+    var retype = !!n.typeTimer;                          // the throw re-types the glass
     n.setRecordsMode('records');
     var chipBack = n.leverLabel.text;
-    return { text: txt, lever: down, chip: chip, chipBack: chipBack, retype: !!n.typeTimer };})()`);
-  check('M3.8 lever → GRAVEYARD STATS page types out (FALLEN/KILLS/ENTERED), lever flips down',
-    sw.text.indexOf('FALLEN') >= 0 && sw.text.indexOf('REALMS ENTERED') >= 0 &&
-    sw.lever === 'lever_down' && sw.retype);
+    return { lever: down, chip: chip, chipBack: chipBack, retype: retype };})()`);
+  check('M3.8 lever throw flips it down and RE-TYPES the combined readout',
+    sw.lever.toLowerCase().indexOf('down') >= 0 && sw.retype);   // classic 'lever_down' or hi-fi 'leverHiDown' (m4n)
   check('M3.8 v3 hotkey chip above the lever shows the flip key: (R) when down, (G) when up',
     sw.chip === '(R)' && sw.chipBack === '(G)');
   await page.waitForFunction(`(function(){var n=${scene('Nexus')}; return !n.typeTimer;})()`,
@@ -157,11 +174,44 @@ function check(name, ok, extra) {
     return { open: !!n.consoleUi, slotted: n.consoleAffixes.slice(),
              showsOn: blob.indexOf('[x] APEX PREDATORS') >= 0 && blob.indexOf('[x] HORDES') >= 0,
              showsOff: blob.indexOf('[ ] ESCALATING THREATS') >= 0,
-             counter: blob.indexOf('2/' + DATA.console.maxAffixes) >= 0,
-             sealed: blob.indexOf('SEALED REALM') >= 0 };})()`);
+             counter: blob.indexOf('2/' + DATA.console.maxAffixes) >= 0 };})()`);
   check('M3.5 console board: toggled affixes VISIBLY slotted ([x]), others [ ], counter right',
     board.open && board.slotted.length === 2 && board.showsOn && board.showsOff && board.counter);
-  check('M3.5 future realms are SEALED rows inside the console (no pedestal furniture)', board.sealed);
+
+  // -- M4.9: the MAP SELECTOR dropdown — real map selectable, ??? sealed placeholders locked
+  const mapsel = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    // collapsed: shows the current real map, and the MAP label
+    var t0=[]; n.consoleUi.forEach(function(c){ if (c.text) t0.push(c.text); });
+    var collapsed = t0.join(' | ');
+    var startMap = n.consoleMap;
+    // expand it → the ??? sealed placeholders appear
+    n.toggleMapDropdown();
+    var t1=[]; n.consoleUi.forEach(function(c){ if (c.text) t1.push(c.text); });
+    var expanded = t1.join(' | ');
+    // try to pick a LOCKED map → refused (stays on the real one)
+    n.consoleSetMap('sealed1');
+    var afterLocked = n.consoleMap;
+    // pick the real map explicitly → accepted, dropdown collapses
+    n.toggleMapDropdown();
+    n.consoleSetMap('trainyard');
+    return { hasLabel: collapsed.indexOf('MAP') >= 0,
+             showsReal: collapsed.indexOf('THE TRAIN YARD') >= 0,
+             sealedHidden: collapsed.indexOf('SEALED') < 0,          // ??? only shows when expanded
+             sealedShown: expanded.indexOf('SEALED') >= 0,
+             lockedRefused: afterLocked === startMap && startMap === 'trainyard',
+             chosen: n.consoleMap, closed: !n.mapDropdownOpen };})()`);
+  check('M4.9 MAP dropdown: collapsed shows the real map; expands to ??? SEALED placeholders',
+    mapsel.hasLabel && mapsel.showsReal && mapsel.sealedHidden && mapsel.sealedShown);
+  check('M4.9 locked ??? maps are NOT selectable; a real map is + collapses the dropdown',
+    mapsel.lockedRefused && mapsel.chosen === 'trainyard' && mapsel.closed);
+  // the run cfg carries the chosen map
+  const mapCfg = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    n.consoleSpawnPortal(true);
+    var cfg = game.registry.get('pendingPortal');
+    return cfg && cfg.map;})()`);
+  check('M4.9 the spawned portal cfg carries the selected map', mapCfg === 'trainyard');
+  // reopen the board for the following checks (spawn closed it)
+  await page.evaluate(`(function(){var n=${scene('Nexus')}; if(n.portal){n.despawnPortal&&n.despawnPortal();} if(!n.consoleUi) n.toggleConsole();})()`);
 
   // spawn → the full charge-up cinematic: console powers the platform, THEN the
   // portal exists (headless runs ~5× slow, so the ~2.3s cinematic gets ~30s)
@@ -313,7 +363,9 @@ function check(name, ok, extra) {
   check('quota met → boss portal (bounty counter intact)', bounty.portal && bounty.champs >= 5,
     `${bounty.champs} champions down`);
   await page.evaluate(`(function(){var r=${scene('Realm')}; r.player.setPosition(r.bossPortal.x, r.bossPortal.y);})()`);
-  await sleep(300);
+  // M4.7: wait out the Conductor's train-arrival cinematic
+  await page.waitForFunction(`(function(){var r=${scene('Realm')}; return !!r.boss && r.scanning;})()`,
+    null, { timeout: 60000 });
   await page.keyboard.press('Enter');                     // dismiss the scouter
   await sleep(200);
   const chest = await page.evaluate(`(function(){var r=${scene('Realm')};
@@ -321,12 +373,14 @@ function check(name, ok, extra) {
     return null;})()`);
   await sleep(200);
   const rolls = await page.evaluate(`(function(){var r=${scene('Realm')};
-    var base = DATA.dropTables[DATA.bosses.grovekeeper.lootTable].rolls;
+    var base = DATA.dropTables[DATA.bosses[DATA.realm.boss].lootTable].rolls;
     var cap = DATA.affixes.championBounty.cap;
-    return { n: r.pendingLoot.items.length, expected: base + cap,
+    // M5.5: total rolls are conserved as NEW items + DUPLICATE (bonus-XP) rolls
+    var total = r.pendingLoot.items.length + (r.pendingLoot.dupes || []).length;
+    return { total: total, expected: base + cap,
              real: r.pendingLoot.items.every(function(k){ return !!DATA.items[k]; }) };})()`);
-  check('boss chest = base rolls + champion bounty, CAPPED (2 + 3, all real items)',
-    rolls.n === rolls.expected && rolls.real, `${rolls.n} items`);
+  check('boss chest = base rolls + champion bounty, CAPPED (2 + 3, all real items or dupe-XP)',
+    rolls.total === rolls.expected && rolls.real, `${rolls.total} rolls`);
 
   // -- 7. zero console errors -----------------------------------------------------------
   check('zero console errors', consoleErrors.length === 0, consoleErrors.slice(0, 3).join(' ;; '));

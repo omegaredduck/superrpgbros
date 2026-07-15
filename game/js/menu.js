@@ -114,7 +114,7 @@ var MENU = (function () {
     }
 
     function renderSettings() {
-      var cx = Wd() / 2, cy = Hd() / 2, w = 700, h = 640;
+      var cx = Wd() / 2, cy = Hd() / 2, w = 700, h = 548;
       box(cx, cy, w, h);
       var top = cy - h / 2, L = cx - 320;
       txt(cx, top + 30, 'SETTINGS', { size: 26, color: '#ffcd75', ox: 0.5, bold: true });
@@ -132,50 +132,25 @@ var MENU = (function () {
       txt(L + 176, top + 184, af ? 'fires on its own — no button held' : 'hold mouse / interact to fire',
         { size: 11, color: '#8a93a8' });
 
-      // ---- CHARACTER (ART-FIDELITY TEST 2026-07-13) ----------------------
-      // Ranger-only art model picker. '16' = the original (default); the
-      // larger sizes are higher-fidelity animated models. Fully reversible —
-      // just re-select 16. Applies live to the player in the current scene.
-      txt(L, top + 210, 'ART TEST  (experimental · reversible)', { size: 13, color: '#7cc7ff' });
-      // -- Ranger model picker --
-      txt(L, top + 234, 'Ranger model', { size: 15, color: '#f4f4f4' });
-      var curModel = (SAVE.settings().rangerModel) || '16';
-      var chipX = L + 132, modelIds = (typeof TEX !== 'undefined' && TEX.RANGER_SIZES)
-        ? ['16'].concat(TEX.RANGER_SIZES.map(String)) : ['16', '32', '64', '128', '160'];
-      modelIds.forEach(function (id) {
-        var on = (id === curModel);
-        var lbl = id === '16' ? '[16·orig]' : '[' + id + ']';
-        var b = btn(chipX, top + 234, lbl, function () {
-          SAVE.settings().rangerModel = id; SAVE.saveSettings();
-          try {
-            if (scene.player && typeof Entities !== 'undefined' && Entities.applyModelSkin)
-              Entities.applyModelSkin(scene, scene.player);
-          } catch (e) {}
-          render();
-        }, { size: 14, ox: 0, color: on ? '#a7f070' : '#8a93a8' });
-        chipX += b.width + 10;
-      });
-      // -- Two independent Hi-Fi toggles: World (train-yard realm + monsters)
-      //    and Chamber (portal room). Each applies on the NEXT visit to that place.
-      txt(L, top + 262, 'Hi-Fi', { size: 15, color: '#f4f4f4' });
-      var hw = !!SAVE.settings().hifiWorld;
-      txt(L + 58, top + 262, 'World', { size: 13, color: '#cbd5e6' });
-      btn(L + 108, top + 262, hw ? '[ ON ]' : '[ OFF ]', function () {
-        SAVE.settings().hifiWorld = !SAVE.settings().hifiWorld; SAVE.saveSettings(); render();
-      }, { size: 13, ox: 0, color: hw ? '#a7f070' : '#8a93a8' });
-      var hc = !!SAVE.settings().hifiChamber;
-      txt(L + 208, top + 262, 'Chamber', { size: 13, color: '#cbd5e6' });
-      btn(L + 278, top + 262, hc ? '[ ON ]' : '[ OFF ]', function () {
-        SAVE.settings().hifiChamber = !SAVE.settings().hifiChamber; SAVE.saveSettings(); render();
-      }, { size: 13, ox: 0, color: hc ? '#a7f070' : '#8a93a8' });
-      txt(L, top + 284, 'World = train yard + hi-fi monsters (next realm) · Chamber = hi-fi portal room',
-        { size: 11, color: '#8a93a8' });
+      // M5.3 DEV MODE (user): one toggle → all gear (vault) + max level +
+      // immortality, for testing. Turning it ON applies the save grants now
+      // (global applyDevMode); immortality reads the flag live in-game.
+      var dev = SAVE.settings().dev;
+      txt(L, top + 212, 'Dev mode', { size: 16, color: dev ? '#ffcd75' : '#f4f4f4' });
+      btn(L + 92, top + 212, dev ? '[ ON ]' : '[ OFF ]', function () {
+        var s = SAVE.settings(); s.dev = !s.dev; SAVE.saveSettings();
+        if (s.dev && typeof applyDevMode === 'function') applyDevMode();
+        if (scene.buildVaultUi && scene.vaultUi) scene.buildVaultUi();   // reflect granted gear
+        render();
+      }, { size: 14, ox: 0, color: dev ? '#a7f070' : '#8a93a8' });
+      txt(L + 176, top + 212, dev ? 'ALL GEAR · MAX LEVEL · IMMORTAL' : 'grants all gear, max level, immortality',
+        { size: 11, color: dev ? '#ffcd75' : '#8a93a8' });
 
-      txt(L, top + 302, 'KEYBINDS', { size: 13, color: '#7cc7ff' });
-      txt(cx + 320, top + 302, 'primary · alternate — click to rebind', { size: 11, color: '#8a93a8', ox: 1 });
+      txt(L, top + 244, 'KEYBINDS', { size: 13, color: '#7cc7ff' });
+      txt(cx + 320, top + 244, 'primary · alternate — click to rebind', { size: 11, color: '#8a93a8', ox: 1 });
 
       var list = (DATA.keybinds && DATA.keybinds.list) || [];
-      var perCol = Math.ceil(list.length / 2), rowH = 30, y0 = top + 332;
+      var perCol = Math.ceil(list.length / 2), rowH = 28, y0 = top + 272;
       for (var i = 0; i < list.length; i++) {
         var col = i < perCol ? 0 : 1, row = i - col * perCol;
         keyRow(L + col * 330, y0 + row * rowH, list[i]);
