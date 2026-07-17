@@ -263,7 +263,12 @@ var TEX = (function () {
                  // M5.6 THE GRAVEYARD roster (user picks 2026-07-15)
                  ghoul: 'ghoulHi', rattlebones: 'rattlebonesHi', boneArcher: 'boneArcherHi',
                  tombGolem: 'tombGolemHi', corpseBloater: 'corpseBloaterHi', banshee: 'bansheeHi',
-                 mummy: 'mummyHi', necroAcolyte: 'necroAcolyteHi', graveReaper: 'reaperHi' };
+                 mummy: 'mummyHi', necroAcolyte: 'necroAcolyteHi', graveReaper: 'reaperHi',
+                 // M5.7 THE ROBOTICS FACTORY roster (user picks 2026-07-15)
+                 sparkbot: 'sparkbotHi', hiveDrone: 'hiveDroneHi', arcWelder: 'arcWelderHi',
+                 scrapHulk: 'scrapHulkHi', buzzsaw: 'buzzsawHi', magCrane: 'magCraneHi',
+                 forgeHound: 'forgeHoundHi', coolantTank: 'coolantTankHi', bulwark: 'bulwarkHi',
+                 repairUnit: 'repairUnitHi', warframe: 'warframeHi', purgeFlamer: 'purgeFlamerHi' };
   var MOB_HI_SIZE = 48, MOB_HI_DISPLAY = 40, MOB_BODY_WORLD = 22;     // keep classic 22px hitbox
   // M4.8 (user, 2026-07-14): per-mob on-screen size overrides (default 40).
   // The Furnace Imp read too small to parse in a swarm; the Crossing Creep a
@@ -280,7 +285,12 @@ var TEX = (function () {
                       // a touch bigger; the reaper is a tall dread walker.
                       ghoul: 62, rattlebones: 52, boneArcher: 60, tombGolem: 76,
                       corpseBloater: 74, banshee: 64, mummy: 64, necroAcolyte: 62,
-                      graveReaper: 112 };
+                      graveReaper: 112,
+                      // M5.7 factory: swarm reads small; tanks/heavies read elite;
+                      // the crane + coolant tank are chunky machines.
+                      sparkbot: 38, hiveDrone: 40, arcWelder: 52, scrapHulk: 78,
+                      buzzsaw: 50, magCrane: 66, forgeHound: 54, coolantTank: 70,
+                      bulwark: 68, repairUnit: 56, warframe: 72, purgeFlamer: 60 };
   // M5.0 recolor palettes — mini-mob skins are data, not new art (user:
   // "we will need recolours for the mini mobs").
   var PUFF_PALS = [
@@ -303,7 +313,13 @@ var TEX = (function () {
     conductor:   { key: 'conductorHi', size: 128, display: 104, bodyW: 44, bodyH: 40 },
     // M5.6 THE GRAVEKEEPER — ~2x the other bosses (user): a towering hooded
     // dread. 96px canvas; big display, a fair mid-body hitbox.
-    gravekeeper: { key: 'gravekeeperHi', size: 96, display: 160, bodyW: 52, bodyH: 56 }
+    gravekeeper: { key: 'gravekeeperHi', size: 96, display: 160, bodyW: 52, bodyH: 56 },
+    // M6e FIX (Red: "hitting the boss and its not doing damage / arrows fly
+    // over" — phase 1): the engineer had NO entry here, so spawnBoss fell back
+    // to the classic 14×12 body at offset (3,5) — a tiny corner hitbox under a
+    // setScale(3)=192px sprite. Most visual hits missed the body. Real entry:
+    // 96px display, centered 46×50 world-px hitbox that matches what you see.
+    engineer:    { key: 'engineerHi', size: 64, display: 96, bodyW: 46, bodyH: 50 }
   };
   // M4.7 FREIGHT CAR RECOLORS — one grain-car model + one boxcar model, several
   // palettes each (user: "1 model several recolors"). Data, not new art.
@@ -493,6 +509,25 @@ var TEX = (function () {
     spr('gyFenceV', 64, 64, A.dIronFenceTop);
     spr('gyFenceVDmg1', 64, 64, A.dIronFenceTopD1);
     spr('gyFenceVDmg2', 64, 64, A.dIronFenceTopD2);
+    // ---- M5.7 THE ROBOTICS FACTORY roster + boss + tiles ---------------------
+    spr('sparkbotHi', MS, MS, A.drawSparkbot);
+    spr('hiveDroneHi', MS, MS, A.drawHiveDrone);
+    spr('arcWelderHi', MS, MS, A.drawArcWelder);
+    spr('scrapHulkHi', MS, MS, A.drawScrapHulk);
+    spr('buzzsawHi', MS, MS, A.drawBuzzsaw);
+    spr('magCraneHi', MS, MS, A.drawMagCrane);
+    spr('forgeHoundHi', MS, MS, A.drawForgeHound);
+    spr('coolantTankHi', MS, MS, A.drawCoolantTank);
+    spr('bulwarkHi', MS, MS, A.drawBulwark);
+    spr('repairUnitHi', MS, MS, A.drawRepairUnit);
+    spr('warframeHi', MS, MS, A.drawWarframe);
+    spr('purgeFlamerHi', MS, MS, A.drawPurgeFlamer);
+    spr('engineerHi', 64, 64, A.drawEngineer);       // phase-1 boss "The Overseer"
+    spr('mechHi', 96, 96, A.drawMech);               // phase-2 boss "PROTOTYPE 130C-4"
+    tex('factoryFloor', 48, 48, A.drawFactoryFloor);
+    tex('factoryCatwalk', 48, 48, A.drawFactoryCatwalk);
+    tex('factoryHazard', 48, 48, A.drawFactoryHazard);
+    tex('convBelt', 48, 48, A.drawBeltTile);
     _worldBuilt = true;
   }
 

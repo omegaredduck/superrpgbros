@@ -6,6 +6,85 @@
 
 ---
 
+## 2026-07-17 · 16-MAP CAMPAIGN DESIGN COMPLETE · maps 15+16 locked, campaign closed out (planning, no game code)
+
+Final design sessions of the map campaign (2026-07-16 → 07-17). NO game code
+(?v= stays m6e). The campaign Red extended from 10 to 16 maps (realms 5–20) is
+now **16/16 DESIGN-COMPLETE** — every map folder under game/js/maps/<id>/ is
+stocked with PLAN.md + BUILD_INSTRUCTIONS.md + approved assets + render scripts,
+mirrored to artdev/<id>/.
+
+**MAP 15 PREHISTORIA (realm 19):** 7 dino mobs (take-2 real anatomy; recolor
+rule, ptero exempt) · all 20 decor · all 10 tiles (GAME TRAIL decorative) ·
+METEOR SHOWER cycle · boss THE PRIMORDIAL (dragons #10 feathered dino-dragon)
+w/ THE HATCH egg entrance (4-beat gif approved) + METEOR CALL signature ·
+theme PRIMAL.EXE **take 2 DARK TRANCE** ("perfect"; take-1 drums+chant
+rejected — "another techno piece trance vibes but dark"): 140 BPM, 105 bars,
+D minor, bar-64 drop. Suite: test/m21_prehistoria_verify.js.
+
+**MAP 16 BELLY OF THE BEAST (realm 20, Red's own design — THE FINALE):**
+"???" realm-select reveal · the game's FIRST INTRO CINEMATIC (pirate ship,
+"thats weird..." blurb verbatim, titan whale swallows the whole ship) · main
+map = the whale's guts (16 mobs picked "use the rest" after vetoing 4; all 20
+decor "all those decorations are in"; tiles 1 2 3 4 6 8 9) · DIGESTION TIDE
+cycle · THE UVULA gag-trigger exit · outro cinematic (whale beaches + spits
+you up) · SAND ARENA boss: THE TITAN WHALE — **STATIONARY boss/moving player**
+(new fight shape), pose #2 HEAD-ON MAW + look #4 ORCA DRESS ("perfect" after
+teeth-inside-the-maw fix), kit w/ SPRAY MORTARS / INHALE→CHOMP / FLIPPER SLAM
+rings / GUT COUGH / P2 MAW ALIGHT / signature WATER GUN vent ×1.5 ("sounds
+good") · theme HEAVE HO.EXE 8-BIT SEA SHANTY take 1 ("sounds good"): 120 BPM
+swung, A dorian, call-and-answer, HEAVE...HO! ending. Suite:
+test/m22_belly_verify.js.
+
+**Close-out:** docs/TEN_MAPS_PLAN.md status → COMPLETE · this entry ·
+MILESTONES M5.9 row · docs/NEXT_SESSION.md rewritten as the OPUS BUILD PROMPT
+(registry refactor per game/js/maps/REGISTRY_SPEC.md FIRST, then the 16 maps
+in lineup order; ALL-FENCES-DESTRUCTIBLE retrofit rides along). Memory:
+[[belly-map-progress]] [[prehistoria-progress]] [[ten-maps-campaign]].
+
+**Files (this close-out window):** game/js/maps/prehistoria/{PLAN.md,
+BUILD_INSTRUCTIONS.md} + artdev/prehistoria mirror (29 files) ·
+game/js/maps/belly/ full package (PLAN.md, BUILD_INSTRUCTIONS.md, 8 asset
+PNGs/WAV, 9 render scripts) + artdev/belly mirror (17 files) · docs updates.
+
+## 2026-07-15 · M5.7 BIOME 4 "THE ROBOTICS FACTORY" · full design + all assets (planning, no game code)
+
+Design-and-assets session for the fourth realm. NO game code changed (?v= stays
+m5g); all output is design docs + option-sheet PNGs + a theme WAV in artdev/factory/.
+Followed Red's 13-note "Master List" workflow: front-load a plan doc + all the
+option sheets, ask design questions, let Red pick, then lock the build.
+
+**What landed (all Red's calls, via AskUserQuestion + live messages):**
+- THEME: robotics factory (epic & grand); mobs are ROBOTS, not necessarily humanoid;
+  the map must FEEL ALIVE while running (animated conveyors/arms/presses/fans/sparks).
+- SIGNATURE MAP MECHANIC: IN-GROUND CONVEYOR TRAVELATORS (airport moving-walkway,
+  flush to floor) — moving WITH the belt = speed burst, AGAINST = slowed.
+- 12 MOB PICKS from a 20-candidate sheet (roles = the sheet labels): Sparkbot,
+  Hive Drone, Arc Welder, Scrap Hulk, Buzzsaw, Mag-Crane, Forge Hound, Coolant Tank,
+  Bulwark Drone, Repair Unit, Warframe, Purge Flamer (Flamer changed to a fire CIRCLE
+  + circular ground telegraph, not a cone).
+- TILING #1 riveted steel / #3 grated catwalk / #4 hazard, composed with the decor
+  into one cohesive planned map (loading bay+spawn → assembly floor w/ belts → foundry
+  wing → blast doors → boss arena). Decor placed as a scene, not scattered.
+- BOSS "THE GRAND ENGINEER": phase-1 = mad scientist (engineer sheet #5 "The
+  Overseer"); phase-2 = mech "PROTOTYPE 130C-4" (mech sheet #10). Rises on a floor
+  lift; ladder-climb cutscene into the mech, which knocks the boarding platform aside
+  and hunts you. Custom square arena "THE PROTOTYPE BAY" with 4 cover PILLARS, ceiling
+  presses, wall turrets, conveyor cross. Kit is factory-themed + environment-driven AI;
+  phase-2 REACTOR OVERLOAD self-destruct (run to center, beep/flash, room-wide blast —
+  break line-of-sight behind a pillar to survive). Full kit in docs/FACTORY_BOSS.md.
+- MUSIC "ASSEMBLY LINE": 8-bit techno/house, 126 BPM, A-minor, ~3:00 (WAV preview).
+
+**Files created:** docs/MAP4_PLAN.md, docs/FACTORY_BOSS.md; artdev/factory/ (factory_
+mob_options.png, factory_decor_options.png, factory_tile_options.png, factory_scene_
+plan.png, factory_boss_engineer.png, factory_boss_mech.png, factory_bossroom.png,
+factory_theme.wav, factory_kit.js + 7 render scripts). Memory: factory-map-plan.md.
+
+**Next:** BUILD the realm (DATA.realms.factory + 12 mob rows + in-ground belt art &
+conveyor speed logic + alive ambient anims + 2-phase boss + custom arena + floor-lift
+entrance + ladder cutscene + port the theme into data.js) → then bestiary/scouter
+text-fit + suites + bump ?v=. Awaiting Red's approval of the boss room + theme.
+
 ## 2026-07-15 · M5.6 WAVE CARD MOTION · top placement + slide on/off (?v=m5m)
 
 Red: "i want the wave 5 to be closer to the top of the screen and it needs an

@@ -83,6 +83,25 @@ function autoEquipFromCollection(upgrade) {
   return changed;
 }
 
+// M6c (Red) BALANCE TESTING: force the WHITE (tier-1 COMMON) class-legal set
+// into every slot on realm entry — independent of the collection, so it
+// survives death and is never bumped up to legendary. Falls back to the lowest
+// tier if a slot has no T1. OFF by default; Settings › "White-gear test".
+function equipWhiteSet() {
+  if (!GAME_SAVE || !CURRENT) return;
+  DATA.equipSlots.forEach(function (slot) {
+    var pick = null, pt = 999;
+    for (var k in DATA.items) {
+      var it = DATA.items[k];
+      if (it.slot !== slot || (it.cls && it.cls !== CURRENT.cls)) continue;
+      var score = it.tier === 1 ? -1 : it.tier;      // WHITE first, else lowest
+      if (score < pt) { pt = score; pick = k; }
+    }
+    if (pick) { CURRENT.equipment[slot] = pick; collectItem(pick); }
+  });
+  persist();
+}
+
 // M5.5: split rolled loot into NEW items (not yet owned) and DUPLICATES
 // (already owned → BONUS XP by rarity). Dedup is against the PERSISTENT
 // collection only (intra-chest repeats stay, so drop-table roll counts are
@@ -1604,18 +1623,26 @@ var NexusScene = new Phaser.Class({
       notes.push(d.unlockAt ? 'Joins the realm ' + d.unlockAt + 's in.' : 'Hunts from the first second.');
       notes.push('May spawn as a CHAMPION (' + Math.round(DATA.affixes.mobRollChance * 100) + '% roll) wearing an affix.');
     } else {
-      var pk;
-      for (pk in d.patterns) {
-        var pat = d.patterns[pk];
-        // M5.6: not every verb is a projectile — scene-owned verbs (timber,
-        // ghost train, explode corpse, grasping hands…) have no count/shots.
-        var desc = pat.count ? (pat.count + ' bolts in a ring')
+      // M5.7: cap the pattern list so a big kit (the Engineer's 13 verbs) can't
+      // overflow the codex panel under the hints (text-fit, note 11). The full
+      // tactical read still lives in the scouter's ≤6 hints.
+      var pk, pkeys = [], PMAX = 7;
+      for (pk in d.patterns) pkeys.push(pk);
+      pkeys.slice(0, PMAX).forEach(function (pk2) {
+        var pat = d.patterns[pk2];
+        // not every verb is a projectile — scene-owned verbs (timber, ghost
+        // train, reactor overload…) have no count/shots.
+        var desc = pat.lobs ? (pat.lobs + ' marked impact circles')
+                 : (pat.count && pat.radius) ? (pat.count + ' telegraphed slams')
+                 : (pat.count && pat.keys) ? 'calls the line for help'
+                 : pat.count ? (pat.count + ' bolts in a ring')
                  : pat.shots ? (pat.shots + ' aimed bolts')
                  : 'a telegraphed strike';
-        var dmgTxt = (pat.dmg != null) ? (' · ' + pat.dmg + ' dmg') : '';
+        var dmgTxt = (pat.dmg != null && pat.dmg < 9999) ? (' · ' + pat.dmg + ' dmg') : '';
         var everyTxt = pat.everyMs ? (' · every ' + (pat.everyMs / 1000) + 's') : '';
-        notes.push(pk.toUpperCase() + ' — ' + desc + dmgTxt + everyTxt);
-      }
+        notes.push(pk2.toUpperCase() + ' — ' + desc + dmgTxt + everyTxt);
+      });
+      if (pkeys.length > PMAX) notes.push('…and ' + (pkeys.length - PMAX) + ' more moves — read the scouter.');
       (d.hints || []).forEach(function (h) { notes.push(h); });
     }
     var ny = cy + 60;
@@ -1759,6 +1786,11 @@ var RealmScene = new Phaser.Class({
       this.physics.world.setBounds(0, 0, WW, HH);
       this.wallBodies = null;
       this.setupGraveyard(WW, HH);                          // M5.6: the moonlit cemetery
+    } else if (this.hifiWorld && this.realmDef.kind === 'factory') {
+      WW = HH = DATA.realm.size;
+      this.physics.world.setBounds(0, 0, WW, HH);
+      this.wallBodies = null;
+      this.setupFactory(WW, HH);                            // M5.7: the robotics factory
     } else if (this.hifiWorld) {
       WW = HH = DATA.realm.size;
       this.physics.world.setBounds(0, 0, WW, HH);
@@ -1784,7 +1816,10 @@ var RealmScene = new Phaser.Class({
     // M5.5: gear REMAINS — a fresh hero auto-fills EMPTY slots from the best
     // owned (collected) gear before spawning. Fill-empty only, so a manual
     // downgrade equipped for testing is never yanked back up.
-    autoEquipFromCollection(false);
+    // M6c (Red): "White-gear test" (Settings) instead LOCKS the weakest starter
+    // set every entry, so balance testing stays in white gear across deaths.
+    if (SAVE.settings().whiteTest) equipWhiteSet();
+    else autoEquipFromCollection(false);
     this.player = Entities.createPlayer(this, start.x, start.y, CURRENT);
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
     this.rig = makeInputRig(this);
@@ -1833,6 +1868,7 @@ var RealmScene = new Phaser.Class({
     this.physics.add.collider(this.mobs, this.mobs);
     if (this._trunkColliderPending) this.wireGroveColliders();   // M5.0: fallen-trunk walls
     if (this._fenceColliderPending) this.wireGraveyardColliders();  // M5.6: destructible iron fences
+    if (this._factoryColliderPending) this.wireFactoryColliders();  // M5.7: prototype-bay pillars
     var self = this;
 
     // M3: walls are real — they block bodies AND shots (cover to kite around).
@@ -2033,6 +2069,12 @@ var RealmScene = new Phaser.Class({
       if (bs.def.waves) {
         ['nextExplodeAt', 'nextHandsAt', 'nextSigilAt', 'reaperAt'].forEach(function (k) { if (bs[k]) bs[k] += dt; });
       }
+      // M5.7/M6e: the Grand Engineer's / 130C-4's verb cadence clocks
+      if (bs.def.floorLift) {
+        ['nextPressAt', 'nextArcAt', 'nextTurretAt', 'nextCallAt',
+         'nextDrillAt', 'nextScrapAt', 'nextConeAt', 'nextStampAt', 'nextOverrideAt',
+         'nextReactorAt', 'ventedUntil', 'rootUntil'].forEach(function (k) { if (bs[k]) bs[k] += dt; });
+      }
     }
     // M5.0 grove scene clocks: falling trees, lingering trunks, glow patches,
     // corpse ledger, the phase-two channel
@@ -2057,6 +2099,19 @@ var RealmScene = new Phaser.Class({
     if (this.gasPatches) this.gasPatches.forEach(function (g) { g.dieAt += dt; if (g.lastTick) g.lastTick += dt; });
     if (this.soulWisps) this.soulWisps.forEach(function (s) { s.dieAt += dt; });
     if (this.graveFences) this.graveFences.forEach(function (f) { if (f.lastChewAt) f.lastChewAt += dt; });
+    // M5.7/M6e factory scene clocks: the transform cutscene, boss FX telegraphs
+    // (drill lane / cone / stamp waves / zone warns), the conveyor surge,
+    // coolant slow-field patches (map phase), deployed turrets, spark cadence.
+    if (this._engineerXform && this._engineerXform.until) this._engineerXform.until += dt;
+    if (this.engineerFx) { var EF = this.engineerFx;
+      ['reactorUntil'].forEach(function (k) { if (EF[k]) EF[k] += dt; });
+      ['drill', 'cone'].forEach(function (k) { if (EF[k] && EF[k].until) EF[k].until += dt; });
+      if (EF.stamp) { if (EF.stamp.aAt) EF.stamp.aAt += dt; if (EF.stamp.bAt) EF.stamp.bAt += dt; } }
+    if (this._zoneWarns) this._zoneWarns.forEach(function (w) { if (w.until) w.until += dt; });
+    if (this.conveyorSurge && this.conveyorSurge.until) this.conveyorSurge.until += dt;
+    if (this.coolantPatches) this.coolantPatches.forEach(function (p) { if (!p.dead) p.dieAt += dt; });
+    if (this.factoryTurrets) this.factoryTurrets.forEach(function (t) { if (t.fireAt) t.fireAt += dt; if (t.offAt) t.offAt += dt; });
+    if (this.factory && this.factory.nextSparkAt) this.factory.nextSparkAt += dt;
     if (this.player.state.curseUntil) { this.player.state.curseUntil += dt; if (this.player.state.curseNextAt) this.player.state.curseNextAt += dt; }
     if (this.ghostTrain && this.ghostTrain.warnUntil) this.ghostTrain.warnUntil += dt;   // M4.7 ghost track
     if (this.player.state.slowUntil) this.player.state.slowUntil += dt;                  // M4.7 the schedule
@@ -2161,6 +2216,8 @@ var RealmScene = new Phaser.Class({
     if (this.soulWisps) { this.soulWisps.forEach(function (s) { if (s.spr && s.spr.active) { try { s.spr.destroy(); } catch (e) {} } }); this.soulWisps = []; }
     if (this.witching && this.witching.grave && this.witching.grave.ring) { try { this.witching.grave.ring.destroy(); } catch (e) {} this.witching.grave = null; }
     if (this.clearReaper) this.clearReaper();               // M5.6: the reaper marches no more
+    // M5.7: the factory's coolant slow-field patches die with the swarm too
+    if (this.coolantPatches) { this.coolantPatches.forEach(function (p) { if (p.obj && p.obj.active) { try { p.obj.destroy(); } catch (e) {} } }); this.coolantPatches = []; }
     // full-screen destruction flash
     var W = this.scale.width, H = this.scale.height;
     var flash = this.add.rectangle(W / 2, H / 2, W, H, 0xffffff, 0.55).setScrollFactor(0).setDepth(75);
@@ -2226,6 +2283,9 @@ var RealmScene = new Phaser.Class({
     } else if (def.graveArrival && this.arenaGrave) {
       // M5.6: THE GRAVEKEEPER climbs out of the arena grave
       this.gravekeeperArrival(def);
+    } else if (def.floorLift && this.arenaBay) {
+      // M5.7: THE GRAND ENGINEER rises through the floor on the hydraulic lift
+      this.engineerArrival(def);
     } else {
       this.spawnBossNow(def, bx, by);
       this.showScouter(def);                             // E3: the workup sheet
@@ -2271,6 +2331,7 @@ var RealmScene = new Phaser.Class({
     if (def.patterns.ghostTrain) this.initConductor(this.boss, this.time.now);   // M4.7 pattern clocks
     if (def.patterns.timber) this.initGrovekeeper(this.boss, this.time.now);     // M5.0 grove verb clocks
     if (def.waves) this.initGravekeeper(this.boss, this.time.now);               // M5.6 wave loop + verbs
+    if (def.floorLift) this.initEngineer(this.boss, this.time.now);              // M5.7 engineer/mech verbs
   },
 
   // ---------------------- M4.7: THE CONDUCTOR — ARRIVAL + TRAIN VERBS --------
@@ -2667,6 +2728,7 @@ var RealmScene = new Phaser.Class({
     this.burst(bx, by, 40, def.deathTint);
     if (def.patterns.ghostTrain) this.clearConductorFx();   // M4.7: beam/rails/ties die with him
     if (def.patterns.timber) this.clearGrovekeeperFx();     // M5.0: beam/markers/vines die with him
+    if (def.floorLift) this.clearEngineerFx();              // M5.7: reactor/turrets/telegraphs die with him
     boss.destroy(); this.boss = null;
     if (this.bossBar) { this.bossBar.destroy(); this.bossBarBg.destroy(); this.bossName.destroy(); this.bossBar = null; }
     AUDIO.stopMusic();                                   // M4.5: the battle is decided — silence is the release
@@ -2715,18 +2777,11 @@ var RealmScene = new Phaser.Class({
     // becomes real when equipment lands at M3 (E1 phase 2).
     var L = this.pendingLoot, st = this.player.state;
     if (L.stat) ACCOUNT.potions[L.stat]++;
-    // M5.5 COLLECTION: every NEW item is OWNED now; gear AUTO-UPGRADES from the
-    // collection (best owned piece per slot). Duplicates already became bonus
-    // XP at the roll (folded into L.xp). No manual take — gear stays upgraded.
-    (L.items || []).forEach(function (k) { collectItem(k); });
-    var equippedNow = {};
-    DATA.equipSlots.forEach(function (s) { equippedNow[s] = CURRENT.equipment[s]; });
-    autoEquipFromCollection(true);                           // upgrade to best owned
-    applyEquipmentChange(this);                              // re-derive live stats (persists)
-    // record which of THIS chest's items landed on the hero (for the summary)
-    L.equipped = (L.items || []).filter(function (k) {
-      return CURRENT.equipment[DATA.items[k].slot] === k;
-    });
+    // M6b (Red): NO auto-equip. New items are OFFERED in the overlay and only
+    // COLLECTED + EQUIPPED when the player SELECTS them (so white-gear balance
+    // testing sticks — a declined drop is never owned and never re-fills a slot).
+    // The potion is banked and XP (base + close bonus + DUPLICATE bonus) applies
+    // now; duplicates already became bonus XP at the roll (folded into L.xp).
     Entities.grantXp(this, this.player, L.xp);
     ACCOUNT.records.realmsClosed++;
     ACCOUNT.records.totalKills += st.kills; st.kills = 0;    // banked, not lost
@@ -2735,54 +2790,133 @@ var RealmScene = new Phaser.Class({
     this.buildLootOverlay(L);
   },
 
-  // M5.5: the chest is now a COLLECTION SUMMARY (no manual take — items are
-  // auto-collected + auto-equipped at open). Rows: potion · XP (incl. dupe
-  // bonus) · each NEW item (collected, tagged EQUIPPED when it landed) · each
-  // DUPLICATE (already owned → +XP). ENTER/CLICK closes.
+  // M6b (Red) REDESIGN — the end-of-map chest is a COMPARE-AND-SELECT screen:
+  //  · YOUR LOADOUT strip: all four equipped slots, always visible.
+  //  · each NEW drop is OFFERED with a side-by-side stat compare vs the piece it
+  //    would replace — numbers GREEN when the drop raises a stat, RED when it
+  //    lowers one. [EQUIP] collects + equips it (re-derives live stats); a
+  //    DECLINED drop is discarded (never owned) so white-gear runs stay white.
+  //  · DUPLICATES (already owned) never appear as items — they were paid out as
+  //    bonus XP by rarity at the roll, listed here as info.
+  //  · ENTER or CLOSE leaves with only what you chose.
   buildLootOverlay: function (L) {
     if (this.lootUi) { this.lootUi.forEach(function (o) { o.destroy(); }); }
-    var self = this, st = this.player.state;
-    var W = this.scale.width, H = this.scale.height, cx = W / 2, cy = H / 2;
+    var self = this, st = this.player.state, cls = DATA.classes[CURRENT.cls], lvl = st.level;
+    var W = this.scale.width, H = this.scale.height, cx = W / 2;
     var items = L.items || [], dupes = L.dupes || [];
-    var rows = 1 + (L.stat ? 1 : 0) + items.length + dupes.length;   // XP row always
-    var panelH = 200 + Math.max(1, rows) * 56;
-    var ui = [];
-    ui.push(this.add.rectangle(cx, cy, W, H, 0x000000, 0.55).setScrollFactor(0).setDepth(84));
-    ui.push(this.add.rectangle(cx, cy, 500, panelH, 0x0f0f1b, 0.97).setScrollFactor(0).setDepth(85).setStrokeStyle(2, 0xffcd75));
-    ui.push(this.add.sprite(cx - 210, cy - panelH / 2 + 34, 'chest').setScale(2).setScrollFactor(0).setDepth(86));
-    ui.push(this.add.text(cx - 178, cy - panelH / 2 + 26, 'LOOT', { fontFamily: 'monospace', fontSize: 20, color: '#ffcd75' }).setScrollFactor(0).setDepth(86));
-    var y = cy - panelH / 2 + 88;
-    var row = function (tint, spr, sprScale, sprTint, title, titleColor, sub) {
-      ui.push(self.add.rectangle(cx, y, 460, 48, 0x1a1c2c, 1).setScrollFactor(0).setDepth(86).setStrokeStyle(1, tint));
-      if (spr) ui.push(self.add.sprite(cx - 206, y, spr).setScale(sprScale).setTint(sprTint).setScrollFactor(0).setDepth(87));
-      ui.push(self.add.text(cx - 180, y - 14, title, { fontFamily: 'monospace', fontSize: 13, color: titleColor }).setScrollFactor(0).setDepth(87));
-      ui.push(self.add.text(cx - 180, y + 4, sub, { fontFamily: 'monospace', fontSize: 10, color: '#94b0c2' }).setScrollFactor(0).setDepth(87));
-      y += 56;
-    };
-    if (L.stat) row(0x29366f, 'potion', 2.2, DATA.potions.tints[L.stat],
-      'POTION OF ' + L.stat.toUpperCase(), '#f4f4f4',
-      '+' + DATA.potions.boost + ' ' + L.stat.toUpperCase() + ' — banked to the stash (survives death)');
-    row(0x29366f, 'px', 6, 0xffcd75, '+' + L.xp + ' XP',
-      '#f4f4f4', 'applied — now level ' + st.level + (st.level >= DATA.xp.cap ? ' (MAX)' : ''));
-    // NEW items — collected + (auto-)equipped
+    var PW = 660, headH = 112, itemH = 92, dupeH = 26;
+    var bodyH = 8 + (items.length ? items.length * itemH : 46) + (dupes.length ? 24 + dupes.length * dupeH : 0) + 56;
+    var panelH = Math.min(H - 16, headH + bodyH);
+    var cy = H / 2, top = cy - panelH / 2, ui = [];
+    // dim backdrop — interactive so world clicks are swallowed, but never closes
+    ui.push(this.add.rectangle(cx, cy, W, H, 0x000000, 0.62).setScrollFactor(0).setDepth(84).setInteractive());
+    ui.push(this.add.rectangle(cx, cy, PW, panelH, 0x0f0f1b, 0.98).setScrollFactor(0).setDepth(85).setStrokeStyle(2, 0xffcd75));
+    // ---- header
+    ui.push(this.add.sprite(cx - PW / 2 + 34, top + 30, 'chest').setScale(1.8).setScrollFactor(0).setDepth(86));
+    ui.push(this.add.text(cx - PW / 2 + 60, top + 16, 'LOOT', { fontFamily: 'monospace', fontSize: 20, color: '#ffcd75' }).setScrollFactor(0).setDepth(86));
+    ui.push(this.add.text(cx - PW / 2 + 60, top + 40, (L.headline || 'the realm has fallen'), { fontFamily: 'monospace', fontSize: 11, color: '#94b0c2' }).setScrollFactor(0).setDepth(86));
+    var xpNote = '+' + L.xp + ' XP' + (L.stat ? '  ·  POTION OF ' + L.stat.toUpperCase() + ' banked' : '') + '  ·  lvl ' + st.level + (st.level >= DATA.xp.cap ? ' (MAX)' : '');
+    ui.push(this.add.text(cx + PW / 2 - 20, top + 22, xpNote, { fontFamily: 'monospace', fontSize: 11, color: '#f4f4f4' }).setOrigin(1, 0).setScrollFactor(0).setDepth(86));
+    // ---- YOUR LOADOUT strip (equipped in every slot — always visible)
+    var stripY = top + 74, cellW = (PW - 40) / DATA.equipSlots.length;
+    ui.push(this.add.text(cx - PW / 2 + 20, stripY - 16, 'YOUR LOADOUT', { fontFamily: 'monospace', fontSize: 10, color: '#6c7a99' }).setScrollFactor(0).setDepth(86));
+    DATA.equipSlots.forEach(function (slot, i) {
+      var celX = cx - PW / 2 + 20 + i * cellW;
+      ui.push(self.add.rectangle(celX + cellW / 2, stripY + 14, cellW - 8, 34, 0x1a1c2c, 1).setScrollFactor(0).setDepth(86).setStrokeStyle(1, 0x2a3350));
+      var eqKey = CURRENT.equipment[slot];
+      if (eqKey) {
+        var eit = DATA.items[eqKey];
+        ui.push(self.add.sprite(celX + 16, stripY + 14, eit.texture).setScale(1.5).setTint(itemTint(eqKey)).setScrollFactor(0).setDepth(87));
+        ui.push(self.add.text(celX + 30, stripY + 3, slot.toUpperCase(), { fontFamily: 'monospace', fontSize: 8, color: '#6c7a99' }).setScrollFactor(0).setDepth(87));
+        ui.push(self.add.text(celX + 30, stripY + 14, DATA.tiers[eit.tier].rarity + ' ' + eit.name, { fontFamily: 'monospace', fontSize: 8, color: itemColor(eqKey), wordWrap: { width: cellW - 42 } }).setScrollFactor(0).setDepth(87));
+      } else {
+        ui.push(self.add.text(celX + 10, stripY + 7, slot.toUpperCase() + '\n— empty —', { fontFamily: 'monospace', fontSize: 8, color: '#4a566f' }).setScrollFactor(0).setDepth(87));
+      }
+    });
+    // ---- OFFERED items (compare + select)
+    var y = top + headH + 4;
+    if (!items.length) {
+      ui.push(this.add.text(cx, y + 14, 'no new gear dropped', { fontFamily: 'monospace', fontSize: 12, color: '#6c7a99' }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(86));
+      y += 46;
+    }
     items.forEach(function (key) {
-      var it = DATA.items[key], eq = (L.equipped || []).indexOf(key) >= 0;
-      row(itemTint(key), it.texture, 2, itemTint(key),
-        itemLabel(key) + (eq ? '   ◄ EQUIPPED' : '   · collected'),
-        itemColor(key), eq ? it.desc : it.desc + '  ·  owned (a better piece is equipped)');
+      var it = DATA.items[key], slot = it.slot, curKey = CURRENT.equipment[slot];
+      var equippedThis = curKey === key;
+      var eqBefore = {}, eqAfter = {};
+      DATA.equipSlots.forEach(function (s) { eqBefore[s] = CURRENT.equipment[s]; eqAfter[s] = CURRENT.equipment[s]; });
+      eqAfter[slot] = key;
+      var sB = SIM.statsFor(cls, lvl, CURRENT.potionsDrunk, eqBefore);
+      var sA = SIM.statsFor(cls, lvl, CURRENT.potionsDrunk, eqAfter);
+      var dmgB = SIM.weaponMod(eqBefore).dmg, dmgA = SIM.weaponMod(eqAfter).dmg;
+      ui.push(self.add.rectangle(cx, y + itemH / 2 - 6, PW - 40, itemH - 12, 0x1a1c2c, 1).setScrollFactor(0).setDepth(86).setStrokeStyle(1, equippedThis ? 0x38b764 : itemTint(key)));
+      ui.push(self.add.sprite(cx - PW / 2 + 42, y + 20, it.texture).setScale(2).setTint(itemTint(key)).setScrollFactor(0).setDepth(87));
+      ui.push(self.add.text(cx - PW / 2 + 68, y + 8, itemLabel(key) + '   (' + slot + ')', { fontFamily: 'monospace', fontSize: 12, color: itemColor(key) }).setScrollFactor(0).setDepth(87));
+      var replTxt = curKey ? 'replaces  ' + DATA.tiers[DATA.items[curKey].tier].rarity + ' ' + DATA.items[curKey].name : 'fills an EMPTY ' + slot + ' slot';
+      ui.push(self.add.text(cx - PW / 2 + 68, y + 24, replTxt, { fontFamily: 'monospace', fontSize: 9, color: '#94b0c2' }).setScrollFactor(0).setDepth(87));
+      // stat chips — GREEN up / RED down
+      var chips = [];
+      if (slot === 'weapon' && dmgA !== dmgB) chips.push(['DMG', dmgB, dmgA]);
+      ['att', 'def', 'hp', 'mp', 'spd', 'dex'].forEach(function (k) { if (sA[k] !== sB[k]) chips.push([k.toUpperCase(), sB[k], sA[k]]); });
+      var chipX = cx - PW / 2 + 68, chipY = y + 42;
+      if (!chips.length) {
+        ui.push(self.add.text(chipX, chipY, 'no stat change', { fontFamily: 'monospace', fontSize: 10, color: '#6c7a99' }).setScrollFactor(0).setDepth(87));
+      } else {
+        chips.forEach(function (c) {
+          var col = c[2] > c[1] ? '#38b764' : '#e05b5b';
+          var t = self.add.text(chipX, chipY, c[0] + ' ' + c[1] + '→' + c[2], { fontFamily: 'monospace', fontSize: 11, color: col }).setScrollFactor(0).setDepth(87);
+          ui.push(t); chipX += t.width + 14;
+          if (chipX > cx + PW / 2 - 150) { chipX = cx - PW / 2 + 68; chipY += 16; }
+        });
+      }
+      // EQUIP button (or EQUIPPED tag)
+      if (equippedThis) {
+        ui.push(self.add.text(cx + PW / 2 - 30, y + 24, '◄ EQUIPPED', { fontFamily: 'monospace', fontSize: 13, color: '#38b764' }).setOrigin(1, 0.5).setScrollFactor(0).setDepth(88));
+      } else {
+        var bw = 108, bx = cx + PW / 2 - 20 - bw / 2, by = y + 24;
+        var btn = self.add.rectangle(bx, by, bw, 30, 0x29366f, 1).setScrollFactor(0).setDepth(87).setStrokeStyle(1, 0x5a78c0).setInteractive({ useHandCursor: true });
+        var blbl = self.add.text(bx, by, 'EQUIP', { fontFamily: 'monospace', fontSize: 13, color: '#f4f4f4' }).setOrigin(0.5).setScrollFactor(0).setDepth(88);
+        ui.push(btn); ui.push(blbl);
+        btn.on('pointerover', function () { btn.setFillStyle(0x3a4a90, 1); });
+        btn.on('pointerout', function () { btn.setFillStyle(0x29366f, 1); });
+        btn.on('pointerdown', function () { self.equipDropped(L, key); });
+      }
+      y += itemH;
     });
-    // DUPLICATES — already owned → bonus XP
-    dupes.forEach(function (d) {
-      var it = DATA.items[d.key];
-      row(0x3a3550, it.texture, 2, 0x8a7fb0,
-        itemLabel(d.key) + '   · ALREADY OWNED', '#8a7fb0', 'duplicate → +' + d.xp + ' bonus XP');
-    });
-    ui.push(this.add.text(cx, cy + panelH / 2 - 24, '[ ENTER or CLICK to continue ]',
-      { fontFamily: 'monospace', fontSize: 14, color: '#ffcd75' }).setScrollFactor(0).setOrigin(0.5).setDepth(86));
+    // ---- DUPLICATES → bonus XP (info only; already applied at the roll)
+    if (dupes.length) {
+      ui.push(this.add.text(cx - PW / 2 + 20, y + 2, 'DUPLICATES  (already owned → bonus XP by rarity)', { fontFamily: 'monospace', fontSize: 10, color: '#8a7fb0' }).setScrollFactor(0).setDepth(86));
+      y += 24;
+      dupes.forEach(function (d) {
+        var it = DATA.items[d.key];
+        ui.push(self.add.sprite(cx - PW / 2 + 30, y + 9, it.texture).setScale(1.3).setTint(0x8a7fb0).setScrollFactor(0).setDepth(87));
+        ui.push(self.add.text(cx - PW / 2 + 46, y + 3, DATA.tiers[it.tier].rarity + ' ' + it.name + '   →  +' + d.xp + ' XP', { fontFamily: 'monospace', fontSize: 10, color: '#8a7fb0' }).setScrollFactor(0).setDepth(87));
+        y += dupeH;
+      });
+    }
+    // ---- footer: CLOSE (leaves with only what you chose)
+    var fy = top + panelH - 24;
+    var cbtn = this.add.rectangle(cx, fy, 280, 30, 0x1a1c2c, 1).setScrollFactor(0).setDepth(87).setStrokeStyle(1, 0xffcd75).setInteractive({ useHandCursor: true });
+    var clbl = this.add.text(cx, fy, '[ ENTER or CLICK to leave ]', { fontFamily: 'monospace', fontSize: 13, color: '#ffcd75' }).setOrigin(0.5).setScrollFactor(0).setDepth(88);
+    ui.push(cbtn); ui.push(clbl);
+    cbtn.on('pointerover', function () { cbtn.setFillStyle(0x29366f, 1); });
+    cbtn.on('pointerout', function () { cbtn.setFillStyle(0x1a1c2c, 1); });
+    cbtn.on('pointerdown', function () { self.takeLoot(); });
     this.lootUi = ui;
     this.rig.keys.ENTER.off('down');
     this.rig.keys.ENTER.once('down', function () { self.takeLoot(); });
-    this.input.once('pointerdown', function () { self.takeLoot(); });
+  },
+
+  // M6b (Red): equip a chosen drop — collect it (now owned), place it in its
+  // slot, re-derive live stats (persists), then rebuild the overlay so the
+  // LOADOUT strip + compare numbers refresh. Declined drops are never collected.
+  equipDropped: function (L, key) {
+    if (!this.looting) return;
+    var it = DATA.items[key]; if (!it) return;
+    collectItem(key);
+    CURRENT.equipment[it.slot] = key;
+    applyEquipmentChange(this);
+    AUDIO.play('drink');
+    this.buildLootOverlay(L);
   },
 
   // M5.5: close the chest summary (all rewards already applied at open).
@@ -2992,6 +3126,10 @@ var RealmScene = new Phaser.Class({
       Entities.grantXp(self, self.player, mob.mob.xp || mob.mob.def.xp);   // E9: affix bounty
       self.burst(mob.x, mob.y, DATA.juice.deathParticles, mob.mob.def.deathTint);
       AUDIO.play('die');
+      // M5.7: a Bulwark's guard-aura ring dies with it (pooled sprite reuse
+      // would otherwise leak the circle).
+      if (mob.mob.auraSpr) { try { mob.mob.auraSpr.destroy(); } catch (e) {} mob.mob.auraSpr = null; }
+      if (mob.mob.flameRing) { try { mob.mob.flameRing.destroy(); } catch (e) {} mob.mob.flameRing = null; }
       // E9 v2: champion kills feed the boss chest (CHAMPION BOUNTY)
       if (mob.mob.affix) {
         self.championKills++;
@@ -3083,7 +3221,10 @@ var RealmScene = new Phaser.Class({
     this.events.on('boss-died', function (boss) {
       if (!self.player.state.alive) return;
       var bd = boss.boss;
-      if (bd.def.phaseTwo && !bd.phase2done && !bd.resurrecting) self.grovekeeperResurrection(boss);
+      // M5.7: the Engineer's phase-two is the mech transformation cutscene,
+      // not the grovekeeper's pixie revive — branch on floorLift.
+      if (bd.def.floorLift && bd.def.phaseTwo && !bd.phase2done && !bd.resurrecting) self.engineerTransform(boss);
+      else if (bd.def.phaseTwo && !bd.phase2done && !bd.resurrecting) self.grovekeeperResurrection(boss);
       else self.onBossDown(boss);
     });
     this.events.on('player-hurt', function (dmg) {
@@ -3655,9 +3796,14 @@ var RealmScene = new Phaser.Class({
   // Drop a lingering green patch; it fades + self-destructs via tween (pause-
   // safe). updateSlime ticks damage on a player standing in any live patch.
   dropSlime: function (x, y, cfg) {
-    var patch = this.add.ellipse(x, y, cfg.radius * 2, cfg.radius * 1.5, 0x49e83b, 0.32)
-      .setDepth(3).setStrokeStyle(1, 0x8ff0a5, 0.5);
+    // M5.7: the Forge Hound sets fire:true — the patch recolors to embers and
+    // reads/labels as a burn trail (same hazard-pool tech as the green slime).
+    var fill = cfg.fire ? 0xff7a2c : 0x49e83b, stroke = cfg.fire ? 0xffd34d : 0x8ff0a5;
+    var patch = this.add.ellipse(x, y, cfg.radius * 2, cfg.radius * 1.5, fill, 0.32)
+      .setDepth(3).setStrokeStyle(1, stroke, 0.5);
+    if (cfg.fire) patch.setBlendMode(Phaser.BlendModes.ADD);
     var rec = { obj: patch, x: x, y: y, r: cfg.radius, dmg: cfg.dmg, tickMs: cfg.tickMs,
+                src: cfg.fire ? 'a burning trail' : 'toxic slime',
                 dieAt: this.time.now + cfg.lifeMs };
     this.slimePatches.push(rec);
     this.tweens.add({ targets: patch, alpha: 0.08, duration: cfg.lifeMs, ease: 'Sine.In',
@@ -3666,17 +3812,17 @@ var RealmScene = new Phaser.Class({
 
   updateSlime: function (time) {
     if (!this.slimePatches || !this.slimePatches.length) return;
-    var live = [], p = this.player, inSlime = false, dmg = 0, tickMs = 480;
+    var live = [], p = this.player, inSlime = false, dmg = 0, tickMs = 480, src = 'toxic slime';
     for (var i = 0; i < this.slimePatches.length; i++) {
       var s = this.slimePatches[i];
       if (s.dead || time >= s.dieAt) { if (s.obj && s.obj.active) { try { s.obj.destroy(); } catch (e) {} } continue; }
       live.push(s);
-      if (p.state.alive && Math.hypot(p.x - s.x, p.y - s.y) < s.r) { inSlime = true; dmg = s.dmg; tickMs = s.tickMs; }
+      if (p.state.alive && Math.hypot(p.x - s.x, p.y - s.y) < s.r) { inSlime = true; dmg = s.dmg; tickMs = s.tickMs; src = s.src || 'toxic slime'; }
     }
     this.slimePatches = live;
     if (inSlime && time - (this._lastSlimeTickAt || 0) >= tickMs) {
       this._lastSlimeTickAt = time;
-      Entities.hurtPlayer(this, p, dmg, time, 'toxic slime');
+      Entities.hurtPlayer(this, p, dmg, time, src);
     }
   },
 
@@ -3762,6 +3908,7 @@ var RealmScene = new Phaser.Class({
     if (!this.hitstopActive) this.updateGhostTrain(time, delta);
     this.updateGrove(time, delta);                         // M5.0: grove hazard/queues/revive
     this.updateGraveyard(time, delta);                     // M5.6: witching cycle + gate/fences
+    this.updateFactory(time, delta);                       // M5.7: conveyors + alive props + engineer
     if (!this.player.state.alive && this.lanternG) this.lanternG.clear();   // no beam over the death screen
     if (!this.player.state.alive && this.sunG) this.sunG.clear();           // M5.0: sunlance too
     this.updateHud();
@@ -5179,6 +5326,552 @@ var RealmScene = new Phaser.Class({
     for (var c3 = this.corpses.length - 1; c3 >= 0; c3--) {
       if (this.corpses[c3].used || time - this.corpses[c3].at > 6000) this.corpses.splice(c3, 1);
     }
+  },
+
+  // ======================= M5.7 — THE ROBOTICS FACTORY =====================
+  // Riveted-steel floors, catwalk borders, IN-GROUND CONVEYOR TRAVELATORS (the
+  // map mechanic — moving WITH a belt bursts you along, AGAINST it slows you),
+  // and ALIVE ambient machinery (scrolling belts, sweeping arms, hammering
+  // presses, spinning fans, sparks, glowing smelters). At the north looms THE
+  // PROTOTYPE BAY — the boss arena: 4 cover PILLARS, ceiling presses, wall
+  // turrets, and the dormant PROTOTYPE 130C-4 on its gantry (visible all fight).
+  // Ambient stands down while the boss lives / arrives. TUNE ME: everything.
+  setupFactory: function (WW, HH) {
+    var self = this;
+    this._realmStart = { x: WW * 0.5, y: HH * 0.90 };
+    this.add.tileSprite(WW / 2, HH / 2, WW, HH, 'factoryFloor').setDepth(-20);
+    [[WW / 2, 26, WW, 52], [WW / 2, HH - 26, WW, 52], [26, HH / 2, 52, HH], [WW - 26, HH / 2, 52, HH]].forEach(function (b) {
+      self.add.tileSprite(b[0], b[1], b[2], b[3], 'factoryHazard').setDepth(-19).setAlpha(0.9);
+    });
+    this.add.tileSprite(WW / 2, HH * 0.5, WW, 96, 'factoryCatwalk').setDepth(-18).setAlpha(0.85);
+    // IN-GROUND CONVEYOR TRAVELATORS — the map mechanic (lanes across the floor)
+    this.conveyors = [];
+    var ccfg = this.realmDef.conveyor || { push: 150, withMult: 1.4, againstMult: 0.6, scrollSpeed: 90 };
+    // THREE NON-OVERLAPPING lanes (Red 2026-07-15): two side verticals + one
+    // central horizontal, all clear of each other AND the boss bay (top, y<0.33).
+    // A up (x .19–.26), B down (x .74–.81), C right (x .29–.71) — gaps between all.
+    [{ x: WW * 0.22, y: HH * 0.63, w: 150, h: HH * 0.56, dir: { x: 0, y: -1 } },
+     { x: WW * 0.78, y: HH * 0.63, w: 150, h: HH * 0.56, dir: { x: 0, y: 1 } },
+     { x: WW * 0.50, y: HH * 0.52, w: WW * 0.42, h: 150, dir: { x: 1, y: 0 } }].forEach(function (L) {
+      var spr = self.add.tileSprite(L.x, L.y, L.dir.x !== 0 ? L.h : L.w, L.dir.x !== 0 ? L.w : L.h, 'convBelt').setDepth(-17);
+      if (L.dir.x !== 0) spr.setRotation(Math.PI / 2);
+      self.conveyors.push({ spr: spr, x: L.x, y: L.y, w: L.w, h: L.h, dir: L.dir, cfg: ccfg });
+    });
+    // ambient ALIVE props (animated in updateFactory)
+    this.factory = { cfg: this.realmDef.factoryCycle || { sparkEveryMs: 700, steamEveryMs: 2600 },
+                     nextSparkAt: this.time.now + 700, arms: [], presses: [] };
+    [[WW * 0.2, HH * 0.42], [WW * 0.78, HH * 0.44], [WW * 0.4, HH * 0.68], [WW * 0.68, HH * 0.32]].forEach(function (p, i) {
+      self.add.circle(p[0], p[1], 10, 0x454e63).setDepth(2);
+      var arm = self.add.rectangle(p[0], p[1], 56, 10, 0x8a94a6).setOrigin(0, 0.5).setDepth(2).setRotation(i);
+      self.add.circle(p[0], p[1], 5, 0x41d6f6).setDepth(3);
+      self.factory.arms.push({ arm: arm, x: p[0], y: p[1], phase: i, sp: 1.0 + (i % 3) * 0.4 });
+    });
+    [[WW * 0.34, HH * 0.34], [WW * 0.6, HH * 0.72]].forEach(function (p, i) {
+      self.add.rectangle(p[0], p[1] - 40, 54, 14, 0x3d4456).setDepth(2);
+      var head = self.add.rectangle(p[0], p[1] - 20, 44, 26, 0x697386).setDepth(2).setStrokeStyle(2, 0x22283a);
+      self.factory.presses.push({ head: head, y0: p[1] - 30, phase: i * 900 });
+    });
+    [[WW * 0.15, HH * 0.75], [WW * 0.85, HH * 0.66], [WW * 0.5, HH * 0.26]].forEach(function (p) {
+      var fan = self.add.star(p[0], p[1], 4, 6, 20, 0x2b3245).setDepth(1);
+      self.tweens.add({ targets: fan, angle: 360, duration: 900, repeat: -1 });
+    });
+    [[WW * 0.24, HH * 0.30], [WW * 0.8, HH * 0.82]].forEach(function (p) {
+      var glow = self.add.circle(p[0], p[1], 26, 0xff7d3a, 0.5).setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
+      self.tweens.add({ targets: glow, alpha: { from: 0.5, to: 0.85 }, scale: { from: 1, to: 1.15 }, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    });
+    this.coolantPatches = [];
+    this.buildPrototypeBay(WW, HH);
+  },
+
+  // The custom boss arena — built at setup so the dormant mech looms all run.
+  buildPrototypeBay: function (WW, HH) {
+    var self = this, BC = { x: WW * 0.5, y: HH * 0.18 };
+    this.arenaBay = { x: BC.x, y: BC.y, r: 360 };
+    this.add.rectangle(BC.x, BC.y, 720, 720, 0x181a26, 0).setStrokeStyle(6, 0xffcd45, 0.3).setDepth(-16);
+    this.add.tileSprite(BC.x, BC.y - 360, 720, 40, 'factoryHazard').setDepth(-16).setAlpha(0.8);
+    this.add.tileSprite(BC.x, BC.y + 360, 720, 40, 'factoryHazard').setDepth(-16).setAlpha(0.8);
+    this.bayBelts = [this.add.tileSprite(BC.x, BC.y, 120, 720, 'convBelt').setDepth(-15),
+                     this.add.tileSprite(BC.x, BC.y, 720, 120, 'convBelt').setDepth(-15).setRotation(Math.PI / 2)];
+    // 4 cover PILLARS — static bodies that break LOS for the reactor overload
+    this.pillarBodies = [];
+    this.pillarRects = [];
+    [[-150, -120], [150, -120], [-150, 120], [150, 120]].forEach(function (o) {
+      var px = BC.x + o[0], py = BC.y + o[1];
+      var pil = self.add.rectangle(px, py, 50, 50, 0x5a6072).setStrokeStyle(3, 0x22283a).setDepth(4);
+      self.add.rectangle(px, py, 50, 8, 0xffcd45, 0.6).setDepth(5);
+      self.physics.add.existing(pil, true);
+      self.pillarBodies.push(pil);
+      self.pillarRects.push(new Phaser.Geom.Rectangle(px - 25, py - 25, 50, 50));
+    });
+    this.bayPresses = [];
+    [[-150, 0], [150, 0], [0, -120], [0, 120]].forEach(function (o) {
+      self.bayPresses.push({ x: BC.x + o[0], y: BC.y + o[1] });
+    });
+    this.bayTurrets = [{ x: BC.x - 350, y: BC.y }, { x: BC.x + 350, y: BC.y }, { x: BC.x, y: BC.y - 350 }, { x: BC.x, y: BC.y + 350 }];
+    this.bayGantry = this.add.rectangle(BC.x, BC.y - 300, 170, 30, 0x454e63).setStrokeStyle(2, 0x22283a).setDepth(3);
+    this.dormantMech = this.add.image(BC.x, BC.y - 322, 'mechHi').setDepth(3).setScale(1.4).setTint(0x5a6072);
+    for (var l = 0; l < 5; l++) this.add.rectangle(BC.x, BC.y - 258 + l * 14, 22, 4, 0x697386).setDepth(2);
+    this.add.rectangle(BC.x - 12, BC.y - 250, 3, 96, 0x697386).setDepth(2);
+    this.add.rectangle(BC.x + 12, BC.y - 250, 3, 96, 0x697386).setDepth(2);
+    this._factoryColliderPending = true;
+  },
+  wireFactoryColliders: function () {
+    if (!this._factoryColliderPending) return;
+    this._factoryColliderPending = false;
+    if (!this.pillarBodies || !this.pillarBodies.length) return;
+    var self = this;
+    // M6e: pillars block BODIES only — shots fly over (squat pistons). They
+    // used to eat player arrows, which read as "hitting the boss does nothing";
+    // with the reactor no longer LOS-based they have no bullet-blocking job.
+    this.pillarBodies.forEach(function (pil) {
+      self.physics.add.collider(self.player, pil);
+      self.physics.add.collider(self.mobs, pil);
+    });
+  },
+
+  updateFactory: function (time, delta) {
+    if (!this.realmDef || this.realmDef.kind !== 'factory') return;
+    var p = this.player, alive = p.state.alive;
+    this.wrapFactory();                                    // toroidal map — off one edge, on the other
+    this.updateConveyors(time, delta);
+    this.updateFactoryProps(time, alive && !this.closing && !this.engineerArrivalActive);
+    this.updateCoolant(time);
+    this.updateFactoryTurrets(time);
+    if (this._engineerXform && time >= this._engineerXform.until) {
+      var boss = this._engineerXform.boss; this._engineerXform = null; this.engineerTransformDone(boss);
+    }
+  },
+  // SCREEN WRAP (Red 2026-07-15): the factory is TOROIDAL — the player and the
+  // swarm that walk off one edge reappear on the opposite side (mirrors the
+  // graveyard). The Grand Engineer / mech is a separate this.boss object and is
+  // NOT in this.mobs, so it never wraps — it stays hunting on the field.
+  wrapFactory: function () {
+    var WW = this.worldW, HH = this.worldH;
+    var wrap = function (o) {
+      if (!o) return;
+      var nx = o.x, ny = o.y, moved = false;
+      if (o.x < 0) { nx = o.x + WW; moved = true; } else if (o.x >= WW) { nx = o.x - WW; moved = true; }
+      if (o.y < 0) { ny = o.y + HH; moved = true; } else if (o.y >= HH) { ny = o.y - HH; moved = true; }
+      if (!moved) return;
+      if (o.body && o.body.reset) { var vx = o.body.velocity.x, vy = o.body.velocity.y; o.body.reset(nx, ny); o.body.velocity.x = vx; o.body.velocity.y = vy; }
+      else { o.x = nx; o.y = ny; }
+    };
+    wrap(this.player);
+    this.mobs.children.iterate(function (m) { if (m && m.active && m.mob && !m.mob.bossWave) wrap(m); });
+  },
+  updateConveyors: function (time, delta) {
+    if (!this.conveyors) return;
+    var dt = delta / 1000, self = this;
+    // M6e CONVEYOR OVERRIDE — while the surge lives the belts run red + harder
+    var surge = 1;
+    if (this.conveyorSurge) {
+      if (time < this.conveyorSurge.until) surge = this.conveyorSurge.mult;
+      else { this.conveyorSurge = null; this.conveyors.forEach(function (c) { c.spr.clearTint(); }); }
+    }
+    this.conveyors.forEach(function (c) {
+      c.spr.tilePositionY -= c.cfg.scrollSpeed * surge * dt;
+      // belts shove the PLAYER only (Red 2026-07-15) — mobs are not sped up by them.
+      var push = c.cfg.push * surge * dt, hw = c.w / 2, hh = c.h / 2, p = self.player;
+      if (p.state.alive && Math.abs(p.x - c.x) < hw && Math.abs(p.y - c.y) < hh) { p.x += c.dir.x * push; p.y += c.dir.y * push; }
+    });
+  },
+  updateFactoryProps: function (time, ambient) {
+    var F = this.factory; if (!F) return;
+    F.arms.forEach(function (a) { a.arm.setRotation(Math.sin(time / 700 * a.sp + a.phase) * 0.9); });
+    F.presses.forEach(function (pr) { var t = (time + pr.phase) % 1200; var d = t < 300 ? t / 300 : (t < 500 ? 1 : (t < 700 ? 1 - (t - 500) / 200 : 0)); pr.head.y = pr.y0 + d * 22; });
+    if (!ambient) return;
+    if (time >= F.nextSparkAt) {
+      F.nextSparkAt = time + F.cfg.sparkEveryMs;
+      if (F.arms.length) { var a = F.arms[Math.floor(SIM.rng() * F.arms.length)]; this.burst(a.x + (SIM.rng() * 2 - 1) * 30, a.y, 5, 0xffd34d); }
+    }
+  },
+
+  // ---- new-mob scene hooks (coolant slow-field / bulwark ward / mend / flame) --
+  dropCoolant: function (x, y, cfg) {
+    if (this.boss) return;   // M6e (Red): NO slow-pools anywhere in the boss fight
+    this.coolantPatches = this.coolantPatches || [];
+    var patch = this.add.ellipse(x, y, cfg.radius * 2, cfg.radius * 1.6, 0x8fe0ff, 0.22).setDepth(3).setStrokeStyle(1, 0xc2fbff, 0.5).setBlendMode(Phaser.BlendModes.ADD);
+    var rec = { obj: patch, x: x, y: y, r: cfg.radius, slowMult: cfg.slowMult, dieAt: this.time.now + cfg.lifeMs };
+    this.coolantPatches.push(rec);
+    this.tweens.add({ targets: patch, alpha: 0.06, duration: cfg.lifeMs, ease: 'Sine.In', onComplete: function () { rec.dead = true; try { patch.destroy(); } catch (e) {} } });
+  },
+  updateCoolant: function (time) {
+    if (!this.coolantPatches || !this.coolantPatches.length) return;
+    var live = [], p = this.player, inField = false, mult = 1;
+    for (var i = 0; i < this.coolantPatches.length; i++) {
+      var s = this.coolantPatches[i];
+      if (s.dead || time >= s.dieAt) { if (s.obj && s.obj.active) { try { s.obj.destroy(); } catch (e) {} } continue; }
+      live.push(s);
+      if (p.state.alive && Math.hypot(p.x - s.x, p.y - s.y) < s.r) { inField = true; mult = Math.min(mult, s.slowMult); }
+    }
+    this.coolantPatches = live;
+    if (inField) { p.state.slowUntil = time + 160; p.state.slowMult = mult; }
+  },
+  updateGuardAura: function (m, cfg, time) {
+    if (!m.mob.auraSpr) m.mob.auraSpr = this.add.circle(m.x, m.y, cfg.radius, 0x94b0c2, 0.05).setStrokeStyle(2, 0x94b0c2, 0.3).setDepth(2);
+    m.mob.auraSpr.setPosition(m.x, m.y);
+    this.mobs.children.iterate(function (b) { if (b && b.active && b !== m && b.mob && Math.hypot(b.x - m.x, b.y - m.y) < cfg.radius) b.mob.guardShieldUntil = time + 300; });
+  },
+  mendNearby: function (m, cfg) {
+    var self = this, healed = 0;
+    this.mobs.children.iterate(function (b) {
+      if (b && b.active && b !== m && b.mob && b.mob.maxHp && b.mob.hp < b.mob.maxHp && Math.hypot(b.x - m.x, b.y - m.y) < cfg.radius) {
+        b.mob.hp = Math.min(b.mob.maxHp, b.mob.hp + cfg.amount);
+        if (healed++ < 3) self.burst(b.x, b.y - 6, 3, 0x7fffbf);
+      }
+    });
+  },
+  flameCircleWarn: function (m, cfg) {
+    var ring = this.add.circle(m.mob.flameX, m.mob.flameY, cfg.radius, cfg.tint || 0xff7a2c, 0.12).setStrokeStyle(2, 0xffd34d, 0.8).setDepth(2);
+    this.tweens.add({ targets: ring, scale: { from: 0.4, to: 1 }, duration: cfg.windupMs });
+    m.mob.flameRing = ring;
+  },
+  flameCircleBlast: function (m, cfg) {
+    var x = m.mob.flameX, y = m.mob.flameY;
+    if (m.mob.flameRing) { try { m.mob.flameRing.destroy(); } catch (e) {} m.mob.flameRing = null; }
+    this.burst(x, y, 14, 0xff7a2c); try { AUDIO.play('crash'); } catch (e) {}
+    if (this.player.state.alive && Math.hypot(this.player.x - x, this.player.y - y) < cfg.radius)
+      Entities.hurtPlayer(this, this.player, cfg.dmg, this.time.now, 'a Purge Flamer');
+    this.dropSlime(x, y, { radius: cfg.radius * 0.8, lifeMs: cfg.lingerMs, dmg: cfg.lingerDmg, tickMs: cfg.tickMs, fire: true });
+  },
+
+  // ================== M5.7 — THE GRAND ENGINEER (2-phase boss) ==============
+  engineerArrival: function (def) {
+    var self = this, g = this.arenaBay;
+    this.engineerArrivalActive = true;
+    // M6e (Red): clear any lingering coolant slow-pools — the fight starts clean
+    if (this.coolantPatches) { this.coolantPatches.forEach(function (p) { if (p.obj && p.obj.active) { try { p.obj.destroy(); } catch (e) {} } }); this.coolantPatches = []; }
+    this.player.setPosition(g.x, g.y + 300);
+    this.cameras.main.centerOn(g.x, g.y + 80);
+    this.banner('THE GRAND ENGINEER\nthe line answers to him', '#ffcd45');
+    this.cameras.main.shake(def.floorLift.rumbleMs, 0.005);
+    var lift = this.add.rectangle(g.x, g.y, 90, 90, 0x454e63).setStrokeStyle(3, 0xffcd45, 0.6).setDepth(2).setScale(1, 0.2);
+    this.tweens.add({ targets: lift, scaleY: 1, duration: def.floorLift.riseMs, ease: 'Back.Out' });
+    for (var s = 0; s < 6; s++) this.time.delayedCall(s * 120, function () { self.burst(g.x + (SIM.rng() * 2 - 1) * 40, g.y + 40, 4, 0xb8c2d0); });
+    this.time.delayedCall(def.floorLift.rumbleMs + def.floorLift.riseMs, function () {
+      if (self.closing || !self.player.state.alive) { self.engineerArrivalActive = false; return; }
+      self.spawnBossNow(def, g.x, g.y);
+      self.showScouter(def);
+      self.engineerArrivalActive = false;
+    });
+  },
+  initEngineer: function (b, time) {
+    var bs = b.boss, P = bs.def.patterns;
+    if (!bs.phase) bs.phase = 1;
+    bs.nextPressAt = time + 3000; bs.nextArcAt = time + 6000; bs.nextTurretAt = time + 9000;
+    bs.nextCallAt = time + 12000;
+    // M6e phase-2 clocks — telegraphed zones only
+    bs.nextDrillAt = time + 5000; bs.nextScrapAt = time + 3800; bs.nextConeAt = time + 6500;
+    bs.nextStampAt = time + 9000; bs.nextOverrideAt = time + 12000;
+    bs.nextReactorAt = time + ((P.reactorPurge && P.reactorPurge.firstDelayMs) || 9000);
+    bs.ventDmgMult = (P.reactorPurge && P.reactorPurge.ventDmgMult) || 1.5;
+    if (bs.overclocked === undefined) bs.overclocked = false;
+  },
+  engineerUpdate: function (b, player, time) {
+    var bs = b.boss, def = bs.def, P = def.patterns;
+    var rate = bs.rateMult || 1;
+    if (!bs.overclocked && bs.phase === 2 && bs.hp <= bs.maxHp * P.overclock.hpPct) {
+      bs.overclocked = true; bs.spdMult = (bs.spdMult || 1) * P.overclock.spdMult; bs.rateMult = (bs.rateMult || 1) * P.overclock.rateMult;
+      rate = bs.rateMult; b.setTint(0xff7a2c);
+      this.banner('OVERCLOCK\nit runs hot — the reactor comes sooner', '#ff7a2c');
+      bs.nextReactorAt = Math.min(bs.nextReactorAt, time + 4000);
+    }
+    // reactor purge owns the moment while charging (rooted, circle grows)
+    if (this.engineerFx && this.engineerFx.reactorUntil) { this.updateReactor(b, player, time); return; }
+    // M6e: VENTED after the purge — rooted, helpless, takes bonus damage
+    if (bs.ventedUntil) {
+      if (time < bs.ventedUntil) { b.setVelocity(0, 0); return; }
+      bs.ventedUntil = 0; if (!bs.overclocked) b.clearTint(); else b.setTint(0xff7a2c);
+    }
+    var dx = player.x - b.x, dy = player.y - b.y, dist = Math.hypot(dx, dy) || 1;
+    var spd = def.spd * (bs.spdMult || 1);
+    var rooted = bs.rootUntil && time < bs.rootUntil;       // drill/cone wind-up
+    if (rooted) b.setVelocity(0, 0);
+    else if (bs.phase === 1) {                              // ranged: hold the line, never melee
+      var want = 260, dir = dist < want ? -1 : (dist > want * 1.5 ? 1 : 0);
+      b.setVelocity(dx / dist * spd * dir, dy / dist * spd * dir);
+    } else {                                                // the mech HUNTS you
+      b.setVelocity(dx / dist * spd, dy / dist * spd);
+    }
+    b.setFlipX(dx < 0);
+    if (bs.phase === 1) {
+      if (time >= bs.nextPressAt) { bs.nextPressAt = time + P.pressSlam.everyMs * rate; this.engineerPressSlam(b, player, P.pressSlam); }
+      if (time >= bs.nextArcAt) { bs.nextArcAt = time + P.arcDischarge.everyMs * rate; this.engineerRing(b.x, b.y, P.arcDischarge, 0x7ff0ff); }
+      if (time >= bs.nextTurretAt) { bs.nextTurretAt = time + P.turretDeploy.everyMs * rate; this.engineerTurrets(P.turretDeploy); }
+      if (time >= bs.nextCallAt) { bs.nextCallAt = time + P.callLine.everyMs * rate; this.engineerCallLine(b, P.callLine); }
+    } else {
+      // THE WALKING FACTORY (M6e): telegraphed ground shapes only — no bullets.
+      if (time >= bs.nextDrillAt) { bs.nextDrillAt = time + P.drillCharge.everyMs * rate; this.engineerDrill(b, player, P.drillCharge); }
+      if (time >= bs.nextScrapAt) { bs.nextScrapAt = time + P.scrapLob.everyMs * rate; this.engineerScrapLob(b, player, P.scrapLob); }
+      if (time >= bs.nextConeAt) { bs.nextConeAt = time + P.exhaustCone.everyMs * rate; this.engineerExhaustCone(b, player, P.exhaustCone); }
+      if (time >= bs.nextStampAt) { bs.nextStampAt = time + P.floorStamp.everyMs * rate; this.engineerFloorStamp(b, P.floorStamp); }
+      if (time >= bs.nextOverrideAt) { bs.nextOverrideAt = time + P.conveyorOverride.everyMs * rate; this.engineerOverride(P.conveyorOverride); }
+      if (time >= bs.nextReactorAt) { bs.nextReactorAt = time + P.reactorPurge.everyMs * rate; this.engineerReactorStart(b, P.reactorPurge); }
+    }
+  },
+  hasBayLOS: function (ax, ay, bx, by) {
+    if (!this.pillarRects) return true;
+    var line = new Phaser.Geom.Line(ax, ay, bx, by);
+    for (var i = 0; i < this.pillarRects.length; i++) if (Phaser.Geom.Intersects.LineToRectangle(line, this.pillarRects[i])) return false;
+    return true;
+  },
+  engineerRing: function (cx, cy, cfg, color) {
+    var self = this, maxR = cfg.maxR || 560, r0 = 20;
+    var ring = this.add.circle(cx, cy, r0, color, 0).setStrokeStyle(4, color, 0.85).setDepth(6);
+    var st = { r: r0, hit: false };
+    this.engineerFx = this.engineerFx || {};
+    var EF = this.engineerFx;
+    EF.ring = { x: cx, y: cy, r: r0, band: cfg.band, maxR: maxR };   // bot/HUD-readable
+    this.tweens.add({ targets: st, r: maxR, duration: Math.max(300, maxR / cfg.ringSpeed * 1000), ease: 'Linear',
+      onUpdate: function () { ring.setScale(st.r / r0); if (EF.ring) EF.ring.r = st.r; var p = self.player;   // scale, not setRadius (Arc API-safe)
+        if (p.state.alive && !st.hit) { var d = Math.hypot(p.x - cx, p.y - cy); if (Math.abs(d - st.r) < cfg.band) { st.hit = true; Entities.hurtPlayer(self, p, cfg.dmg, self.time.now, 'the Engineer', true); } } },
+      onComplete: function () { EF.ring = null; try { ring.destroy(); } catch (e) {} } });
+  },
+  // shared telegraphed-circle helper (press slam + scrap lob): warn ring →
+  // blast. `warns` entries are exposed on this._zoneWarns for the player-sim.
+  engineerZoneBlast: function (spots, cfg, src, killMobs) {
+    var self = this;
+    this._zoneWarns = this._zoneWarns || [];
+    spots.forEach(function (sp, idx) {
+      self.time.delayedCall(idx * (cfg.gapMs || 0), function () {
+        var ring = self.add.circle(sp.x, sp.y, cfg.radius, 0xffcd45, 0.14).setStrokeStyle(2, 0xffcd45, 0.8).setDepth(2);
+        self.tweens.add({ targets: ring, scale: { from: 0.4, to: 1 }, duration: cfg.warnMs });
+        var warn = { x: sp.x, y: sp.y, r: cfg.radius, until: self.time.now + cfg.warnMs };
+        self._zoneWarns.push(warn);
+        self.time.delayedCall(cfg.warnMs, function () {
+          var wi = self._zoneWarns.indexOf(warn); if (wi >= 0) self._zoneWarns.splice(wi, 1);
+          try { ring.destroy(); } catch (e) {}
+          self.burst(sp.x, sp.y, 12, 0xb8c2d0); self.cameras.main.shake(120, 0.005); try { AUDIO.play('crash'); } catch (e) {}
+          if (self.player.state.alive && Math.hypot(self.player.x - sp.x, self.player.y - sp.y) < cfg.radius)
+            Entities.hurtPlayer(self, self.player, cfg.dmg, self.time.now, src, true);
+          if (killMobs) self.mobs.children.iterate(function (m) { if (m && m.active && Math.hypot(m.x - sp.x, m.y - sp.y) < cfg.radius) self.killMobCredited(m); });
+        });
+      });
+    });
+  },
+  engineerPressSlam: function (b, player, cfg) {
+    var pads = (this.bayPresses || []).slice(), spots = [];
+    if (pads.length) { pads.sort(function (a, c) { return Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(c.x - player.x, c.y - player.y); }); spots = pads.slice(0, cfg.count).map(function (pd) { return { x: pd.x, y: pd.y }; }); }
+    else for (var i = 0; i < cfg.count; i++) spots.push({ x: player.x + (SIM.rng() * 2 - 1) * 120, y: player.y + (SIM.rng() * 2 - 1) * 120 });
+    this.engineerZoneBlast(spots, cfg, "the Engineer's press", true);
+  },
+  // M6e SCRAP LOB — 3 marked impact circles scattered around you; walk out.
+  engineerScrapLob: function (b, player, cfg) {
+    var spots = [];
+    for (var i = 0; i < cfg.lobs; i++) {
+      var a = Math.PI * 2 * i / cfg.lobs + SIM.rng();
+      spots.push({ x: Phaser.Math.Clamp(player.x + Math.cos(a) * (SIM.rng() * cfg.scatter), 60, this.worldW - 60),
+                   y: Phaser.Math.Clamp(player.y + Math.sin(a) * (SIM.rng() * cfg.scatter), 60, this.worldH - 60) });
+    }
+    this.engineerZoneBlast(spots, cfg, '130C-4 scrap', false);
+  },
+  engineerTurrets: function (cfg) {
+    var self = this; this.factoryTurrets = this.factoryTurrets || [];
+    (this.bayTurrets || []).slice(0, cfg.turrets).forEach(function (mt) {
+      var spr = self.add.circle(mt.x, mt.y, 12, 0xb13e53).setStrokeStyle(2, 0x22283a).setDepth(4);
+      self.factoryTurrets.push({ x: mt.x, y: mt.y, spr: spr, fireAt: self.time.now + 500, offAt: self.time.now + cfg.durMs, fireMs: cfg.fireMs, dmg: cfg.dmg, projSpeed: cfg.projSpeed });
+    });
+    this.banner('TURRETS ONLINE\ntake cover or silence them', '#ffcd45');
+  },
+  updateFactoryTurrets: function (time) {
+    if (!this.factoryTurrets || !this.factoryTurrets.length) return;
+    var self = this, p = this.player, live = [];
+    this.factoryTurrets.forEach(function (t) {
+      if (time >= t.offAt || !self.boss) { if (t.spr) { try { t.spr.destroy(); } catch (e) {} } return; }
+      live.push(t);
+      if (p.state.alive && time >= t.fireAt) {
+        t.fireAt = time + t.fireMs;
+        var a = Math.atan2(p.y - t.y, p.x - t.x);
+        var s = Entities.fireProjectile(self, self.enemyShots, t.x, t.y, a, t.projSpeed, t.dmg, 2600, 'orbShot', false, 'a rivet turret');
+        if (s) { s.proj.fromBoss = true; s.setTint(0xffcd45); }
+      }
+    });
+    this.factoryTurrets = live;
+  },
+  engineerCallLine: function (b, cfg) {
+    var alive = 0;
+    this.mobs.children.iterate(function (m) { if (m && m.active && m.mob && m.mob.bossWave) alive++; });
+    var room = Math.max(0, cfg.cap - alive);
+    for (var i = 0; i < Math.min(cfg.count, room); i++) {
+      var key = cfg.keys[i % cfg.keys.length], a = SIM.rng() * Math.PI * 2;
+      this.queueSpawn({ key: key, bossWave: true, x: b.x + Math.cos(a) * 170, y: b.y + Math.sin(a) * 170 });
+    }
+  },
+  // M6e DRILL CHARGE (kept per Red, properly telegraphed): the mech ROOTS and
+  // revs, the lane flashes for warnMs — plenty of time to step OUT — then it
+  // dashes the lane. Lane geometry exposed on engineerFx.drill for the sim.
+  engineerDrill: function (b, player, cfg) {
+    var self = this, ang = Math.atan2(player.y - b.y, player.x - b.x), len = cfg.len, half = cfg.half;
+    b.boss.rootUntil = this.time.now + cfg.warnMs;          // rooted while revving
+    var cx = b.x + Math.cos(ang) * len / 2, cy = b.y + Math.sin(ang) * len / 2;
+    var lane = this.add.rectangle(cx, cy, len, half * 2, 0xff3b30, 0).setDepth(3).setRotation(ang);
+    this.tweens.add({ targets: lane, fillAlpha: { from: 0.12, to: 0.45 }, duration: 320, yoyo: true, repeat: Math.max(1, Math.floor(cfg.warnMs / 640)) });   // FLASHES, not a fade
+    this.engineerFx = this.engineerFx || {};
+    this.engineerFx.drill = { x: b.x, y: b.y, ang: ang, len: len, half: half, until: this.time.now + cfg.warnMs };
+    try { AUDIO.play('creak'); } catch (e) {}
+    this.cameras.main.shake(cfg.warnMs, 0.002);             // it REVS — you can feel it coming
+    var ox = b.x, oy = b.y;
+    this.time.delayedCall(cfg.warnMs, function () {
+      if (self.engineerFx) self.engineerFx.drill = null;
+      if (!b.active) { try { lane.destroy(); } catch (e) {} return; }
+      self.tweens.add({ targets: b, x: ox + Math.cos(ang) * len, y: oy + Math.sin(ang) * len, duration: cfg.dashMs, ease: 'Quad.in',
+        onUpdate: function () { var p = self.player; if (p.state.alive && !lane._hit) {
+          var dxl = p.x - b.x, dyl = p.y - b.y, proj = dxl * Math.cos(ang) + dyl * Math.sin(ang), perp = Math.abs(-dxl * Math.sin(ang) + dyl * Math.cos(ang));
+          if (perp < half + 12 && proj > -40 && proj < 60) { lane._hit = true; Entities.hurtPlayer(self, p, cfg.dmg, self.time.now, '130C-4 drill charge', true); } } },
+        onComplete: function () { try { lane.destroy(); } catch (e) {} } });
+    });
+  },
+  // M6e EXHAUST CONE — direction LOCKS at cast (graveyard banshee rule), the
+  // wedge glows on the floor for warnMs, then the flame resolves inside it.
+  engineerExhaustCone: function (b, player, cfg) {
+    var self = this, ang = Math.atan2(player.y - b.y, player.x - b.x);
+    var half = Phaser.Math.DegToRad(cfg.halfDeg);
+    b.boss.rootUntil = this.time.now + cfg.warnMs;          // rooted while it vents up
+    var g = this.add.graphics().setDepth(3);
+    g.fillStyle(0xff7a2c, 0.16); g.slice(b.x, b.y, cfg.range, ang - half, ang + half, false); g.fillPath();
+    g.lineStyle(2, 0xff7a2c, 0.8); g.slice(b.x, b.y, cfg.range, ang - half, ang + half, false); g.strokePath();
+    this.tweens.add({ targets: g, alpha: { from: 0.55, to: 1 }, duration: 280, yoyo: true, repeat: Math.max(1, Math.floor(cfg.warnMs / 560)) });
+    this.engineerFx = this.engineerFx || {};
+    this.engineerFx.cone = { x: b.x, y: b.y, ang: ang, half: half, range: cfg.range, until: this.time.now + cfg.warnMs };
+    this.time.delayedCall(cfg.warnMs, function () {
+      if (self.engineerFx) self.engineerFx.cone = null;
+      try { g.destroy(); } catch (e) {}
+      if (!b.active) return;
+      for (var i = 0; i < 4; i++) self.burst(b.x + Math.cos(ang + (SIM.rng() - 0.5) * half) * (60 + i * 70),
+                                             b.y + Math.sin(ang + (SIM.rng() - 0.5) * half) * (60 + i * 70), 6, 0xff7a2c);
+      var p = self.player;
+      if (p.state.alive) {
+        var d = Math.hypot(p.x - b.x, p.y - b.y);
+        var diff = Phaser.Math.Angle.Wrap(Math.atan2(p.y - b.y, p.x - b.x) - ang);
+        if (d <= cfg.range && Math.abs(diff) <= half) Entities.hurtPlayer(self, p, cfg.dmg, self.time.now, "130C-4's exhaust", true);
+      }
+    });
+  },
+  // M6e FLOOR STAMP (Red: "square … stand between two waves") — a checkerboard
+  // around the mech blows in TWO alternating waves: wave-B tiles are SAFE while
+  // wave A resolves, and vice versa. Grid exposed on engineerFx.stamp.
+  engineerFloorStamp: function (b, cfg) {
+    var self = this, t = cfg.tile, now = this.time.now;
+    var x0 = b.x - (cfg.cols / 2 - 0.5) * t, y0 = b.y - (cfg.rows / 2 - 0.5) * t;
+    var cells = [];
+    for (var i = 0; i < cfg.cols; i++) for (var j = 0; j < cfg.rows; j++) {
+      var cx = x0 + i * t, cy = y0 + j * t;
+      if (cx < 40 || cy < 40 || cx > this.worldW - 40 || cy > this.worldH - 40) continue;
+      cells.push({ x: cx, y: cy, wave: (i + j) % 2 });
+    }
+    this.engineerFx = this.engineerFx || {};
+    this.engineerFx.stamp = { cells: cells, tile: t, aAt: now + cfg.warnMs, bAt: now + cfg.warnMs * 2 };
+    var fire = function (wave, delay) {
+      self.time.delayedCall(delay, function () {
+        if (!b.active) { if (self.engineerFx && wave === 1) self.engineerFx.stamp = null; return; }
+        var rects = [];
+        cells.forEach(function (c) { if (c.wave !== wave) return;
+          rects.push(self.add.rectangle(c.x, c.y, t - 10, t - 10, 0xffcd45, 0.13).setStrokeStyle(2, 0xffcd45, 0.85).setDepth(2)); });
+        self.tweens.add({ targets: rects, fillAlpha: 0.32, duration: cfg.warnMs });
+        self.time.delayedCall(cfg.warnMs, function () {
+          rects.forEach(function (r) { try { r.destroy(); } catch (e) {} });
+          try { AUDIO.play('crash'); } catch (e) {} self.cameras.main.shake(140, 0.004);
+          var p = self.player, hit = false;
+          cells.forEach(function (c) { if (c.wave !== wave) return;
+            self.burst(c.x, c.y, 5, 0xffd34d);
+            if (!hit && p.state.alive && Math.abs(p.x - c.x) < t / 2 && Math.abs(p.y - c.y) < t / 2) {
+              hit = true; Entities.hurtPlayer(self, p, cfg.dmg, self.time.now, 'the floor stamp', true);
+            } });
+          if (wave === 1 && self.engineerFx) self.engineerFx.stamp = null;
+        });
+      });
+    };
+    fire(0, 0);                    // wave A telegraphs now, blows at warnMs
+    fire(1, cfg.warnMs);           // wave B telegraphs as A blows — step across
+    this.banner('FLOOR STAMP\nstand between the waves', '#ffcd45');
+  },
+  // M6e CONVEYOR OVERRIDE — the belts surge red and shove twice as hard.
+  engineerOverride: function (cfg) {
+    this.conveyorSurge = { until: this.time.now + cfg.durMs, mult: cfg.mult };
+    (this.conveyors || []).forEach(function (c) { c.spr.setTint(0xff6a4d); });
+    this.banner('CONVEYOR OVERRIDE\nthe belts run hot', '#ff7a2c');
+  },
+  // M6e REACTOR PURGE (signature rework — Red: the LOS detonate "doesn't work,
+  // there's nowhere to take cover"): the mech ROOTS where it stands, a huge
+  // warning circle grows around it for chargeMs — RUN OUT of it — then the
+  // blast hits everything still inside. Afterward it VENTS: rooted, helpless,
+  // and taking bonus damage (hurtBoss reads bs.ventedUntil). No pillars needed.
+  engineerReactorStart: function (b, cfg) {
+    this.engineerFx = this.engineerFx || {};
+    this.engineerFx.reactorUntil = this.time.now + cfg.chargeMs;
+    this.engineerFx.reactorCfg = cfg;
+    this.banner('REACTOR PURGE\nget OUT of the circle!', '#ff3b30');
+    try { AUDIO.play('portal'); } catch (e) {}
+    if (this.reactorWarnRing) { try { this.reactorWarnRing.destroy(); } catch (e) {} }
+    if (this.reactorGrowRing) { try { this.reactorGrowRing.destroy(); } catch (e) {} }
+    this.reactorWarnRing = this.add.circle(b.x, b.y, cfg.radius, 0xff3b30, 0.07).setStrokeStyle(3, 0xff3b30, 0.5).setDepth(6);
+    this.reactorGrowRing = this.add.circle(b.x, b.y, cfg.radius, 0xff3b30, 0).setStrokeStyle(2, 0xffe08a, 0.9).setDepth(6).setScale(0.05);
+    this.tweens.add({ targets: this.reactorGrowRing, scale: 1, duration: cfg.chargeMs, ease: 'Linear' });   // the fuse
+  },
+  updateReactor: function (b, player, time) {
+    b.setVelocity(0, 0);
+    var EF = this.engineerFx, cfg = EF.reactorCfg || { radius: 500, dmg: 55, ventMs: 3500 };
+    var left = EF.reactorUntil - time, period = Math.max(80, left / 6);
+    b.setTint(Math.floor(time / period) % 2 === 0 ? 0xff3b30 : 0xffe08a);
+    if (this.reactorWarnRing) { this.reactorWarnRing.setPosition(b.x, b.y); this.reactorWarnRing.setScale(1 + Math.sin(time / 100) * 0.03); }
+    if (this.reactorGrowRing) this.reactorGrowRing.setPosition(b.x, b.y);
+    if (left <= 0) {
+      EF.reactorUntil = 0;
+      if (player.state.alive && Math.hypot(player.x - b.x, player.y - b.y) <= cfg.radius)
+        Entities.hurtPlayer(this, player, cfg.dmg, time, 'the Reactor Purge', true);
+      this.cameras.main.shake(500, 0.012);
+      var blast = this.add.circle(b.x, b.y, 40, 0xffd34d, 0.6).setDepth(20).setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({ targets: blast, scale: cfg.radius / 40, alpha: 0, duration: 450, onComplete: function () { try { blast.destroy(); } catch (e) {} } });
+      if (this.reactorWarnRing) { try { this.reactorWarnRing.destroy(); } catch (e) {} this.reactorWarnRing = null; }
+      if (this.reactorGrowRing) { try { this.reactorGrowRing.destroy(); } catch (e) {} this.reactorGrowRing = null; }
+      // THE PUNISH WINDOW — vented: rooted + bonus damage (see Entities.hurtBoss)
+      b.boss.ventedUntil = time + cfg.ventMs;
+      b.setTint(0x7ff0ff);
+      for (var i = 0; i < 5; i++) this.burst(b.x + (SIM.rng() * 2 - 1) * 50, b.y + (SIM.rng() * 2 - 1) * 50, 6, 0xc2fbff);
+      this.banner('IT VENTS\nthe core is exposed — unload!', '#7ff0ff');
+    }
+  },
+  engineerTransform: function (boss) {
+    var self = this, bs = boss.boss, def = bs.def, BC = this.arenaBay || { x: boss.x, y: boss.y };
+    bs.resurrecting = true; bs.hp = 1; boss.setVelocity(0, 0);
+    this.banner('THE ENGINEER BOARDS 130C-4\ntake cover — it is coming', '#ffcd45');
+    try { AUDIO.play('revive'); } catch (e) {}
+    this.tweens.add({ targets: boss, x: BC.x, y: BC.y - 280, duration: 900, ease: 'Sine.in' });
+    this._engineerXform = { until: this.time.now + ((def.phaseTwo && def.phaseTwo.channelMs) || 3200), boss: boss };
+    this.time.delayedCall(1000, function () {
+      if (!boss.active) return;
+      var sc = def.mech.scale || 1.5;
+      boss.setTexture(def.mech.texture).setScale(sc).clearTint();
+      // M6e FIX ("arrows fly over the boss"): the mech gets a real centered body
+      // matching its big sprite — texture-space size = world bodyW/H ÷ scale.
+      if (def.mech.bodyW && boss.body) {
+        var tex = boss.texture.getSourceImage(), tw = tex ? tex.width : 96;
+        var bw = Math.round(def.mech.bodyW / sc), bh = Math.round(def.mech.bodyH / sc);
+        boss.body.setSize(bw, bh).setOffset(Math.round((tw - bw) / 2), Math.round((tw - bh) / 2));
+      }
+      self.cameras.main.shake(400, 0.008);
+      if (self.dormantMech) self.dormantMech.setVisible(false);
+      if (self.bayGantry) self.tweens.add({ targets: self.bayGantry, x: BC.x - 260, angle: -40, alpha: 0.4, duration: 700 });
+    });
+  },
+  engineerTransformDone: function (boss) {
+    if (!boss || !boss.active) return;
+    var bs = boss.boss, def = bs.def, P2 = def.phaseTwo, t = this.time.now;
+    bs.resurrecting = false; bs.phase2done = true; bs.phase = 2;
+    bs.hp = bs.maxHp;
+    bs.spdMult = P2.spdMult; bs.rateMult = P2.rateMult;
+    this.initEngineer(boss, t); bs.phase = 2;
+    // M6e: NO radial/stream re-arm — the mech fires no projectiles at all.
+    this.banner('PROTOTYPE 130C-4 ONLINE\nit hunts you now — watch the floor', '#b13e53');
+    this.burst(boss.x, boss.y, 30, 0xffcd45);
+  },
+  clearEngineerFx: function () {
+    if (this.reactorWarnRing) { try { this.reactorWarnRing.destroy(); } catch (e) {} this.reactorWarnRing = null; }
+    if (this.reactorGrowRing) { try { this.reactorGrowRing.destroy(); } catch (e) {} this.reactorGrowRing = null; }
+    this.engineerFx = null; this._engineerXform = null; this._zoneWarns = [];
+    if (this.conveyorSurge) { this.conveyorSurge = null; (this.conveyors || []).forEach(function (c) { c.spr.clearTint(); }); }
+    if (this.factoryTurrets) { this.factoryTurrets.forEach(function (t) { if (t.spr) { try { t.spr.destroy(); } catch (e) {} } }); this.factoryTurrets = []; }
+    if (this.coolantPatches) { this.coolantPatches.forEach(function (p) { if (p.obj && p.obj.active) { try { p.obj.destroy(); } catch (e) {} } }); this.coolantPatches = []; }
   },
 
   // ======================= ART TEST — HI-FI TRAIN YARD =====================

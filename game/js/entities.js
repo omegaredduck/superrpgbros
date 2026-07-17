@@ -483,7 +483,8 @@ var Entities = (function () {
     // by this at spawn (level is otherwise cosmetic; xp.levelPower false). The
     // dmgMult rides on m.mob and is read at the contact + shoot damage sites.
     var lm = SIM.mobLevelMult(scene.player && scene.player.state ? scene.player.state.level : 1);
-    m.mob = { key: key, def: def, hp: Math.max(1, Math.round(def.hp * lm)),
+    var _hp0 = Math.max(1, Math.round(def.hp * lm));
+    m.mob = { key: key, def: def, hp: _hp0, maxHp: _hp0,   // M5.7: maxHp at spawn (repair-unit mend baseline)
               xp: Math.max(1, Math.round(def.xp * lm)), spd: def.spd, dmgMult: lm,
               affix: null, evolved: false, lastShotAt: 0, lastContactAt: 0,
               slowUntil: 0, slowMult: 1, frosted: false,     // M4: frost slow (pooled — reset)
@@ -701,6 +702,57 @@ var Entities = (function () {
       }
     }
 
+    // M5.7 MAG-CRANE PULL — a telegraphed magnetic GRAB: wind up (flash), then
+    // DRAG the player inward for pullMs while slowing them. Absolute clocks →
+    // unfreeze. (Realm mob only, never in the pillared boss arena.)
+    if (def.pull) {
+      var PU = def.pull;
+      if (m.mob.pullPhase === 'pull') {
+        if (time >= m.mob.pullUntil) { m.mob.pullPhase = null; m.mob.nextPullAt = time + PU.cooldownMs; m.clearTint(); }
+        else {
+          m.setVelocity(0, 0);
+          player.setPosition(player.x + (m.x - player.x) * PU.pullK, player.y + (m.y - player.y) * PU.pullK);
+          player.state.slowUntil = time + 140; player.state.slowMult = PU.slowMult;
+          if (scene.magBeamFx) scene.magBeamFx(m, player);
+          return;
+        }
+      } else if (m.mob.pullPhase === 'wind') {
+        m.setVelocity(0, 0);
+        m.setTint(Math.floor(time / 90) % 2 === 0 ? (PU.tint || 0xffb347) : 0xffffff);
+        if (time >= m.mob.pullUntil) {
+          m.clearTint();
+          m.mob.pullPhase = 'pull'; m.mob.pullUntil = time + PU.pullMs;
+          if (dist < PU.range * 1.3) hurtPlayer(scene, player, Math.max(DATA.combat.minDamage, Math.round(PU.dmg * (m.mob.dmgMult || 1))), time, 'a Mag-Crane');
+        }
+        return;
+      } else {
+        if (!m.mob.nextPullAt) m.mob.nextPullAt = time + PU.cooldownMs * (0.4 + SIM.rng() * 0.6);
+        if (dist < PU.range && time >= m.mob.nextPullAt) { m.mob.pullPhase = 'wind'; m.mob.pullUntil = time + PU.windupMs; m.setVelocity(0, 0); return; }
+      }
+    }
+    // M5.7 PURGE FLAMER — a repeating CIRCULAR ground telegraph → a ring of fire
+    // that blooms where you stood + LINGERS as a burning patch (Red: a circle,
+    // not a cone). Roots during the warn. Absolute clocks → unfreeze.
+    if (def.flameCircle) {
+      var FC = def.flameCircle;
+      if (m.mob.flamePhase === 'warn') {
+        m.setVelocity(0, 0);
+        m.setTint(Math.floor(time / 100) % 2 === 0 ? (FC.tint || 0xff7a2c) : 0xffffff);
+        if (time >= m.mob.flameUntil) {
+          m.clearTint(); m.mob.flamePhase = null; m.mob.nextFlameAt = time + FC.everyMs;
+          if (scene.flameCircleBlast) scene.flameCircleBlast(m, FC);
+        }
+        return;
+      } else {
+        if (!m.mob.nextFlameAt) m.mob.nextFlameAt = time + FC.everyMs * (0.4 + SIM.rng() * 0.6);
+        if (dist < FC.range && time >= m.mob.nextFlameAt) {
+          m.mob.flamePhase = 'warn'; m.mob.flameUntil = time + FC.windupMs;
+          m.mob.flameX = player.x; m.mob.flameY = player.y;
+          if (scene.flameCircleWarn) scene.flameCircleWarn(m, FC);
+          m.setVelocity(0, 0); return;
+        }
+      }
+    }
     // M5.0 BLOOM PIXIE — glow trail (scene owns the patches + corpse revives)
     // + the periodic Bumblebrute summon (queued, capped scene-side).
     if (def.glowTrail && time - (m.mob.lastGlowAt || 0) >= def.glowTrail.everyMs) {
@@ -826,11 +878,28 @@ var Entities = (function () {
         if (scene.raiseCorpses) scene.raiseCorpses(m, def.raise);
       }
     }
-    // M4.9 CONDUCTOR ZOMBIE — drip a GREEN SLIME patch on a cadence as it
-    // shambles (RealmScene owns the hazard pool + the player-damage tick).
+    // M4.9 CONDUCTOR ZOMBIE / M5.7 FORGE HOUND — drip a patch on a cadence as it
+    // shambles (RealmScene owns the hazard pool + the player-damage tick). The
+    // Forge Hound sets fire:true so the patch recolors + reads as a burn trail.
     if (def.slimeTrail && time - (m.mob.lastSlimeAt || 0) >= def.slimeTrail.everyMs) {
       m.mob.lastSlimeAt = time;
       if (scene.dropSlime) scene.dropSlime(m.x, m.y + m.displayHeight * 0.22, def.slimeTrail);
+    }
+    // M5.7 COOLANT TANK — vents a chilling SLOW FIELD patch on a cadence (scene
+    // owns the pool; the player is slowed while standing in it, no damage).
+    if (def.slowField && time - (m.mob.lastSlowFieldAt || 0) >= def.slowField.everyMs) {
+      m.mob.lastSlowFieldAt = time;
+      if (scene.dropCoolant) scene.dropCoolant(m.x, m.y + m.displayHeight * 0.22, def.slowField);
+    }
+    // M5.7 BULWARK — projects a WARD onto nearby mobs (they can't be hurt while
+    // it lives and they're inside the aura). Scene refreshes a short guard-shield
+    // stamp each frame; hurtMob honors it (auto-expires when it leaves / dies).
+    if (def.guardAura && scene.updateGuardAura) scene.updateGuardAura(m, def.guardAura, time);
+    // M5.7 REPAIR UNIT — mends nearby wounded mobs on a cadence (scene iterates
+    // the swarm + heals). Absolute clock → unfreeze. Priority-kill target.
+    if (def.mend) {
+      if (!m.mob.nextMendAt) m.mob.nextMendAt = time + def.mend.everyMs * 0.5;
+      if (time >= m.mob.nextMendAt) { m.mob.nextMendAt = time + def.mend.everyMs; if (scene.mendNearby) scene.mendNearby(m, def.mend); }
     }
     m.setFlipX(dx < 0);
     if (m.nameTag) m.nameTag.setPosition(m.x, m.y - m.displayHeight / 2 - 9);
@@ -845,6 +914,13 @@ var Entities = (function () {
     // Environmental mows (train / timber) go through killMobCredited and
     // still flatten him — a falling tree does not care about bees.
     if (m.mob.ward > 0) {
+      if (scene.events) scene.events.emit('mob-immune', m);
+      return;
+    }
+    // M5.7 BULWARK guard-shield — a short stamp refreshed each frame while a
+    // Bulwark's aura covers this mob. Auto-expires ~0.3s after it leaves the
+    // aura or the Bulwark dies (no explicit cleanup). Env kills bypass hurtMob.
+    if (m.mob.guardShieldUntil && time < m.mob.guardShieldUntil) {
       if (scene.events) scene.events.emit('mob-immune', m);
       return;
     }
@@ -944,9 +1020,16 @@ var Entities = (function () {
     // so dispatch WITHOUT return and let the generic driver below fire them.
     if (def.waves && scene.gravekeeperUpdate) scene.gravekeeperUpdate(b, player, time);
 
+    // M5.7: THE GRAND ENGINEER — floor-lift entrance, room verbs, the
+    // Engineer→130C-4 transition, and the mech's telegraphed-zone kit (M6e).
+    // He carries NO radial/stream filler anymore (Red: every boss does the
+    // burst + the projectile ring); the P.radial/P.stream guards skip them.
+    if (def.floorLift && scene.engineerUpdate) scene.engineerUpdate(b, player, time);
+
     // pattern 1: radial burst — the whole ring, dodge through the gaps
     // (M4.6: boss bolts carry fromBoss — hurtPlayer scales them per class)
-    if (time >= b.boss.nextRadialAt) {
+    // (M6e: guarded — a boss may define no radial/stream at all)
+    if (P.radial && time >= b.boss.nextRadialAt) {
       b.boss.nextRadialAt = time + P.radial.everyMs * rate;
       for (var i = 0; i < P.radial.count; i++) {
         var a = Math.PI * 2 * i / P.radial.count;
@@ -958,12 +1041,12 @@ var Entities = (function () {
       scene.events.emit('boss-pattern');
     }
     // pattern 2: aimed stream — rapid shots that track your position per shot
-    if (b.boss.streamLeft === 0 && time >= b.boss.nextStreamAt) {
+    if (P.stream && b.boss.streamLeft === 0 && time >= b.boss.nextStreamAt) {
       b.boss.nextStreamAt = time + P.stream.everyMs * rate;
       b.boss.streamLeft = P.stream.shots;
       b.boss.nextStreamShotAt = time;
     }
-    if (b.boss.streamLeft > 0 && time >= b.boss.nextStreamShotAt) {
+    if (P.stream && b.boss.streamLeft > 0 && time >= b.boss.nextStreamShotAt) {
       b.boss.streamLeft--;
       b.boss.nextStreamShotAt = time + P.stream.gapMs;
       var aim = Math.atan2(player.y - b.y, player.x - b.x);
@@ -979,6 +1062,10 @@ var Entities = (function () {
     // M5.6: THE GRAVEKEEPER is IMMUNE while a minion wave still walks — clear
     // the wave to unlock the chunk (the scene strips it directly).
     if (b.boss.immune) { if (scene.bossImmunePopup) scene.bossImmunePopup(b); return; }
+    // M6e: the VENTED mech (post reactor-purge) takes bonus damage — the
+    // survive-the-purge → punish-the-core reward loop.
+    if (b.boss.ventedUntil && scene.time.now < b.boss.ventedUntil)
+      dmg = Math.round(dmg * (b.boss.ventDmgMult || 1.5));
     b.boss.hp -= dmg;
     b.setTintFill(0xffffff);
     scene.time.delayedCall(50, function () { if (b.active) b.clearTint(); });

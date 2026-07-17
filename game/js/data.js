@@ -383,7 +383,66 @@ var DATA = {
     necroAcolyte: { name: 'Necro Acolyte', texture: 'necroAcolyteHi',  hp: 48,  spd: 40,  xp: 34, cost: 5,
                    deathTint: 0x9a70be, chase: { contactDmg: 6 },
                    raise: { everyMs: 4200, radius: 170, maxAlive: 6, key: 'rattlebones' },
-                   maxConcurrent: 2, unlockAt: 100 }
+                   maxConcurrent: 2, unlockAt: 100 },
+
+    // --- M5.7 THE ROBOTICS FACTORY — biome 4's 12 robots (user picks 2026-07-15).
+    // Mechanics = the 20-sheet role labels. New verbs (pull / slowField / guardAura /
+    // mend / flameCircle) are implemented scene-side (entities.updateMob + scene
+    // hooks). Colored shots = orbShot + tint. TUNE ME: all — first-pass numbers,
+    // pitched a notch above the graveyard (biome 4) but beatable in white gear.
+    sparkbot:    { name: 'Sparkbot',       texture: 'sparkbotHi',      hp: 18,  spd: 96,  xp: 5,  cost: 1,
+                   deathTint: 0xffcd45, chase: { contactDmg: 6 } },
+    hiveDrone:   { name: 'Hive Drone',     texture: 'hiveDroneHi',     hp: 20,  spd: 140, xp: 7,  cost: 1,
+                   deathTint: 0x8fd6ff, float: true, flap: true, chase: { contactDmg: 7 } },
+    arcWelder:   { name: 'Arc Welder',     texture: 'arcWelderHi',     hp: 44,  spd: 62,  xp: 20, cost: 4,
+                   deathTint: 0x7ff0ff, chase: { contactDmg: 8 },
+                   // short WIDE arc (reuses the wail cone tech, electric flavor)
+                   wail: { range: 155, halfDeg: 42, dmg: 12, slowMult: 0.75, slowMs: 600,
+                           everyMs: 3000, windupMs: 700, tint: 0x7ff0ff },
+                   maxConcurrent: 3, unlockAt: 30 },
+    scrapHulk:   { name: 'Scrap Hulk',     texture: 'scrapHulkHi',     hp: 175, spd: 44,  xp: 30, cost: 4,
+                   deathTint: 0x8a8e96, chase: { contactDmg: 18 },
+                   regen: { perSec: 15, idleMs: 2600 }, unlockAt: 55 },
+    buzzsaw:     { name: 'Buzzsaw',        texture: 'buzzsawHi',       hp: 40,  spd: 78,  xp: 16, cost: 3,
+                   deathTint: 0xc0c0c8, chase: { contactDmg: 12 },
+                   lunge: { range: 260, windupMs: 700, dashMs: 240, dashSpeed: 400, cooldownMs: 3200 } },
+    magCrane:    { name: 'Mag-Crane',      texture: 'magCraneHi',      hp: 62,  spd: 36,  xp: 24, cost: 4,
+                   deathTint: 0xffb347, chase: { contactDmg: 8 },
+                   // PULL/GRAB (new verb): telegraph, then drag the player inward
+                   pull: { range: 320, windupMs: 800, pullMs: 900, pullK: 0.10, grabMs: 500,
+                           slowMult: 0.5, dmg: 8, cooldownMs: 4400, tint: 0xffb347 },
+                   maxConcurrent: 2, unlockAt: 65 },
+    forgeHound:  { name: 'Forge Hound',    texture: 'forgeHoundHi',    hp: 46,  spd: 90,  xp: 18, cost: 3,
+                   deathTint: 0xff7a2c, chase: { contactDmg: 11 },
+                   // FIRE TRAIL (slimeTrail tech, fire:true recolors the patch)
+                   slimeTrail: { everyMs: 500, radius: 24, lifeMs: 2200, dmg: 5, tickMs: 460, fire: true },
+                   unlockAt: 40 },
+    coolantTank: { name: 'Coolant Tank',   texture: 'coolantTankHi',   hp: 92,  spd: 38,  xp: 26, cost: 4,
+                   deathTint: 0x8fe0ff, chase: { contactDmg: 8 },
+                   // SLOW FIELD (new verb): vents a chilling patch that slows the player
+                   slowField: { everyMs: 1900, radius: 72, lifeMs: 3200, slowMult: 0.5 },
+                   unlockAt: 50 },
+    bulwark:     { name: 'Bulwark',        texture: 'bulwarkHi',       hp: 120, spd: 40,  xp: 30, cost: 5,
+                   deathTint: 0x94b0c2, chase: { contactDmg: 12 },
+                   // SHIELD GUARD (new verb): projects a ward onto nearby mobs (they
+                   // are immortal while the Bulwark lives + they're inside the aura)
+                   guardAura: { radius: 155 }, maxConcurrent: 2, unlockAt: 75 },
+    repairUnit:  { name: 'Repair Unit',    texture: 'repairUnitHi',    hp: 56,  spd: 48,  xp: 32, cost: 5,
+                   deathTint: 0x7fffbf, chase: { contactDmg: 6 },
+                   // HEALER (new verb): mends nearby wounded mobs on a cadence
+                   mend: { everyMs: 1600, radius: 155, amount: 14 }, maxConcurrent: 2, unlockAt: 70 },
+    warframe:    { name: 'Warframe',       texture: 'warframeHi',      hp: 130, spd: 42,  xp: 40, cost: 5,
+                   deathTint: 0xb13e53, chase: { contactDmg: 14 },
+                   shoot: { range: 420, dmg: 12, projSpeed: 300, cooldownMs: 2600,
+                            count: 5, spreadDeg: 34, lifeMs: 2400, tint: 0xffcd45, texture: 'orbShot' },
+                   burst: { gapMs: 90 }, maxConcurrent: 2, unlockAt: 90 },
+    purgeFlamer: { name: 'Purge Flamer',   texture: 'purgeFlamerHi',   hp: 64,  spd: 40,  xp: 30, cost: 5,
+                   deathTint: 0xff7a2c, chase: { contactDmg: 8 },
+                   // FIRE CIRCLE (new verb): circular ground telegraph -> ring of fire
+                   // that LINGERS as a burning patch (not a cone — Red's call).
+                   flameCircle: { range: 300, windupMs: 1000, radius: 92, dmg: 22, everyMs: 4400,
+                                  lingerMs: 900, tickMs: 300, lingerDmg: 6, tint: 0xff7a2c },
+                   maxConcurrent: 2, unlockAt: 80 }
   },
 
   // --- Wave director (Fusion Law F3) ----------------------------------------
@@ -438,7 +497,14 @@ var DATA = {
     // corpses as Rattlebones (raise verb), never via the director roster.
     graveyard: { name: 'The Graveyard', tile: 'gravedirt',
              mobs: ['ghoul', 'rattlebones', 'boneArcher', 'tombGolem',
-                    'corpseBloater', 'banshee', 'mummy', 'necroAcolyte'] }
+                    'corpseBloater', 'banshee', 'mummy', 'necroAcolyte'] },
+    // M5.7 (user picks 2026-07-15): THE ROBOTICS FACTORY's own 12 robots. The
+    // director draws from this list; floor tile is riveted steel.
+    // M6c (Red): WARFRAME pulled from the roster — its 420-range 5-bolt burst
+    // out-ranged everything ("shoots out way too far"). Def + art kept dormant.
+    factory: { name: 'The Factory', tile: 'factoryFloor',
+               mobs: ['sparkbot', 'hiveDrone', 'arcWelder', 'scrapHulk', 'buzzsaw', 'magCrane',
+                      'forgeHound', 'coolantTank', 'bulwark', 'repairUnit', 'purgeFlamer'] }
   },
 
   // --- M5.0: REALM REGISTRY — one entry per live destination. The portal's
@@ -480,7 +546,20 @@ var DATA = {
                    // field corpses rise, mob eyes flare + speed surge, a grave wave.
                    bell: { everyMs: 55000, tolls: 3, tollGapMs: 900, surgeMs: 2000,
                            surgeMult: 1.2, riseRadius: 9999 }
-                 } }
+                 } },
+    // M5.7 THE ROBOTICS FACTORY — biome 4. kind:'factory' routes the planned
+    // layout (loading bay/assembly floor/foundry), the ambient "alive" props
+    // (belts/arms/presses/fans/sparks/smelter), the IN-GROUND CONVEYOR TRAVELATORS
+    // (map mechanic), and the 2-phase Grand Engineer boss + custom Prototype Bay
+    // arena. `conveyor` is the map-mechanic config; `factoryCycle` conducts the
+    // ambient animation cadence (stands down while the boss lives). TUNE ME: all.
+    factory: { name: 'The Factory', biome: 'factory', boss: 'engineer', kind: 'factory', music: 'factory',
+               // IN-GROUND CONVEYOR TRAVELATORS: moving WITH the belt = speed
+               // burst, AGAINST = slowed. push = px/s the belt shoves bodies;
+               // withMult/againstMult scale the player's own movement on the belt.
+               conveyor: { push: 150, withMult: 1.4, againstMult: 0.6, scrollSpeed: 90 },
+               // ambient prop animation cadence (cosmetic; spark bursts + steam)
+               factoryCycle: { sparkEveryMs: 700, steamEveryMs: 2600 } }
   },
 
   // --- M3 (Lane C): tilesets the MAP BUILDER offers. A set = named lists of
@@ -550,7 +629,9 @@ var DATA = {
       // M5.6: THE GRAVEYARD — third real destination. locked until the biome's
       // full battery is green (flip to false at ship + bump ?v=).
       { id: 'graveyard', name: 'THE GRAVEYARD',  sub: 'the Gravekeeper keeps the hollow earth', locked: false },
-      { id: 'sealed3',   name: '??? — SEALED',   sub: 'build it in the map builder (M)', locked: true },
+      // M5.7: THE ROBOTICS FACTORY — fourth real destination. locked until the
+      // biome's full battery is green (flip to false at ship + bump ?v=).
+      { id: 'factory',   name: 'THE FACTORY',    sub: 'the Grand Engineer runs the line', locked: false },
       { id: 'sealed4',   name: '??? — SEALED',   sub: 'build it in the map builder (M)', locked: true },
       { id: 'sealed5',   name: '??? — SEALED',   sub: 'build it in the map builder (M)', locked: true }
     ],
@@ -760,6 +841,66 @@ var DATA = {
         'GRASPING HANDS / CURSE SIGILS — marked circles erupt into hands and rune-blasts. Read the ground, step off the marks.',
         'BONE STORM / SOUL VOLLEY — a shard ring and a green stream. Slip the gaps, strafe the volley.',
         'THE BELL IS HIS NOW — every toll opens the next wave. When it rings, brace.'
+      ]
+    },
+    // M5.7 — THE GRAND ENGINEER; PHASE 2 REWORKED M6e (Red 2026-07-15). Phase 1 =
+    // engineer on foot (floor lift), ranged, operates the ROOM (presses / arc
+    // ring / turrets / adds). NO stream/radial — Red: "all bosses do the machine
+    // gun burst and the projectile aoe, im tired of seeing that" — this boss
+    // fires NO generic filler (driver now guards missing keys). Coolant slow-
+    // pools REMOVED from the whole fight (Red). On first death: the TRANSFORM
+    // cutscene → PROTOTYPE 130C-4. Phase 2 = THE WALKING FACTORY: ZERO
+    // projectiles — every attack is a TELEGRAPHED GROUND SHAPE (lane / circles /
+    // cone / square waves) with time to react (Red's design riffs). Signature =
+    // REACTOR PURGE: a huge circle around the mech, 3.4s to RUN OUT of it, then
+    // it VENTS — rooted + takes bonus damage (the punish window). FLOOR STAMP =
+    // checkerboard square waves, "stand between the two waves" (Red's idea).
+    // All verbs scene-owned (RealmScene.engineerUpdate); every clock rides
+    // unfreeze(); every source passes fromBoss=true. TUNE ME: sim-tuned m6e.
+    engineer: {
+      name: 'The Grand Engineer', texture: 'engineerHi',
+      hp: 2000, spd: 40, xp: 320, contactDmg: 20, deathTint: 0xffcd45,
+      lootTable: 'engineer',
+      floorLift: { rumbleMs: 900, riseMs: 1500 },        // rises through the floor on a hydraulic lift
+      // PHASE-2 mech "PROTOTYPE 130C-4": visuals + stats + BODY swapped at the
+      // cutscene (bodyW/H = world-px hitbox, matches the big sprite — fix for
+      // "hitting the boss and it does no damage").
+      mech: { texture: 'mechHi', spdMult: 1.7, contactDmg: 30, scale: 1.5, deathTint: 0xb13e53,
+              bodyW: 80, bodyH: 88 },
+      phaseTwo: { channelMs: 3200, spdMult: 1.7, rateMult: 0.9 },
+      patterns: {
+        // ---- PHASE-1 room verbs (all telegraphed; no bullet filler) ----
+        pressSlam:    { everyMs: 4600, count: 3, warnMs: 1100, radius: 64, dmg: 26, gapMs: 420 },
+        arcDischarge: { everyMs: 7000, warnMs: 900, dmg: 22, ringSpeed: 280, band: 60, maxR: 560 },
+        turretDeploy: { everyMs: 10000, turrets: 2, durMs: 8000, fireMs: 1000, dmg: 10, projSpeed: 280 },
+        callLine:     { everyMs: 12000, count: 2, keys: ['sparkbot', 'hiveDrone'], cap: 4 },
+        // ---- PHASE-2 mech verbs — TELEGRAPHED ZONES ONLY, no projectiles ----
+        // DRILL CHARGE (kept per Red, longer telegraph): red lane flashes 1.5s,
+        // the mech revs in place, then dashes it. Step OUT of the lane.
+        drillCharge:   { everyMs: 7000, warnMs: 1500, dmg: 30, len: 560, half: 36, dashMs: 560 },
+        // SCRAP LOB: 4 marked impact circles near you (1.4s) — walk out.
+        scrapLob:      { everyMs: 6200, lobs: 4, warnMs: 1400, radius: 72, dmg: 22, scatter: 200 },
+        // EXHAUST CONE: a flame cone locks its direction at cast (1.2s) — sidestep.
+        exhaustCone:   { everyMs: 7800, warnMs: 1200, range: 340, halfDeg: 46, dmg: 20 },
+        // FLOOR STAMP (Red: "square … stand between two waves"): checkerboard
+        // tiles flash + blow in TWO alternating waves — stand on the other wave.
+        floorStamp:    { everyMs: 11000, tile: 120, cols: 5, rows: 4, warnMs: 1300, dmg: 20 },
+        // CONVEYOR OVERRIDE: the belts surge red — the floor itself misbehaves.
+        conveyorOverride: { everyMs: 14000, durMs: 6000, mult: 2.2 },
+        // SIGNATURE — REACTOR PURGE: rooted, a huge warning circle around the
+        // mech, RUN OUT before it blows; then it VENTS: rooted + bonus damage.
+        reactorPurge:  { everyMs: 15000, chargeMs: 3400, radius: 500, dmg: 55,
+                         ventMs: 3500, ventDmgMult: 1.5, firstDelayMs: 8000 },
+        overclock:     { hpPct: 0.35, spdMult: 1.25, rateMult: 0.75 }
+      },
+      title: 'MASTER OF THE ASSEMBLY LINE',
+      hints: [
+        'HE RIDES UP ON THE LIFT — ranged, never melees, and makes the ROOM attack: presses, an arc ring, turrets, called help.',
+        'THE ARC RING blooms from him and dies out around 560 — RUN AWAY from it and it fizzles before it reaches you.',
+        'KILL HIM ONCE AND HE BOARDS 130C-4 — the mech HUNTS. It never shoots: every attack paints the FLOOR first. Trust the paint.',
+        'LANE = drill charge (step aside). CIRCLES = falling scrap (walk out). CONE = exhaust burn (sidestep the wedge).',
+        'FLOOR STAMP — the tiles blow in TWO alternating waves. Stand on the wave that already fired, between the two.',
+        'REACTOR PURGE — a huge circle grows around the rooted mech. GET OUT of it; when it vents, it sits helpless — unload on the core.'
       ]
     }
   },
@@ -986,6 +1127,13 @@ var DATA = {
       { item: 'w5', w: 0.2 }, { item: 'a5', w: 0.2 }, { item: 'ar5', w: 0.2 }, { item: 'r5', w: 0.2 }
     ]},
     gravekeeper: { rolls: 2, entries: [
+      { item: 'w1', w: 12 },  { item: 'a1', w: 12 },  { item: 'ar1', w: 12 },  { item: 'r1', w: 12 },
+      { item: 'w2', w: 7 },   { item: 'a2', w: 7 },   { item: 'ar2', w: 7 },   { item: 'r2', w: 7 },
+      { item: 'w3', w: 3 },   { item: 'a3', w: 3 },   { item: 'ar3', w: 3 },   { item: 'r3', w: 3 },
+      { item: 'w4', w: 1 },   { item: 'a4', w: 1 },   { item: 'ar4', w: 1 },   { item: 'r4', w: 1 },
+      { item: 'w5', w: 0.2 }, { item: 'a5', w: 0.2 }, { item: 'ar5', w: 0.2 }, { item: 'r5', w: 0.2 }
+    ]},
+    engineer: { rolls: 2, entries: [
       { item: 'w1', w: 12 },  { item: 'a1', w: 12 },  { item: 'ar1', w: 12 },  { item: 'r1', w: 12 },
       { item: 'w2', w: 7 },   { item: 'a2', w: 7 },   { item: 'ar2', w: 7 },   { item: 'r2', w: 7 },
       { item: 'w3', w: 3 },   { item: 'a3', w: 3 },   { item: 'ar3', w: 3 },   { item: 'r3', w: 3 },
@@ -1493,6 +1641,95 @@ DATA.audio.music.graveyard = (function () {
       { type: 'square',   vol: 0.022, notes: arp },       // frantic arpeggio
       { type: 'triangle', vol: 0.045, notes: bell },      // bell tolls
       { type: 'square',   vol: 0.058, notes: lead }       // soaring lead (the tune)
+    ]
+  };
+})();
+
+// M5.7 THE FACTORY — "ASSEMBLY LINE": 8-bit techno/house, 126 BPM, A-minor,
+// prog Am–F–C–G, ~3:00. Ported from the approved render (artdev/factory/
+// render_factory_theme.js) to the in-game chip section-composer. NO noise voice
+// in-game, so the four-on-the-floor kick is a short low triangle and the house
+// chord stabs collapse to one tone (monophonic tracks). 94 bars × 4 = 376 beats
+// (~2:59 @126bpm); ALL tracks sum to 376 (the equal-beats rule — asserted by the
+// per-bar emitters each pushing exactly 4 beats).
+DATA.audio.music.factory = (function () {
+  var NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  function m2n(midi) { if (!midi || midi <= 0) return null; return NAMES[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1); }
+  // triad roots (mid octave); Am is minor, F/C/G major
+  var ROOTS = { A: 57, F: 53, C: 60, G: 55 };
+  function triad(tok) { var r = ROOTS[tok], th = tok === 'A' ? 3 : 4; return [r, r + th, r + 7]; }
+  var PROG = ['A', 'F', 'C', 'G'];                    // Am – F – C – G, one per bar
+
+  // house lead motif — [midi, 16th-steps] (4 steps = 1 beat, 0 = rest)
+  var LD = [[69,4],[76,2],[74,2],[72,4],[69,4],[67,4],[69,4],[72,2],[74,2],
+            [76,4],[74,2],[72,2],[71,4],[67,4],[69,8],[0,4],
+            [72,4],[76,2],[74,2],[72,4],[71,4],[69,4],[67,4],[64,2],[67,2],
+            [69,4],[72,2],[74,2],[76,4],[74,4],[69,8],[0,4]];
+  var LO = [[69,8],[67,8],[64,8],[69,24]];            // sparse outro/intro glints
+
+  var SECTIONS = [
+    { bars: 8,  mode: 'intro',   lead: LO },
+    { bars: 16, mode: 'dropA',   lead: LD },
+    { bars: 16, mode: 'main',    lead: LD },
+    { bars: 12, mode: 'break',   lead: LO },
+    { bars: 4,  mode: 'rebuild', lead: LO },
+    { bars: 28, mode: 'dropB',   lead: LD },
+    { bars: 10, mode: 'outro',   lead: LO }
+  ];
+
+  var kick = [], bass = [], stab = [], arp = [], pad = [], lead = [];
+  var KICK_ON = { dropA: 1, main: 1, rebuild: 1, dropB: 1 };
+  var BASS_FULL = { dropA: 1, main: 1, dropB: 1, rebuild: 1 };   // octave-jump 8ths; else sparse
+  var STAB_ON = { dropA: 1, main: 1, 'break': 1, dropB: 1 };
+  var ARP_ON = { dropA: 1, main: 1, 'break': 1, rebuild: 1, dropB: 1 };
+  var LEAD_ON = { dropA: 1, main: 1, dropB: 1 };
+  var BASSOFF = { intro: 0 };                                     // intro: no bass at all
+  var JUMP = [0, 12, 0, 7, 0, 12, 0, 5];                          // house octave-jump offsets
+
+  SECTIONS.forEach(function (sec) {
+    var budget = sec.bars * 4;
+    // ---- lead: loop the motif (or rest the whole section) ----
+    if (LEAD_ON[sec.mode]) {
+      var acc = 0, i = 0;
+      while (acc < budget - 1e-6) {
+        var mn = sec.lead[i % sec.lead.length]; i++;
+        var b = mn[1] / 4; if (acc + b > budget) b = budget - acc;
+        lead.push([m2n(mn[0]), b]); acc += b;
+      }
+    } else { lead.push([null, budget]); }
+    // ---- per-bar layers (each emits EXACTLY 4 beats/bar) ----
+    for (var bar = 0; bar < sec.bars; bar++) {
+      var tok = PROG[bar % PROG.length], tones = triad(tok);
+      var broot = ROOTS[tok] - 24;                    // deep house bass root
+      // kick: short low four-on-the-floor thump
+      if (KICK_ON[sec.mode]) { for (var k = 0; k < 4; k++) { kick.push([m2n(33), 0.25], [null, 0.75]); } }
+      else { kick.push([null, 4]); }
+      // bass: octave-jump eighths, or sparse, or silent (intro)
+      if (sec.mode === 'intro') { bass.push([null, 4]); }
+      else if (BASS_FULL[sec.mode]) { for (var e = 0; e < 8; e++) bass.push([m2n(broot + JUMP[e]), 0.5]); }
+      else { bass.push([m2n(broot), 1], [null, 1], [m2n(broot + 7), 1], [null, 1]); }
+      // pad: sustained drone (root, one octave down)
+      pad.push([m2n(ROOTS[tok] - 12), 4]);
+      // stab: offbeat one-tone house chord (the third, up an octave)
+      if (STAB_ON[sec.mode]) { for (var s = 0; s < 4; s++) { stab.push([null, 0.5], [m2n(tones[1] + 12), 0.5]); } }
+      else { stab.push([null, 4]); }
+      // arp: 16 sixteenths cycling chord tones up 1–2 octaves
+      if (ARP_ON[sec.mode]) {
+        var seq = [tones[0] + 12, tones[1] + 12, tones[2] + 12, tones[0] + 24, tones[2] + 12, tones[1] + 12, tones[2] + 24, tones[1] + 12];
+        for (var a2 = 0; a2 < 16; a2++) arp.push([m2n(seq[a2 % 8]), 0.25]);
+      } else { arp.push([null, 4]); }
+    }
+  });
+
+  return {
+    bpm: 126,
+    tracks: [
+      { type: 'triangle', vol: 0.085, notes: bass },     // deep house bass (the pump)
+      { type: 'triangle', vol: 0.050, notes: kick },      // faked four-on-the-floor kick
+      { type: 'square',   vol: 0.026, notes: stab },      // offbeat chord stab
+      { type: 'square',   vol: 0.022, notes: arp },       // techno 16th arp
+      { type: 'square',   vol: 0.024, notes: pad },       // sustained pad drone
+      { type: 'square',   vol: 0.056, notes: lead }       // the lead line
     ]
   };
 })();

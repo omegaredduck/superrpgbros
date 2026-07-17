@@ -114,7 +114,7 @@ var MENU = (function () {
     }
 
     function renderSettings() {
-      var cx = Wd() / 2, cy = Hd() / 2, w = 700, h = 548;
+      var cx = Wd() / 2, cy = Hd() / 2, w = 700, h = 580;
       box(cx, cy, w, h);
       var top = cy - h / 2, L = cx - 320;
       txt(cx, top + 30, 'SETTINGS', { size: 26, color: '#ffcd75', ox: 0.5, bold: true });
@@ -146,11 +146,21 @@ var MENU = (function () {
       txt(L + 176, top + 212, dev ? 'ALL GEAR · MAX LEVEL · IMMORTAL' : 'grants all gear, max level, immortality',
         { size: 11, color: dev ? '#ffcd75' : '#8a93a8' });
 
-      txt(L, top + 244, 'KEYBINDS', { size: 13, color: '#7cc7ff' });
-      txt(cx + 320, top + 244, 'primary · alternate — click to rebind', { size: 11, color: '#8a93a8', ox: 1 });
+      // M6c WHITE-GEAR TEST (Red): lock the weakest starter set on every realm
+      // entry so balance testing stays in white gear across deaths.
+      var wt = SAVE.settings().whiteTest;
+      txt(L, top + 240, 'White-gear test', { size: 16, color: wt ? '#ffcd75' : '#f4f4f4' });
+      btn(L + 148, top + 240, wt ? '[ ON ]' : '[ OFF ]', function () {
+        var s = SAVE.settings(); s.whiteTest = !s.whiteTest; SAVE.saveSettings(); render();
+      }, { size: 14, ox: 0, color: wt ? '#a7f070' : '#8a93a8' });
+      txt(L + 232, top + 240, wt ? 'locks the COMMON starter set on every realm entry' : 'keeps your best owned gear on entry (normal)',
+        { size: 11, color: wt ? '#ffcd75' : '#8a93a8' });
+
+      txt(L, top + 272, 'KEYBINDS', { size: 13, color: '#7cc7ff' });
+      txt(cx + 320, top + 272, 'primary · alternate — click to rebind', { size: 11, color: '#8a93a8', ox: 1 });
 
       var list = (DATA.keybinds && DATA.keybinds.list) || [];
-      var perCol = Math.ceil(list.length / 2), rowH = 28, y0 = top + 272;
+      var perCol = Math.ceil(list.length / 2), rowH = 28, y0 = top + 300;
       for (var i = 0; i < list.length; i++) {
         var col = i < perCol ? 0 : 1, row = i - col * perCol;
         keyRow(L + col * 330, y0 + row * rowH, list[i]);
