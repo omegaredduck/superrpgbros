@@ -6,6 +6,453 @@
 
 ---
 
+## 2026-07-17 · M7 BUILD · MAP 8/16 WITCH'S SWAMP SHIPPED (?v=m7i)
+
+**Realm 12 — game/js/maps/swamp/{art,scene,map}.js** (folder-registered,
+three tags, ZERO core edits). Bayou witch: black water, wisp light, brew
+green — spooky but alive. Session ended here (Red's call) — see the
+battery note at the bottom.
+
+**Landed:**
+- Island bayou: seven bog-moss islands in black water joined by rickety
+  plank paths (rotated tileSprites), glow-algae + lily-shallows accent
+  patches, mire toxic seeps (permanent damage-tick patches), the OLD DOCK
+  spawn south, WITCH'S HOLLOW north (hut + GIANT CAULDRON + ritual-earth
+  arena). **WATER RULE (picked + documented in scene.js): slow-wade
+  0.45× — islands and planks run free.** Wrap via edge planks.
+- **HEX TOTEMS** signature system: sites A–E cycle — shimmer warn → the
+  totem RISES as a SHOOTABLE env object (playerShots drain its hp) and
+  pulses ONE hex aura: violet SLOW (players AND mobs), green DRAIN (ticks
+  both; mob deaths env-credited), bone WEAKEN (shots fired from inside are
+  tagged once and land at 0.6×). Shot down = splinter burst
+  (killMobCredited, no player damage). HARD RULES verified: never more
+  than 2 up (the cycle refuses a third), never at the dock (sites are
+  fixed mid-map).
+- 12 mobs: bogling swarm, GIANT LEECH (lunge → LATCH: ~0.8s ride-along
+  drain that breaks on hitstop/shooting it/boss arrival — pirate-pin
+  brevity), skeeter cloud (core lunge nips), SNAPJAW TURTLE (snap cone +
+  TUCK: damage-refund shell w/ cooldown so it can't turtle forever),
+  witchling (orbShot violet hex bolts), sporecap myconid (warned circles →
+  violet slow clouds), toad alchemist (3-flask mortar → lingering seep
+  pools), MIRE SERPENT (wrap-aware warned lane strike), GLOWCAP SPRITE
+  (heals mobs +12, flees you, respects hitstop — priority target),
+  BOTTLED IMP (jar hops → warned SMASH → flame patch, self-kill credited),
+  CAULDRON MIMIC elite (quake-ring hops + brew-arc spew), MOSSBACK elite
+  (sleeps as a mound — 0 aggro until approached OR SHOT, shimmer on the
+  mob only → wakes furious: alternating charge lane / slam circle combo).
+- **THE BREWMISTRESS · MISTRESS OF THE MIRE** (hp 3800, #4: brew-stained
+  robes, crooked point hat, iron ladle, toad familiar): **cauldron-rise
+  entrance** (bloops accelerate → she rises ladle-first, dripping +
+  cackle). Kit: LADLE SWING cone + knockback · FLASK VOLLEY (3 warned
+  circles → seep pools) · PLANT A HEX TOTEM (map tech weaponized, slow
+  hex, hp 25 — REROUTES to flasks while 2 map totems stand: no hex soup) ·
+  SWAMP GAS (3 warned sectors in sequence) · SUMMON THE BREW (3 boglings +
+  a bottled imp from the pot, capped) · **THE GRAND BREW**: she dives IN
+  (untargetable; the pot is the actor) → 5 warned splashes → **the POT
+  TIPS**: a long-warned HALF-ARENA wave on fixed alternating halves (mobs
+  in it die credited) → she crawls out dizzy: rooted + vented ×1.5 ·
+  enrage: the pot boils faster. The cauldron itself is scenery — never
+  targetable (ghost-ship lesson).
+- **"WISP RAVE"** (TAKE 4 — Red: "thats the one"): 8-bit TECHNO TRANCE,
+  140 BPM A minor, 105 bars × 4 = 420 beats = EXACTLY 180.0s (asserted,
+  12 tracks equal). Four-on-the-floor kicks, offbeat open hats + 16th
+  closed ticks, ACID bass (16th offbeats, octave pops, a G-pop where the
+  slide was), trance arp, twin-voice anthem lead, gated pads, breakdown →
+  accelerating snare-roll BUILD → THE DROP w/ sub layer → break 2 → final
+  drop octave up → outro. Wisp drips + one croak per phrase. 14 new SFX.
+
+**Verified:** test/m14_swamp_verify.js — **34/34 green** (registry/theme/
+water rule · totem rise/auras/all 3 hexes/shatter credit/max-2 · leech
+latch lifecycle · turtle tuck refund+reopen · myconid/toad pools · serpent
+wrap lane · sprite heal + hitstop respect · imp smash · mimic quake+spew ·
+mossback sleep→shot-wake→combo · unfreeze · cauldron entrance + cycle
+pause · ladle/flask/totem-reroute/gas/adds · GRAND BREW dive→tip→vent 150 ·
+kill→chest · zero console errors). m2 + m13 smoke green on m7i.
+**⚠ FULL battery NOT yet re-run on m7i** (session ended) — run it FIRST
+THING next session before building map 9.
+
+**Next:** full battery on m7i, then MAP 9/16 WEST. GitHub still at m3q —
+Red should push (2_SAVE_AND_UPLOAD.bat) before the next session.
+
+---
+
+## 2026-07-17 · M7 BUILD · MAP 7/16 HAUNTED CARNIVAL SHIPPED (?v=m7h)
+
+**Realm 11 — game/js/maps/carnival/{art,scene,map}.js** (folder-registered,
+three tags, ZERO core edits). Creepy carnival: cheery-gone-wrong under
+sickly bulb glow on midnight dark — not gore, not pitch black.
+
+**Landed:**
+- Midnight fairground: warped FUNHOUSE CHECKER floor inside a solid wooden
+  fence (south-gate spawn, gate gap in the block line), dead-grass wrap
+  outskirts, the MIDWAY spine of booths A–D, ride yard west (carousel,
+  ferris, teacup, ghost-train rails decal), sideshow alley east (wagon,
+  cage, posters, mirrors, funhouse mouth), and THE BIG TOP north — RING
+  MAT floor + a striped canvas wall ring of static blocks, solid except
+  the south flap. All colliders attach in afterCreate (the m7g lesson).
+- **GAME BOOTHS** signature system: booths light ONE AT A TIME on a cycle
+  (glow zone + bulb sting). Enter the glow to START the round — bullseye
+  targets pop to real playerShots (env objects, **NO kill credit**); all
+  down in time = PRIZE (heal + XP + fanfare); timeout/abandon = **THE
+  BOOTH BITES BACK** — one telegraphed burst at the booth mouth
+  (killMobCredited on mobs it catches). Never mandatory, never two at
+  once; the cycle CANCELS cleanly on boss arrival. Suites park
+  booth.nextAt = Infinity.
+- 11 mobs: CREEPY CLOWN (honk telegraph → lunge), BALLOON WISP (drifts
+  in, warned POP, shootable early — self-pop via killMobCredited, warn
+  ring swept by armed cleanup), CARNY BARKER (warned cane cone that
+  PUSHES — halved while the cymbal slow holds: the CC cap), POSSESSED
+  TEDDY (plays dead → shimmer ON THE MOB ONLY → springs), POPCORN
+  POLTERGEIST (3-kernel mortar), STRONGMAN SHADE (warned slam + expanding
+  shockwave ring), COTTON CANDY BLOB (pink slow patches; **splits ONCE**
+  on death via a scene watcher + queueSpawn with child marks), KNIFE
+  JUGGLER (3 aimed knife lanes), WHACK-A-MOLE (buries → warned hole under
+  you → erupts, body off while under), CYMBAL MONKEY (clash ring slow,
+  hard-capped at +1600ms), FERRIS PHANTOM elite (wrap-aware rolling lane
+  warn rendered on both sides of the seam + twin spoke-beam flicks).
+- **THE RINGMASTER · THE SHOW NEVER ENDS** (hp 3700, #1 THE CLASSIC: red
+  tailcoat/gold trim/top hat/waxed mustache/whip/spotlight pool):
+  **trapeze descent** entrance (spotlight snaps on EMPTY → calliope swell
+  → the rig swings him down → dismount, BOW, whip CRACK). Kit: WHIP CRACK
+  cone + knockback · SPOTLIGHT LOCK (chases, breaks on hitstop, fills →
+  stage light crash) · SEND IN THE CLOWNS (3 clowns + a juggler,
+  bossWave, capped) · KNIFE CURTAIN (4 lanes marching in sequence) ·
+  STEP RIGHT UP (booth tech inverted: 2 teal SAFE rings, one always
+  within reach, never on the wall — outside gets raked) · **GRAND
+  FINALE** (8 warned fireworks → he BOWS: rooted + vented ×1.5) · enrage:
+  the calliope speeds up (rateMult on all cycles). Warn language: env =
+  TEAL, boss = GOLD — both pop on red AND cream checker squares.
+- **"THE LAST SHOW"**: TRUE 3/4 — 132 BPM, 132 bars × 3 = 396 beats =
+  EXACTLY 180.0s (asserted, all 10 tracks equal). D-minor circus waltz:
+  oom-pah-pah engine, calliope pipe lead, forced-cheery chorus bells,
+  TAPE-WARP bars play a SEMITONE FLAT (the composer can't bend pitch —
+  same wrongness, chip-legal), music-box break that skips, mad giggles,
+  octave-up finale, power-cut ending (flat wheeze + a sawdust thump).
+  14 new SFX (booth sting/pop/fanfare/bite, whip, spotlight hum, light
+  crash, knife whish, firework, trapeze creak, calliope swell, honk,
+  cymbal, balloon pop).
+
+**Verified:** test/m13_carnival_verify.js — 33/33 green FIRST RUN
+(registry/theme/layout · booth round win + NO-credit pops + bite credit ·
+all 11 mob verbs · unfreeze shifts · trapeze entrance + booth cancel ·
+whip/spotlight/clowns/curtain/game-rings/finale + vent 150 · kill → chest
++ machinery swept · zero console errors). Full battery green on m7h.
+
+**Next:** MAP 8/16 SWAMP.
+
+---
+
+## 2026-07-17 · M7 BUILD · MAP 6/16 CRYSTAL CAVERNS SHIPPED (?v=m7g)
+
+**Realm 10 — game/js/maps/crystal/{art,scene,map}.js** (folder-registered,
+three tags, ZERO core edits). Sparkle adventure: saturated gems on dark rock.
+
+**Landed:**
+- Chambered cave world: six masked-ellipse chambers (entry shelf spawn ·
+  great hall hub · garden · geode hollow · underground lake w/ sand rim +
+  crystal bridge · THE DEEP FISSURE arena) joined by rotated-tileSprite
+  tunnels; solid rock is CRUSH-SLOW (0.35×) rather than a hard wall — the
+  tunnel network stays meaningful without collider geometry.
+- **GROWING CRYSTAL** signature system: GATES A–D at tunnel chokepoints
+  cycle — floor shimmer + chime warn → the wall GROWS SHUT (a row of real
+  static-body blocks in one shared wall group + shard sprite + kgrown
+  stain) → crack telegraph → **SHATTER**: harmless sparkle + a damaging
+  shard ring on the line (killMobCredited). HARD RULES verified: ≥2 gates
+  open always (the cycle refuses a third close), and a closing gate DEFERS
+  while anyone stands on it.
+- 9 mobs: shardling swarm, AMETHYST LURKER (disguised → shimmer → wake →
+  core lunge), GEODE GOLEM (warned slam + the exposed CORE takes +50%
+  from behind via _coreHp detection), shatterbat (swoop lunge + DAZE
+  screech cone), QUARTZ RAM (locked lane → wrap-carrying charge, velocity
+  set at charge start), resonator (expanding rings — shared ring runner),
+  gemwing moth (glitter-dust slow patches), deep crawler (pincer cone),
+  voidgem horror (twin void beams).
+- **THE SHARDLORD · HEART OF THE MOUNTAIN** (hp 3600, colossus display
+  165): ceiling-drop entrance (stalactite warns + chandelier shudder →
+  crash + quake → core ignites color by color). The **RAINBOW CORE is the
+  telegraph language**: core locks a color (boss tints + chime + a
+  cosmetic hue-cycling glow) → that color fires — PINK shard volley, CYAN
+  lances, PURPLE growing walls (gate tech weaponized, auto-shatter, swept
+  on boss death), AMBER quake rings, GREEN geode hatch. **PRISMATIC
+  OVERLOAD**: five colored cones sweep the wheel → the core burns out
+  GREY → **vented ×1.5**, rooted.
+- **CAVERN OF WONDERS** theme: 88 BPM C major, 66 bars = 264 beats =
+  180.0s exactly. Music-box glitter arps, bouncing octave bass, snap-clap
+  engine, soaring chorus w/ low counter-line, the ECHO CAVE break (the
+  cave answers back, fading), octave-up verse, grand finale pads,
+  music-box outro. 11 tracks, equal-beat asserted. 8 crystal SFX.
+- **test/m12_crystal_verify.js — 26/26 GREEN** + FULL battery green.
+
+**Files:** game/js/maps/crystal/{art,scene,map}.js (NEW) ·
+game/index.html (?v=m7g) · test/m12_crystal_verify.js (NEW) · docs.
+
+**Decisions:** colliders must NOT be created in setup() — the player does
+not exist yet during the terrain dispatch; attach them in afterCreate
+(the 'isParent' undefined crash poisons every physics step and silently
+breaks pause/unfreeze + boss spawns). Suites resolve verb delayedCalls
+DETERMINISTICALLY by wrapping scene.time.delayedCall and invoking the
+captured callback (no scene-time waits at all — supersedes the m7f
+waitForFunction pattern where state polling is awkward).
+
+**Next up:** MAP 7/16 — CARNIVAL (realm 11).
+
+---
+
+## 2026-07-17 · M7 BUILD · MAP 5/16 PIRATE SHIP SHIPPED (?v=m7f)
+
+**Realm 9 — game/js/maps/pirate/{art,scene,map}.js** (folder-registered,
+three tags, ZERO core edits). Red's PIVOT honored: mobs are LIVING pirates
++ sea creatures — ghost teal appears NOWHERE except the boss's summon.
+
+**Landed:**
+- **THE ROCKING DECK**: the ship heels on a swell clock — lean telegraph
+  (tint + creak) → SLIDE drags player AND mobs on deck toward the low
+  rail (positional, hitstop-gated, beach/dock exempt); **RAIL SAFETY**
+  clamps everyone aboard; **hard swells roll loose cargo** — barrel
+  rollers cross the deck (killMobCredited mobs, hurtPlayer player).
+  Open water + ink slicks slow swimmers 0.55×.
+- 10 living-crew mobs + the boss's deckKeg prop: deckhand, cutlass
+  corsair (core lunge), POWDER MONKEY (keg kamikaze on the mine
+  watcher tech — fuse blast + shot-early pop, all env kills credited,
+  XP before player burn), salty gull (dive lunge), SIREN (song windows
+  pull, per-frame displacement cap vs swell stacking), KRAKEN ARM
+  (warned deck hole → erupts rooted → lane sweeps → withdraws +
+  re-ambushes near you), mako leaper (marked arcs over the rails),
+  drunken swab (owns an erratic zig-zag), HARPOONER (lane telegraph →
+  brief PIN, releases on death/timeout, clock-shifted), inkpot octo
+  (warned globs → slippery slicks).
+- **CAPTAIN KRAKEN** (hp 3200, mapOwned): thrown aboard by a COLOSSAL
+  TENTACLE (rises off the bow, hurls him onto the foredeck — arc tween +
+  deck-shake). Kit: cutlass combo (re-aiming double cone), tentacle slam
+  (marching circle line), keg toss (shootable deckKeg mobs, fromBoss),
+  boarding crew adds, hard-swell command (weaponized map mechanic),
+  **THE GHOST SHIP BROADSIDE** — spectral galleon FX sprite surfaces to
+  starboard, TWO 3-lane waves rake the deck, sinks → **vented ×1.5**.
+  Enrage tightens the swell clock.
+- **THE KRAKEN'S SHANTY**: 100 BPM D dorian, 75 bars = 300 beats =
+  180.0s exactly. Concertina lead + reed pumps, stomp-and-clap, crew
+  HEY!s, root-fifth bass → ghost choir → THE FATHOMS (sonar + bending
+  wail) → ghostly chorus → octave-up rowdy finale → one last HEY! and a
+  ghost breath. 10 tracks, equal-beat asserted. 10 pirate SFX.
+- **test/m11_pirate_verify.js — 27/27 GREEN** + FULL battery green.
+
+**Files:** game/js/maps/pirate/{art,scene,map}.js (NEW) ·
+game/index.html (?v=m7f) · test/m11_pirate_verify.js (NEW) · docs.
+
+**Decisions:** HEADLESS TIMING LESSON — Phaser scene time runs ~0.3× real
+time under headless rAF throttling, so suites must NEVER wait fixed real
+ms for a scene-time delayedCall: poll the resulting STATE with
+waitForFunction instead. Ambient mobs interfere with delayed asserts —
+wipe the field first. deckKeg has NO chase def (kegs don't bite);
+env-blast XP lands before the player burn (lunar lesson, kept).
+
+**Next up:** MAP 6/16 — CRYSTAL (realm 10).
+
+---
+
+## 2026-07-17 · M7 BUILD · MAP 4/16 LUNAR STATION SHIPPED (?v=m7e)
+
+**Realm 8 — game/js/maps/lunar/{art,scene,map}.js** (folder-registered,
+three tags, ZERO core edits).
+
+**Landed:**
+- **LOW GRAVITY** signature system, all realm-scoped in the map update:
+  hit mobs keep DRIFTING after the core knockback (~2× distance, hangs
+  ~450ms — _lgHp drop detection + decaying positional glide); the player
+  carries **momentum glide** on sudden stops; **JUMP PADS** in 3 pairs arc
+  you across the crater belt (manual mover, absolute clocks, body OFF in
+  flight = contact-immune while zones still land); **dust puffs** on
+  regolith only (module decks stay clean). All pushes gate on hitstop.
+- 9 mobs + scuttler hatchling: grey watcher (psi orbShot), brood sac
+  (dormant → cracks on approach → capped scuttler waves via queueSpawn),
+  sentry drone (triple laser burst), haywire turret (rooted 3-arc lane
+  sweeps), astro-revenant (float; GRAB = brief hold + ticks, releases on
+  death/timeout, clock-shifted), magnetron (constant positional drag),
+  luna leaper (marked landing rings + low-grav arcs, airborne mid-hop),
+  orbital mine (drifts, beeps, warned blast; SHOOTABLE — pops early via
+  a scene-side watcher; mine + victims all killMobCredited, no double
+  credit; XP lands BEFORE the player burn so level-up heals can't mask
+  it), star horror (locked tentacle cones).
+- **SPECIMEN ZERO · THE OVERMIND** (hp 2800, mapOwned, zero projectiles):
+  LIGHTS-OUT entrance (arena powers down to black → the violet eye
+  ignites → emergency lights stutter on → it was already there; residual
+  gloom holds until it dies, frame-driven armed cleanup). Kit: tkBarrage,
+  mindLash cone, gravityWell (warned circle → live PULL for 3s → pop),
+  cableSweep lanes, psychicScream expanding ring (outrun it),
+  **CONTAINMENT PURGE** — 6 arena sectors vent in sequence w/ one safe
+  pocket → tank fractures → **vented ×1.5**; broodCall adds; overclock.
+- **SEA OF TRANQUILITY** theme: 72 BPM, 54 bars = 216 beats = 180.0s
+  exactly. C-Lydian pads (4 voices) + starlight 16th arps + glass bells →
+  first shadow → THE MENACE (drone, tritone, vent clicks, heartbeat) →
+  uneasy return with the wrong note that stays; ends on one bell + one
+  click. 10 tracks, equal-beat asserted. 9 lunar SFX.
+- **test/m10_lunar_verify.js — 28/28 GREEN** + FULL battery green on m7e.
+
+**Files:** game/js/maps/lunar/{art,scene,map}.js (NEW) ·
+game/index.html (?v=m7e) · test/m10_lunar_verify.js (NEW) · docs.
+
+**Decisions:** hurtMob's juice hitstop gates ALL positional pushes — suite
+fixtures must clear hitstopActive before reading push effects; env-kill
+XP must land BEFORE hurtPlayer in shared blasts (level-up full heal would
+mask the damage assert); mine ring cleanup on both death paths.
+
+**Next up:** MAP 5/16 — PIRATE (realm 9).
+
+---
+
+## 2026-07-17 · M7 BUILD · MAP 3/16 VAMPIRE CASTLE SHIPPED (?v=m7d)
+
+**Realm 7 — game/js/maps/castle/{art,scene,map}.js** (folder-registered,
+three tags, ZERO core edits — the registry hooks from m7a/m7c carried the
+whole map).
+
+**Landed:**
+- **BLOOD MOON COURT** terrain mechanic: roaming moonbeam pools EMPOWER mobs
+  standing in them (tint + spd/dmg buff, per-frame flag reset) and BURN the
+  player; ballroom **waltz drift** (positional push applied BEFORE the wrap
+  check, gated on hitstop); **chandelier crash + rehoist** hazard cycles.
+- 8 court mobs + 2 support defs: gargoyle (perch HARDENED — damage-RESIST
+  via _lastHp refund pattern, hurtMob has no resist hook), blood maiden
+  (leech shot-ledger heals from landed hits), halberd guard (sweep lane),
+  portrait phantom (wall-phase ambush), vamp initiate, dire rats (pack-credit
+  queueSpawn trick), animated armor → **armorPiece crawl-to-centroid
+  reassembly** → separate `armorReborn` def (no re-split; hp fixed ×0.4),
+  crimson duelist (orbit+lunge state machine owning its own movement).
+- **THE PALE KING** (hp 2500, mapOwned): lancePass (double pass <60% hp),
+  carousel ring gallop, tiltCourt spectral walls + collider (cleared on ALL
+  exit paths), waltzTrample 3×3 beat-staggered zones, pennonSweep cone,
+  bloodMoonJoust rotating lane → **vented ×1.5 window**, ratAdds, overclock.
+  GATE-SMASH bossArrival: portcullis rises, entrance lane, king gallops in.
+- **THE LAST WALTZ** theme: true 3/4 — 150 bars @150 BPM = 180.0s exactly
+  (450 beats). Music-box intro → grand waltz → wrongify slips + detuned
+  ghost-twin (delayed 0.1 beat) → minor waltz + timpani → ballroom horror
+  organ → corrupted grand reprise → broken music box. 7 tracks, equal-beat
+  asserted. 9 castle SFX.
+- **test/m9_castle_verify.js — 21/21 GREEN** + FULL battery green on m7d
+  (one m3b flake mid-run, green on rerun — same precedent as the m1 flake).
+
+**Files:** game/js/maps/castle/{art,scene,map}.js (NEW) ·
+game/index.html (?v=m7d) · test/m9_castle_verify.js (NEW) · docs.
+
+**Decisions:** damage-resist-without-a-hook = _lastHp refund + 'HARDENED'
+popup (reusable); per-mob split override impossible (core reads def.split on
+death) → reassembled armor is its own def; gate-smash assert must not race
+the 300ms alpha tween (check gate.y OR alpha).
+
+**Next up:** MAP 4/16 — LUNAR (realm 8).
+
+---
+
+## 2026-07-17 · M7 BUILD · MAP 2/16 PYRAMID PLUNDER SHIPPED (?v=m7c)
+
+**Realm 6 — game/js/maps/pyramid/{art,scene,map}.js** (folder-registered,
+three tags, zero per-map core edits). One NEW registry hook landed in core:
+the boss-died dispatcher now branches `def.mapOwned && def.transform` →
+the map folder's `scene.bossTransform` (engineer-cutscene seat) — this is
+THE two-phase plumbing every later transforming boss rides.
+
+- art.js: Red's picks — mobs #1 3 5 7 10 11 12 14 · NEFERU-KA BOTH forms
+  (pyramid_boss_final canon) · ALL 20 decor · tiles #1 2 3 4 5 7 8 10.
+- scene.js: plan-PNG layout (camp → causeway spine → necropolis/oasis/dunes/
+  temple court → BURIAL CHAMBER w/ obsidian seal + 4 anubis statues);
+  TREASURE & CURSE (walk-over plunder pays XP + haste and raises CURSE →
+  quicksand churns wider → trap plates arm (warned dart lanes, mobs
+  killMobCredited) → retaliation waves + sky dims; urns = free smashes);
+  quicksand slow (speed mult in the mover); toroidal wrap; warned-zone +
+  warned-LANE machinery (absolute clocks, _zoneWarns mirrored).
+- mapVerbs: KHOPESH GUARD visible shield window (reuses hurtMob's
+  guardShieldUntil bounce + 'BLOCKED' popup), SANDSTONE GOLEM telegraphed
+  ground-pound, JACKAL pack-spawn (pack-credit trick stops chain packs).
+- NEFERU-KA: SARCOPHAGUS CREAKS OPEN entrance (braziers gutter → lid grinds
+  → the child floats out). Phase 1 caster: curse sigils · MASK GAZE locked
+  cone · TANTRUM QUAKE checkerboard waves · SANDS OF AGE (real lingering
+  quicksand) · royal summons. Phase-1 death → TRANSFORMATION cutscene →
+  THE EXECUTIONER (texture + body resize mech-precedent, full second HP
+  pool, 2.4× hunter speed, its own 6-hint scouter): CROSS-SLASH X-lane
+  double dash · WHIRLING BLADES grow-ring · BRAND · GUILLOTINE LEAP
+  (tracking→locked circle) · JUDGMENT OF THE FOUR signature (statues sweep
+  beam lanes in sequence → he KNEELS, vented ×1.5) · jackal adds · enrage.
+- map.js: rows + console unlock + 9 SFX + "THE ETERNAL CHILD" ported as an
+  8-track section composer — 84 BPM D hijaz, 63 bars = 252 beats = EXACTLY
+  180.0s (drone/chants/heartbeat toms/shaker/dread stabs/ornamented
+  snake-charmer lead/gong+bells + the final wrong little child's bell).
+- **NEW test/m8_pyramid_verify.js — 23/23 GREEN · FULL BATTERY GREEN on
+  m7c** (incl. m7 skyisles 26/26).
+
+**Files:** game/js/maps/pyramid/* (NEW) · scenes.js (transform hook) ·
+index.html (?v=m7c) · test/m8_pyramid_verify.js (NEW) · docs.
+**Next:** map 3/16 CASTLE (realm 7).
+
+## 2026-07-17 · M7 BUILD · REGISTRY REFACTOR (?v=m7a) + MAP 1 STORM SKY ISLES SHIPPED (?v=m7b)
+
+THE BUILD SESSION begins (docs/NEXT_SESSION.md is the brief). Red skipped the
+safety push ("skip it, just build").
+
+**M7a — THE REGISTRY REFACTOR (REGISTRY_SPEC.md, build step 0):**
+- NEW `game/js/maps/registry.js`: EXTENDS the existing MAPS tile-map module
+  (the spec's `window.MAPS = {}` would clobber maps.js — noted in-file).
+  `MAPS.register(def)` stores the def and runs `installData(DATA)` immediately
+  (map folders load after builder.js, before main.js → **zero data.js edits**).
+  Helpers: `MAPS.addConsoleMap` (inserts before sealed rows), `MAPS.forScene`.
+- Core hooks (one-time, tiny): scenes.js create() registry-map terrain branch +
+  afterCreate + per-frame map update (owns wrap/ambient) + unfreeze(dt) +
+  annihilate + bossArrival dispatch; entities.js updateBoss `def.mapOwned` →
+  scene.bossUpdate (grovekeeper no-return pattern) + updateMob `def.mapVerb` →
+  def.mobVerbs table; textures.js buildHiFiWorld end → def.buildArt(ctx) with
+  the SAME spr/tex + MOB_HI/MOB_DISPLAY/BOSS_HI helpers core mobs use.
+- SUITE DE-DRIFT (pre-existing, from the unlogged m6a–m6e factory build):
+  m3c/m47/m5_grove hardcoded "3 bosses = 11 bestiary entries" → data-driven
+  (roster + Object.keys(DATA.bosses)); m3b chest checks still tested the
+  pre-m6c auto-equip → ported to compare-and-SELECT. m1/m21/m3 stay
+  documented-stale (pre-m3o menu model, not in the battery).
+- Fence retrofit audit: only the graveyard has fences among the live realms —
+  already destructible. Yard/grove/factory have walls/trunks/pillars, not
+  fences. Nothing to retrofit; new maps ship destructible by design.
+- **FULL BATTERY GREEN on m7a** (m2·m3b·m3c·m4·m4b·m46·m47·m5_grove·
+  graveyard smoke/boss·factory sim).
+
+**M7b — MAP 1/16: STORM SKY ISLES (realm 5) SHIPPED:**
+- `game/js/maps/skyisles/{art,scene,map}.js` — the first folder-registered
+  realm; three script tags in index.html, zero core edits.
+- art.js: Red's picks ported from the render scripts — mobs #2 4 8 9 11 15 16
+  19, NIMBUS TALON (sky_boss_final canon, lightning skeleton), decor #1–19
+  (#20 cut), tiles #1 2 3 5 10 + MIST VEIL sea (#4). Windmill split
+  tower/sails (sails spin), balloon bobs, mist drifts.
+- scene.js: the planned 7-isle layout (sky_scene_plan.png canon) + 8 shards,
+  rope bridges, lantern cobble path; MIST SLOW (speed mult in the mover,
+  floaters exempt); drifting CLOUD BANKS (concealment, flags reset before
+  marking); toroidal wrap (graveyard pattern); THE TEMPEST CYCLE v2 (wind
+  shift w/ ringing chimes → roaming strikes clustering on rods/vanes/the eye
+  → updraft vents on island edges → THE STORM EYE conductor, parks over the
+  Roost for the boss); env kills credit via killMobCredited.
+- Three NEW mapVerbs through the registry hook: Cloud Ray RAYMARK (marked
+  mini-strike), Nimbus Golem SHOVE (positional toss), Roc Hatchling
+  BELLY-FLOP (hop airborne → telegraphed circle).
+- NIMBUS TALON: GROWING-SHADOW entrance (arena darkens → he erupts onto the
+  roc nest, wing-blast ring, ~3s, suites waitForFunction(r.boss&&r.scanning));
+  kit = SKYFALL BARRAGE · GALE SHOVE · ISLAND-DROP SLAM (checkerboard waves)
+  · DIVE LANE · ROD OVERLOAD signature (4 rods in sequence, rotating safe
+  pocket → VENT ×1.5 window via core ventedUntil) · storm adds (queueSpawn,
+  bossWave) · overclock enrage. mapOwned, NO radial/stream filler, 6 hints.
+- map.js: biome/realm/mob/boss/dropTable rows + console unlock + 6 new SFX +
+  "SKYBREAKER MARCH" ported as a 7-track section composer — 140 BPM D minor,
+  105 bars = 420 beats = EXACTLY 180.0s, equal-beat asserted by construction
+  (bugle intro → march A/B → storm break → double climax w/ descant →
+  reprise → outro; drums faked in chip voices).
+- GOTCHA logged: core wireEvents() strips map listeners on the boss/player
+  event family (events.off) — death-reactive map logic must be frame-driven
+  (the fight-darkness cleanup lives in update(), armed at spawn).
+- **NEW `test/m7_skyisles_verify.js` — 26/26 GREEN** (routing · console/
+  bestiary · mist slow + floater exemption · wrap · the 3 mapVerbs · tempest
+  clocks through unfreeze · entrance · skyfall fromBoss · rod sequence + 150
+  vent damage · adds · chest close · zero console errors). **FULL BATTERY
+  GREEN on m7b.**
+
+**Files:** game/js/maps/registry.js + skyisles/{art,scene,map}.js (NEW) ·
+scenes.js entities.js textures.js index.html (hooks + tags, ?v=m7b) ·
+test/{m7_skyisles_verify.js NEW, m3b/m3c/m47/m5_grove ported} · docs.
+**Next:** map 2/16 PYRAMID (realm 6).
+
 ## 2026-07-17 · 16-MAP CAMPAIGN DESIGN COMPLETE · maps 15+16 locked, campaign closed out (planning, no game code)
 
 Final design sessions of the map campaign (2026-07-16 → 07-17). NO game code

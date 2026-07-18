@@ -79,9 +79,10 @@ function check(name, ok, extra) {
     var k = SAVE.blank('knight');
     return { kcls: k.character.cls, unlocked: k.account.unlockedClasses,
              fresh: freshCharacter('knight').cls, n: Object.keys(DATA.classes).length };})()`);
-  check('SAVE.blank("knight") seeds a knight; all three classes unlocked',
-    blank.kcls === 'knight' && blank.n === 3 &&
-    ['ranger','wizard','knight'].every(c => blank.unlocked.indexOf(c) >= 0));
+  check('SAVE.blank("knight") seeds a knight; base classes unlocked (ninja locked until beat)',
+    blank.kcls === 'knight' && blank.n === 4 &&
+    ['ranger','wizard','knight'].every(c => blank.unlocked.indexOf(c) >= 0) &&
+    blank.unlocked.indexOf('ninja') < 0);
   check('freshCharacter("knight") keeps the class on permadeath', blank.fresh === 'knight');
 
   // -- 5. title-screen class select: createNewGame(1,'knight') → knight slot ------
@@ -215,8 +216,8 @@ function check(name, ok, extra) {
     if (!game.scene.isActive('Title')) game.scene.start('Title');
     return { classes: Object.keys(DATA.classes),
              accents: Object.keys(DATA.classes).every(function(k){ return DATA.classes[k].accent != null; }) };})()`);
-  check('Picker is data-driven: three classes, each with its own accent',
-    picker.classes.length === 3 && picker.accents);
+  check('Picker is data-driven: four classes (incl. the locked NINJA), each with its own accent',
+    picker.classes.length === 4 && picker.accents);
 
   // -- 12. zero console errors across the whole run ------------------------------
   check('no console errors during the run', consoleErrors.length === 0,

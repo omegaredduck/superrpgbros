@@ -557,6 +557,29 @@ var Entities = (function () {
     if (m.castBarBg) { try { m.castBarBg.destroy(); } catch (e) {} m.castBarBg = null; }
     if (m.castBar) { try { m.castBar.destroy(); } catch (e) {} m.castBar = null; }
     if (m.castText) { try { m.castText.destroy(); } catch (e) {} m.castText = null; }
+    // M7k AUDIT (2026-07-17): GENERIC TELEGRAPH SWEEP — the 16 campaign maps
+    // hang warn graphics off m.mob under _-prefixed fields (_strikeG, _laneG,
+    // _ring, _aimG, _rollG[], _hole, …). A mob killed MID-TELEGRAPH (or wiped
+    // by the portal roar) leaked them permanently. Destroy any Phaser
+    // GameObject — or array of them — stored under an _field, plus the
+    // hop.ring nesting the leapers use. Data records (no .destroy/.scene/.type)
+    // are untouched; the old m.mob object is discarded on pooled reuse, so
+    // nulling here is safe.
+    if (m.mob) {
+      var mm = m.mob, k2, v2, gi2;
+      var isGO = function (v) { return v && typeof v.destroy === 'function' && v.scene !== undefined && typeof v.type === 'string'; };
+      for (k2 in mm) {
+        if (k2.charAt(0) !== '_') continue;
+        v2 = mm[k2];
+        if (isGO(v2)) { try { v2.destroy(); } catch (e1) {} mm[k2] = null; }
+        else if (v2 && v2.constructor === Array) {
+          var hadGO = false;
+          for (gi2 = 0; gi2 < v2.length; gi2++) if (isGO(v2[gi2])) { hadGO = true; try { v2[gi2].destroy(); } catch (e2) {} }
+          if (hadGO) mm[k2] = null;
+        }
+      }
+      if (mm.hop && isGO(mm.hop.ring)) { try { mm.hop.ring.destroy(); } catch (e3) {} mm.hop.ring = null; }
+    }
   }
 
   // M4 (WIZARD): apply a FROST SLOW to a mob — spd × slow.mult for slow.ms.
@@ -600,6 +623,18 @@ var Entities = (function () {
       m.mob.nextBurnAt += m.mob.burnEvery;
       hurtMob(scene, m, m.mob.burnTick, time, { dot: true });
       if (!m.active) return;                     // burned to death this tick
+    }
+
+    // M7 REGISTRY: map-defined mob verbs — a registered map adds NEW behavior
+    // without a core edit: def.mapVerb names a fn in the map def's mobVerbs
+    // table. Returning true means the verb OWNED this frame (skip the generic
+    // movement/attack verbs below); falsy falls through to them.
+    if (def.mapVerb && typeof MAPS !== 'undefined' && MAPS.defs) {
+      var MV = MAPS.defs[scene.realmId];
+      if (MV && MV.mobVerbs && MV.mobVerbs[def.mapVerb]) {
+        if (MV.mobVerbs[def.mapVerb](scene, m, player, time) === true) return;
+        if (!m.active) return;                   // the verb may have killed it
+      }
     }
 
     // M4.9 DYNAMITE MOLE — a TELEGRAPHED BOMB: surfaced, stationary, flashing.
@@ -1025,6 +1060,16 @@ var Entities = (function () {
     // He carries NO radial/stream filler anymore (Red: every boss does the
     // burst + the projectile ring); the P.radial/P.stream guards skip them.
     if (def.floorLift && scene.engineerUpdate) scene.engineerUpdate(b, player, time);
+
+    // M7 REGISTRY: a MAP-OWNED boss (DATA.bosses[key].mapOwned, installed by a
+    // registered map folder) — the map's scene.bossUpdate drives the kit.
+    // Same no-return pattern as the grovekeeper: the generic radial/stream
+    // below only fire if the def carries them (the m6e guards).
+    if (def.mapOwned && typeof MAPS !== 'undefined' && MAPS.defs) {
+      var MD = MAPS.defs[scene.realmId];
+      if (MD && MD.scene && MD.scene.bossUpdate) MD.scene.bossUpdate(scene, b, player, time);
+      if (!b.active || b.boss.hp <= 0) return;   // the verb may have ended the fight
+    }
 
     // pattern 1: radial burst — the whole ring, dodge through the gaps
     // (M4.6: boss bolts carry fromBoss — hurtPlayer scales them per class)

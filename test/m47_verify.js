@@ -25,12 +25,24 @@ function check(name, ok, detail) {
   await page.evaluate(`${scene('Title')}.createNewGame(1, 'ranger')`);
   await page.waitForFunction(`game.scene.isActive('Nexus')`, null, { timeout: 15000 });
 
-  // -- 0. bestiary is biome-scoped: 8 yard mobs + 3 bosses (M5.6 adds the Gravekeeper) --
+  // -- 0. bestiary is BY MAP (M7k): yard mobs + the yard's OWN boss; other
+  // realms' pages live behind the map pager / search.
   const beast = await page.evaluate(`(function(){var nx=${scene('Nexus')};
+    // items 7/8: name search only finds creatures whose realm you've BEATEN —
+    // mark the campaign cleared so Gravekeeper is searchable.
+    ACCOUNT.cleared = nx.campaignMaps().map(function(m){ return m.id; });
     var e = nx.bestiaryEntries();
-    return { n: e.length, firstMob: e[0].key, lastBoss: e[e.length - 1].key };})()`);
-  check('bestiary: 8 yard mobs + Grovekeeper + Conductor + Gravekeeper = 11 entries',
-    beast.n === 11 && beast.firstMob === 'coalGolem' && beast.lastBoss === 'gravekeeper');
+    var expected = DATA.biomes[DATA.realm.biome].mobs.length + 1;
+    var bossKeys = e.filter(function(x){ return x.kind === 'boss'; }).map(function(x){ return x.key; });
+    nx.bestiarySearch = 'gravekeeper';
+    var hit = nx.bestiaryEntries();
+    nx.bestiarySearch = '';
+    return { n: e.length, expected: expected, firstMob: e[0].key,
+             hasConductor: bossKeys.indexOf('conductor') >= 0,
+             graveViaSearch: hit.length === 1 && hit[0].key === 'gravekeeper' };})()`);
+  check('bestiary: yard roster + yard boss (M7k by-map); Gravekeeper via SEARCH',
+    beast.n === beast.expected && beast.firstMob === 'coalGolem' && beast.hasConductor && beast.graveViaSearch,
+    beast.n + ' entries (expected ' + beast.expected + ')');
 
   await page.evaluate(`game.scene.getScene('Nexus').scene.start('Realm', { mode: 'clear' })`);
   await page.waitForFunction(`game.scene.isActive('Realm') && ${scene('Realm')}.player`, null, { timeout: 15000 });

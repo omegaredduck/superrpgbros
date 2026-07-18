@@ -19,13 +19,49 @@ function bindSave(slot, data) {
 }
 function persist() { if (SAVE_SLOT && GAME_SAVE) SAVE.save(SAVE_SLOT, GAME_SAVE); }
 
+// v5 (2026-07-17): BEATING THE GAME. The first Titan Whale clear grants the
+// class's full T5 LEGENDARY SET to the vault/collection (NO auto-equip — Red),
+// flips ACCOUNT.beaten (post-campaign), and marks the endgame cutscenes seen.
+function grantLegendarySet(cls) {
+  if (!GAME_SAVE || !ACCOUNT || typeof DATA === 'undefined') return;
+  var g = (DATA.classGear && DATA.classGear[cls]) || (DATA.classGear && DATA.classGear.ranger);
+  if (!g) return;
+  var keys = [g.weapon[5], g.ability[5], 'ar5', 'r5'];
+  keys.forEach(function (k) {
+    if (!DATA.items[k]) return;
+    if (typeof collectItem === 'function') collectItem(k);
+    if (Array.isArray(ACCOUNT.collected) && ACCOUNT.collected.indexOf(k) < 0) ACCOUNT.collected.push(k);
+    if (Array.isArray(GAME_SAVE.vault) && GAME_SAVE.vault.indexOf(k) < 0 && DATA.vault && GAME_SAVE.vault.length < DATA.vault.slots) GAME_SAVE.vault.push(k);
+  });
+}
+function beatTheGame(cls) {
+  if (!ACCOUNT) return;
+  ACCOUNT.beaten = true;
+  if (ACCOUNT.cutscenesSeen) { ACCOUNT.cutscenesSeen.cs2 = true; ACCOUNT.cutscenesSeen.cs3 = true; ACCOUNT.cutscenesSeen.cs4 = true; }
+  if (Array.isArray(ACCOUNT.cleared) && ACCOUNT.cleared.indexOf('belly') < 0) ACCOUNT.cleared.push('belly');
+  // v5: beating the game UNLOCKS the NINJA (locked class) for character select.
+  if (Array.isArray(ACCOUNT.unlockedClasses) && typeof DATA !== 'undefined') {
+    for (var lc in DATA.classes) { if (DATA.classes[lc].locked && ACCOUNT.unlockedClasses.indexOf(lc) < 0) ACCOUNT.unlockedClasses.push(lc); }
+  }
+  // beating the game AS the ninja earns its LEGENDARY EMPOWERMENT (SHADOW CLONE).
+  if (cls === 'ninja') ACCOUNT.ninjaEmpowered = true;
+  // DEVICE-level unlock so the ninja is pickable at NEW GAME on any slot.
+  try { SAVE.settings().ninjaUnlocked = true; SAVE.saveSettings(); } catch (e) {}
+  grantLegendarySet(cls);
+  try { if (typeof ACH !== 'undefined') ACH.check(); } catch (e) {}   // item 6: unlock any freshly-earned achievements
+  try { persist(); } catch (e) {}
+}
+
 // ---- M5.3 DEV MODE (user): a Settings toggle that grants ALL GEAR + MAX
 // LEVEL + IMMORTALITY, for testing gear/kits. The flag lives in device
 // settings (SAVE.settings().dev) so immortality reads live everywhere;
 // applyDevMode() applies the one-time save grants (max level + fill the vault
 // with this hero's full ladder) and refreshes a live realm player if there is
 // one. Immortality itself is enforced in Entities.hurtPlayer + trainKill.
-function devOn() { try { return !!SAVE.settings().dev; } catch (e) { return false; } }
+// v5 (2026-07-17): DEV MODE REMOVED at Red's request. devOn() is hard-false so a
+// stale settings.dev flag can never keep immortality/grants on. applyDevMode() is
+// left defined (harmless, no longer called from the Settings menu).
+function devOn() { return false; }
 function applyDevMode() {
   if (!GAME_SAVE || !CURRENT) return;
   // MAX LEVEL
@@ -307,7 +343,9 @@ var TitleScene = new Phaser.Class({
     ui.push(this.add.rectangle(cx, cy, W, H, 0x000000, 0.78).setDepth(80).setInteractive());
     ui.push(this.add.text(cx, cy - 150, 'CHOOSE YOUR CLASS', { fontFamily: 'monospace', fontSize: 30, color: '#ffcd75', fontStyle: 'bold' }).setOrigin(0.5).setDepth(81));
     ui.push(this.add.text(cx, cy - 116, 'SLOT ' + slot + ' — new game · this slot keeps its class through permadeath', { fontFamily: 'monospace', fontSize: 12, color: '#94b0c2' }).setOrigin(0.5).setDepth(81));
-    var keys = Object.keys(DATA.classes), n = keys.length;
+    // v5: the NINJA (locked) only appears once the game has been beaten (device flag).
+    var ninjaUnlocked = false; try { ninjaUnlocked = !!SAVE.settings().ninjaUnlocked; } catch (e) {}
+    var keys = Object.keys(DATA.classes).filter(function (k) { return !DATA.classes[k].locked || ninjaUnlocked; }), n = keys.length;
     // adaptive card width so 3+ class cards still fit the min 960-wide screen
     var gap = 24, cardW = Math.min(300, Math.floor((W - 40 - (n - 1) * gap) / n));
     var totalW = n * cardW + (n - 1) * gap, x0 = cx - totalW / 2 + cardW / 2;
@@ -378,26 +416,40 @@ var TitleScene = new Phaser.Class({
   pickClass: function (slot, cls) {
     if (!this.classPicking) return;
     this.closeClassPick();
-    this.createNewGame(slot, cls);
+    this.createNewGame(slot, cls, true);                 // v5: real new game → play the intro cutscenes
   },
 
   // Create a fresh account in `slot` with the chosen class, then enter it.
   // (Also the headless-test entry point for a new game of a given class.)
-  createNewGame: function (slot, cls) {
+  createNewGame: function (slot, cls, withIntro) {
     var data = SAVE.blank(cls);
     SAVE.save(slot, data);
-    this.enterSlot(slot, data);
+    // v5: the intro cutscenes (CS0→CS1) fire only from the real title button
+    // (withIntro). Headless suites call createNewGame(slot,cls) and land straight
+    // in the Chamber — the intro path is verified separately in m23.
+    this.enterSlot(slot, data, !!withIntro);
   },
 
-  enterSlot: function (slot, data) {
+  enterSlot: function (slot, data, fresh) {
     if (this.starting) return;
     bindSave(slot, data);
     this.starting = true;
     AUDIO.play('ui');
     this.cameras.main.fadeOut(350);
-    var self = this;
-    // M3.8: entry:'login' → the records screen boots empty and TYPES itself out
-    this.time.delayedCall(400, function () { self.scene.start('Nexus', { entry: 'login' }); });
+    var self = this, cls = data.character.cls;
+    // v5 (2026-07-17): a BRAND-NEW slot opens on the story — CS0 THE PREAMBLE →
+    // CS1 COLD BOOT (the virus-attack backstory, item 2) → then the Chamber.
+    var playIntro = fresh && typeof CutsceneScene !== 'undefined' &&
+      ACCOUNT.cutscenesSeen && !ACCOUNT.cutscenesSeen.cs0;
+    this.time.delayedCall(400, function () {
+      if (playIntro) {
+        ACCOUNT.cutscenesSeen.cs0 = true; ACCOUNT.cutscenesSeen.cs1 = true; persist();
+        self.scene.start('Cutscene', { id: 'cs0', cls: cls, next:
+          { scene: 'Cutscene', data: { id: 'cs1', cls: cls, next: { scene: 'Nexus', data: { entry: 'login' } } } } });
+      } else {
+        self.scene.start('Nexus', { entry: 'login' });   // M3.8: records screen types itself out
+      }
+    });
   }
 });
 
@@ -454,6 +506,14 @@ var NexusScene = new Phaser.Class({
     if (!GAME_SAVE) { this.scene.start('Title'); return; }   // no slot bound → welcome screen
     this.entry = (data && data.entry) || 'none';             // M3.8: login / realm / none
     persist();                                               // autosave on every nexus arrival
+    // item 6: evaluate achievements on every hub arrival (catches clears, kills,
+    // deaths, discoveries earned during the last run) and toast any fresh ones.
+    try {
+      if (typeof ACH !== 'undefined') {
+        var _fresh = ACH.check();
+        if (_fresh && _fresh.length) this.time.delayedCall(500, this.achToast.bind(this, _fresh));
+      }
+    } catch (e) {}
     // RESIZE mode: the nexus safe room IS the screen, whatever size it is
     // (DATA.nexus.w/h is the windowed minimum).
     var W = Math.max(DATA.nexus.w, this.scale.width), H = Math.max(DATA.nexus.h, this.scale.height);
@@ -594,20 +654,23 @@ var NexusScene = new Phaser.Class({
     // overlay first, then opens the menu; the exit-to-load-screen lives INSIDE
     // the menu now (it used to be ESC's job).
     var esc = this;
+    // M7k: while a SEARCH BAR is capturing (portal machine / bestiary open),
+    // letter keys type into it instead of jumping stations — the capture
+    // handler owns ESC (close) itself.
     BINDS.wire(this, {
-      vault:       function () { if (!esc._menuOpen) esc.requestStation('vault'); },
-      bestiary:    function () { if (!esc._menuOpen) esc.requestStation('bestiary'); },
-      recordsUp:   function () { if (!esc._menuOpen) esc.requestStation('switchRecords'); },
-      recordsDown: function () { if (!esc._menuOpen) esc.requestStation('switchGrave'); },
-      portal:      function () { if (!esc._menuOpen) esc.requestStation('machine'); },
-      menu:        function () { esc.onMenuKey(); }
+      vault:       function () { if (!esc._menuOpen && !esc._typing) esc.requestStation('vault'); },
+      bestiary:    function () { if (!esc._menuOpen && !esc._typing) esc.requestStation('bestiary'); },
+      recordsUp:   function () { if (!esc._menuOpen && !esc._typing) esc.requestStation('switchRecords'); },
+      recordsDown: function () { if (!esc._menuOpen && !esc._typing) esc.requestStation('switchGrave'); },
+      portal:      function () { if (!esc._menuOpen && !esc._typing) esc.requestStation('machine'); },
+      menu:        function () { if (!esc._typing) esc.onMenuKey(); }
     });
 
     // M3 (Lane C): the MAP BUILDER — a developer tool on a FIXED dev key (M,
     // deliberately not remappable), reached from the nexus (not the player
     // flow) so a save slot is always bound for playtests.
     this.input.keyboard.on('keydown-M', function () {
-      if (esc._menuOpen) return;
+      if (esc._menuOpen || esc._typing) return;          // M7k: 'm' may be search input
       persist();
       AUDIO.stopMusic();                                 // M3.9
       esc.scene.start('Builder');
@@ -650,6 +713,27 @@ var NexusScene = new Phaser.Class({
   //   CHARGING (~2s) — console flares, pulses race up the conduit, the 8 ring
   //     lights ignite one by one in the mode color, the portal tears open.
   //   POWERED — pulses keep flowing, lights breathe, portal spins until entry.
+  // item 6: a brief gold banner when new achievements unlock on hub arrival.
+  // Stacks vertically; each card fades itself out. Fully self-contained + safe.
+  achToast: function (fresh) {
+    if (!fresh || !fresh.length || !this.scene || !this.scene.isActive()) return;
+    var self = this, sw = this.scale.width;
+    for (var i = 0; i < fresh.length; i++) {
+      (function (a, k) {
+        var y = 70 + k * 44;
+        var bg = self.add.rectangle(sw / 2, y, 360, 38, 0x14162b, 0.96)
+          .setScrollFactor(0).setDepth(240).setStrokeStyle(2, 0xffd479, 0.9);
+        var t1 = self.add.text(sw / 2 - 150, y - 8, (a.glyph || '★') + '  ACHIEVEMENT UNLOCKED',
+          { fontFamily: 'monospace', fontSize: 12, color: '#ffd479' }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(241);
+        var t2 = self.add.text(sw / 2 - 150, y + 8, a.name,
+          { fontFamily: 'monospace', fontSize: 14, color: '#ffffff', fontStyle: 'bold' }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(241);
+        try { AUDIO.play('ui'); } catch (e) {}
+        self.tweens.add({ targets: [bg, t1, t2], alpha: 0, delay: 2600 + k * 300, duration: 700,
+          onComplete: function () { try { bg.destroy(); t1.destroy(); t2.destroy(); } catch (e) {} } });
+      })(fresh[i], i);
+    }
+  },
+
   buildPortalWorks: function (W, H) {
     var self = this;
     this.plazaPortals = [];      // filled by materializePortal, not at boot
@@ -704,6 +788,13 @@ var NexusScene = new Phaser.Class({
     this.consoleAffixes = [];
     this.consoleMap = (DATA.console.maps && DATA.console.maps[0]) ? DATA.console.maps[0].id : 'trainyard';  // M4.9
     this.mapDropdownOpen = false;
+    // M7k (user): searchable map list + scoped bestiary (scene reuse — reset)
+    this.consoleSearch = ''; this.mapListScroll = 0;
+    this.bestiarySearch = ''; this.bestiaryScope = null;
+    this._typing = false;
+    // v5 (2026-07-17): FIND THE CORRUPTION scanner state (scene reuse — reset).
+    this._corrPhase = 'idle'; this._corrTick = null; this._corrRet = { x: 0, y: 0 };
+    this._corrTargetId = null; this._corrHunt = 0; this._corrHop = 0; this._corrFlyT = 0;
     this.chamberAmbient();                    // ART TEST: hi-fi platform/conduit come alive
   },
 
@@ -769,7 +860,12 @@ var NexusScene = new Phaser.Class({
       this.consoleUi.forEach(function (o) { o.destroy(); });
       this.consoleUi = null;
       this.mapDropdownOpen = false;                        // M4.9: collapse the map dropdown on close
+      this.consoleSearch = ''; this.mapListScroll = 0;     // M7k: fresh search per visit
+      this._typing = false;
       this.input.keyboard.off('keydown-ENTER', this.consoleEnterFn, this);   // bug #2 family
+      if (this._consoleSearchFn) { this.input.keyboard.off('keydown', this._consoleSearchFn); this._consoleSearchFn = null; }
+      if (this._consoleWheel) { this.input.off('wheel', this._consoleWheel); this._consoleWheel = null; }
+      if (this._corrTick) { this._corrTick.remove(); this._corrTick = null; }   // v5: stop the scanner animation
       return;
     }
     if (this.charging) return;                           // one cinematic at a time
@@ -777,6 +873,35 @@ var NexusScene = new Phaser.Class({
     if (this.gyUi) this.toggleGraveyard();
     if (this.bestiaryUi) this.toggleBestiary();
     this.buildConsoleUi();
+    // M7k SEARCH CAPTURE — printable keys type into the destination search;
+    // BACKSPACE edits; ESC closes the machine. Station hotkeys are muted
+    // while _typing (see BINDS.wire guards).
+    var self = this;
+    this._typing = true;
+    this._consoleSearchFn = function (ev) {
+      if (!self.consoleUi) return;
+      var k = ev.key;
+      if (k === 'Escape') { self.toggleConsole(); return; }
+      if (ACCOUNT && !ACCOUNT.beaten) return;   // v5: no destination search pre-campaign (scanner UI)
+      if (k === 'Backspace') {
+        if (self.consoleSearch) { self.consoleSearch = self.consoleSearch.slice(0, -1); self.mapListScroll = 0; self.buildConsoleUi(); }
+        return;
+      }
+      if (k && k.length === 1 && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+        if (self.consoleSearch.length < 24) {
+          self.consoleSearch += k; self.mapListScroll = 0;
+          if (!self.mapDropdownOpen) self.mapDropdownOpen = true;   // typing opens the list
+          self.buildConsoleUi();
+        }
+      }
+    };
+    this.input.keyboard.on('keydown', this._consoleSearchFn);
+    this._consoleWheel = function (ptr, over, dx, dy) {
+      if (!self.consoleUi || !(self.mapDropdownOpen || self.consoleSearch)) return;
+      self.mapListScroll = Math.max(0, self.mapListScroll + (dy > 0 ? 2 : -2));
+      self.buildConsoleUi();
+    };
+    this.input.on('wheel', this._consoleWheel);
     AUDIO.play('ui');
   },
 
@@ -804,6 +929,7 @@ var NexusScene = new Phaser.Class({
     if (!m || m.locked) { AUDIO.play('ui'); return; }    // ??? is not selectable
     this.consoleMap = id;
     this.mapDropdownOpen = false;
+    this.consoleSearch = ''; this.mapListScroll = 0;     // M7k: picking resolves the search
     AUDIO.play('ui');
     if (this.consoleUi) this.buildConsoleUi();
   },
@@ -824,6 +950,10 @@ var NexusScene = new Phaser.Class({
 
   buildConsoleUi: function () {
     if (this.consoleUi) { this.consoleUi.forEach(function (o) { o.destroy(); }); this.consoleUi = null; }
+    // v5 (2026-07-17): FIRST PLAYTHROUGH — before the whale falls the machine is
+    // the CORRUPTION SCANNER (find/reroll/step-through a random region). Beating
+    // the game flips it to the free selector below (the "final end state", Red).
+    if (ACCOUNT && !ACCOUNT.beaten) { this.buildCorruptionUi(); return; }
     var self = this;
     var W = this.scale.width, H = this.scale.height, cx = W / 2, cy = H / 2;
     var ui = [];
@@ -836,10 +966,99 @@ var NexusScene = new Phaser.Class({
     var selMap = (DATA.console.maps || []).filter(function (x) { return x.id === self.consoleMap; })[0]
                  || { name: DATA.realm.name };
 
-    // --- mode select ---
-    ui.push(this.add.text(cx - 290, cy - 180, 'GAME MODE', { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }).setDepth(81));
+    // --- M7k (user): SEARCH BAR at the very top — type anywhere while the
+    // machine is open; the list below filters live. ---
+    var sq = this.consoleSearch || '';
+    var sBox = this.add.rectangle(cx, cy - 180, 580, 24, 0x1a1c2c, 1).setDepth(81)
+      .setStrokeStyle(1, sq ? 0xffcd75 : 0x333c57).setInteractive({ useHandCursor: true });
+    sBox.on('pointerdown', function () { if (!self.mapDropdownOpen) self.toggleMapDropdown(); });
+    ui.push(sBox);
+    ui.push(this.add.text(cx - 278, cy - 180, sq ? ('SEARCH: ' + sq + '_') : 'SEARCH — type to filter destinations',
+      { fontFamily: 'monospace', fontSize: 11, color: sq ? '#ffcd75' : '#566c86' }).setOrigin(0, 0.5).setDepth(82));
+    if (sq) {
+      var clr = this.add.text(cx + 274, cy - 180, '[CLR]', { fontFamily: 'monospace', fontSize: 10, color: '#ff9e6d' })
+        .setOrigin(1, 0.5).setDepth(82).setInteractive({ useHandCursor: true });
+      clr.on('pointerdown', function () { self.consoleSearch = ''; self.mapListScroll = 0; self.buildConsoleUi(); });
+      ui.push(clr);
+    }
+
+    // --- MAP SELECTOR at the TOP (M7k, user: "map goes at the top") — the
+    // collapsed row shows the chosen destination; click (or type) to expand.
+    // The open list is WINDOWED — 20 realms scroll instead of overflowing the
+    // panel (the m7j overlap bug). ---
+    ui.push(this.add.text(cx - 290, cy - 158, 'MAP', { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }).setDepth(81));
+    var selRow = this.add.rectangle(cx, cy - 136, 580, 26, 0x1a1c2c, 1).setDepth(81)
+      .setStrokeStyle(1, 0x41a6f6).setInteractive({ useHandCursor: true });
+    selRow.on('pointerdown', function () { self.toggleMapDropdown(); });
+    ui.push(selRow);
+    ui.push(this.add.text(cx - 278, cy - 136, '> ' + selMap.name,
+      { fontFamily: 'monospace', fontSize: 12, color: '#a7d3ff' }).setOrigin(0, 0.5).setDepth(82));
+    ui.push(this.add.text(cx + 278, cy - 136, this.mapDropdownOpen ? '▲' : '▼',
+      { fontFamily: 'monospace', fontSize: 12, color: '#41a6f6' }).setOrigin(1, 0.5).setDepth(82));
+
+    var listOpen = this.mapDropdownOpen || !!sq;
+    if (listOpen) {
+      // catcher: click anywhere off an option closes the list (and clears the search)
+      var catcher = this.add.rectangle(cx, cy, 640, 520, 0x000000, 0.01).setDepth(89)
+        .setInteractive();
+      catcher.on('pointerdown', function () {
+        self.consoleSearch = ''; self.mapListScroll = 0;
+        if (self.mapDropdownOpen) self.toggleMapDropdown(); else self.buildConsoleUi();
+      });
+      ui.push(catcher);
+      var q = sq.toLowerCase();
+      var flt = (DATA.console.maps || []).filter(function (mp) {
+        return !q || (mp.name + ' ' + (mp.sub || '')).toLowerCase().indexOf(q) >= 0;
+      });
+      var MAXV = 10, top = cy - 110;
+      var maxScroll = Math.max(0, flt.length - MAXV);
+      if (this.mapListScroll > maxScroll) this.mapListScroll = maxScroll;
+      var off = this.mapListScroll;
+      // backdrop so the list reads as ONE overlay, not rows floating on the form
+      var listH = Math.max(1, Math.min(MAXV, flt.length)) * 26 + 16;
+      ui.push(this.add.rectangle(cx, top - 13 + listH / 2, 592, listH, 0x0f0f1b, 0.99)
+        .setDepth(90).setStrokeStyle(1, 0x41a6f6));
+      if (!flt.length) {
+        ui.push(this.add.text(cx, top, 'no destination matches "' + sq + '" — BACKSPACE to edit',
+          { fontFamily: 'monospace', fontSize: 11, color: '#ff9e6d' }).setOrigin(0.5).setDepth(91));
+      }
+      flt.slice(off, off + MAXV).forEach(function (mp, i) {
+        var y = top + i * 26;
+        var isSel = mp.id === self.consoleMap;
+        var box = self.add.rectangle(cx, y, 574, 24, mp.locked ? 0x14142a : (isSel ? 0x29366f : 0x1a1c2c), 1)
+          .setDepth(91).setStrokeStyle(1, mp.locked ? 0x1f2440 : (isSel ? 0x41a6f6 : 0x333c57));
+        ui.push(box);
+        if (!mp.locked) {
+          box.setInteractive({ useHandCursor: true });
+          box.on('pointerover', function () { if (!isSel) box.setFillStyle(0x222a4d, 1); });
+          box.on('pointerout',  function () { if (!isSel) box.setFillStyle(0x1a1c2c, 1); });
+          box.on('pointerdown', function () { self.consoleSetMap(mp.id); });
+        }
+        ui.push(self.add.text(cx - 270, y, (isSel ? '> ' : '  ') + mp.name,
+          { fontFamily: 'monospace', fontSize: 11, color: mp.locked ? '#3b4466' : (isSel ? '#ffcd75' : '#a7d3ff') }).setOrigin(0, 0.5).setDepth(92));
+        ui.push(self.add.text(cx + 268, y, mp.locked ? 'LOCKED · ' + mp.sub : mp.sub,
+          { fontFamily: 'monospace', fontSize: 9, color: mp.locked ? '#3b4466' : '#566c86' }).setOrigin(1, 0.5).setDepth(92));
+      });
+      // scroll affordances — wheel scrolls; the counters say what's clipped
+      if (off > 0) {
+        var upB = this.add.text(cx, top - 20, '▲ ' + off + ' more', { fontFamily: 'monospace', fontSize: 9, color: '#41a6f6' })
+          .setOrigin(0.5).setDepth(92).setInteractive({ useHandCursor: true });
+        upB.on('pointerdown', function () { self.mapListScroll = Math.max(0, self.mapListScroll - MAXV); self.buildConsoleUi(); });
+        ui.push(upB);
+      }
+      if (off + MAXV < flt.length) {
+        var dnB = this.add.text(cx, top + Math.min(MAXV, flt.length) * 26 - 6, '▼ ' + (flt.length - off - MAXV) + ' more (scroll)',
+          { fontFamily: 'monospace', fontSize: 9, color: '#41a6f6' })
+          .setOrigin(0.5).setDepth(92).setInteractive({ useHandCursor: true });
+        dnB.on('pointerdown', function () { self.mapListScroll = Math.min(maxScroll, self.mapListScroll + MAXV); self.buildConsoleUi(); });
+        ui.push(dnB);
+      }
+    }
+
+    // --- mode select (below the map — M7k reorder) ---
+    ui.push(this.add.text(cx - 290, cy - 112, 'GAME MODE', { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }).setDepth(81));
     DATA.console.modes.forEach(function (m, i) {
-      var y = cy - 150 + i * 46, sel = self.consoleMode === m;
+      var y = cy - 82 + i * 46, sel = self.consoleMode === m;
       var md = DATA.modes[m];
       var box = self.add.rectangle(cx, y, 580, 40, sel ? 0x29366f : 0x1a1c2c, 1).setDepth(81)
         .setStrokeStyle(sel ? 2 : 1, sel ? 0xffcd75 : 0x333c57)
@@ -855,52 +1074,14 @@ var NexusScene = new Phaser.Class({
         { fontFamily: 'monospace', fontSize: 10, color: '#566c86' }).setDepth(82));
     });
 
-    // --- MAP SELECTOR (M4.9, user) — a dropdown: collapsed shows the chosen
-    // destination; click to expand the list (real maps selectable, ??? sealed
-    // placeholders greyed until built). Only unlocked maps are pickable. ---
-    ui.push(this.add.text(cx - 290, cy - 82, 'MAP', { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }).setDepth(81));
-    var selRow = this.add.rectangle(cx, cy - 58, 580, 26, 0x1a1c2c, 1).setDepth(81)
-      .setStrokeStyle(1, 0x41a6f6).setInteractive({ useHandCursor: true });
-    selRow.on('pointerdown', function () { self.toggleMapDropdown(); });
-    ui.push(selRow);
-    ui.push(this.add.text(cx - 278, cy - 58, '> ' + selMap.name,
-      { fontFamily: 'monospace', fontSize: 12, color: '#a7d3ff' }).setOrigin(0, 0.5).setDepth(82));
-    ui.push(this.add.text(cx + 278, cy - 58, this.mapDropdownOpen ? '▲' : '▼',
-      { fontFamily: 'monospace', fontSize: 12, color: '#41a6f6' }).setOrigin(1, 0.5).setDepth(82));
-
-    if (this.mapDropdownOpen) {
-      // catcher: click anywhere off an option closes the dropdown
-      var catcher = this.add.rectangle(cx, cy, 640, 520, 0x000000, 0.01).setDepth(89)
-        .setInteractive();
-      catcher.on('pointerdown', function () { self.toggleMapDropdown(); });
-      ui.push(catcher);
-      DATA.console.maps.forEach(function (mp, i) {
-        var y = cy - 44 + i * 26;
-        var isSel = mp.id === self.consoleMap;
-        var box = self.add.rectangle(cx, y, 574, 24, mp.locked ? 0x14142a : (isSel ? 0x29366f : 0x1a1c2c), 1)
-          .setDepth(90).setStrokeStyle(1, mp.locked ? 0x1f2440 : (isSel ? 0x41a6f6 : 0x333c57));
-        ui.push(box);
-        if (!mp.locked) {
-          box.setInteractive({ useHandCursor: true });
-          box.on('pointerover', function () { if (!isSel) box.setFillStyle(0x222a4d, 1); });
-          box.on('pointerout',  function () { if (!isSel) box.setFillStyle(0x1a1c2c, 1); });
-          box.on('pointerdown', function () { self.consoleSetMap(mp.id); });
-        }
-        ui.push(self.add.text(cx - 270, y, (isSel ? '> ' : '  ') + mp.name,
-          { fontFamily: 'monospace', fontSize: 11, color: mp.locked ? '#3b4466' : (isSel ? '#ffcd75' : '#a7d3ff') }).setOrigin(0, 0.5).setDepth(91));
-        ui.push(self.add.text(cx + 268, y, mp.locked ? 'LOCKED · ' + mp.sub : mp.sub,
-          { fontFamily: 'monospace', fontSize: 9, color: mp.locked ? '#3b4466' : '#566c86' }).setOrigin(1, 0.5).setDepth(91));
-      });
-    }
-
     // --- affix board (M3.5 preview: toggleable + visible, INERT until M5) ---
-    ui.push(this.add.text(cx - 290, cy - 4, 'MAP AFFIXES — ' + this.consoleAffixes.length + '/' + DATA.console.maxAffixes +
+    ui.push(this.add.text(cx - 290, cy + 8, 'MAP AFFIXES — ' + this.consoleAffixes.length + '/' + DATA.console.maxAffixes +
       ' slotted  (preview: not yet active — the danger is coming at M5)',
       { fontFamily: 'monospace', fontSize: 11, color: '#ffcd75' }).setDepth(81));
     DATA.console.affixChoices.forEach(function (key, i) {
       var a = DATA.affixes.map[key];
       var on = self.consoleAffixes.indexOf(key) >= 0;
-      var y = cy + 26 + i * 42;
+      var y = cy + 38 + i * 42;
       var box = self.add.rectangle(cx, y, 580, 36, on ? 0x29366f : 0x1a1c2c, 1).setDepth(81)
         .setStrokeStyle(on ? 2 : 1, on ? a.tint : 0x333c57)
         .setInteractive({ useHandCursor: true });
@@ -924,10 +1105,344 @@ var NexusScene = new Phaser.Class({
       { fontFamily: 'monospace', fontSize: 10, color: '#566c86' }).setOrigin(0.5).setDepth(81));
     this.consoleUi = ui;
 
-    // ENTER spawns — wired per open, unwired on close (listener-stacking gotcha)
-    this.consoleEnterFn = this.consoleEnterFn || function () { if (this.consoleUi) this.consoleSpawnPortal(); };
+    // ENTER spawns — wired per open, unwired on close (listener-stacking gotcha).
+    // v5: pre-campaign ENTER drives the scanner (step-through / scan) instead.
+    this.consoleEnterFn = this.consoleEnterFn || function () {
+      if (!this.consoleUi) return;
+      if (ACCOUNT && !ACCOUNT.beaten) { this.corrEnter(); return; }
+      this.consoleSpawnPortal();
+    };
     this.input.keyboard.off('keydown-ENTER', this.consoleEnterFn, this);
     this.input.keyboard.on('keydown-ENTER', this.consoleEnterFn, this);
+  },
+
+  // ==========================================================================
+  // v5 (2026-07-17) — FIRST PLAYTHROUGH: FIND THE CORRUPTION.
+  // The pre-campaign portal machine. A star-map of the GLOBAL CONSCIOUSNESS
+  // (sleeping minds); scanning hunts a crosshair across it and locks the one
+  // red corrupted node = the next region. Beating the whale flips ACCOUNT.beaten
+  // and the machine becomes the free selector (buildConsoleUi). See memory
+  // [[endgame-firstplaythrough]].
+  // ==========================================================================
+  campaignMaps: function () {
+    return (DATA.console.maps || []).filter(function (m) { return !m.locked; });
+  },
+  // the discovered-but-uncleared region id (the active corruption), or null
+  activeCorruption: function () {
+    var disc = ACCOUNT.discovered || [], cl = ACCOUNT.cleared || [];
+    for (var i = disc.length - 1; i >= 0; i--) { if (cl.indexOf(disc[i]) < 0) return disc[i]; }
+    return null;
+  },
+  corrNodeById: function (id) {
+    var ns = this._corrNodes || [];
+    for (var i = 0; i < ns.length; i++) if (ns[i].id === id) return ns[i];
+    return null;
+  },
+  corrGarble: function (name) {
+    var L = 'ABCDEFGHJKMNPQRSTVWXYZ#?/', s = name || '??????????', out = '';
+    for (var i = 0; i < s.length; i++) out += (s[i] === ' ') ? ' ' : L[Math.floor(Math.random() * L.length)];
+    return out;
+  },
+  // pick the next region to reveal. FIRST reveal of the whole run = the train
+  // yard; when only the whale remains uncleared = the whale; else a random
+  // undiscovered non-whale region (opts.exclude/opts.reroll for rerolls).
+  pickCorruption: function (opts) {
+    opts = opts || {};
+    var maps = this.campaignMaps().map(function (m) { return m.id; });
+    var disc = ACCOUNT.discovered || [], cl = ACCOUNT.cleared || [];
+    if (!opts.reroll && disc.length === 0 && cl.length === 0 && maps.indexOf('trainyard') >= 0) return 'trainyard';
+    var remainingNonWhale = maps.filter(function (id) { return cl.indexOf(id) < 0 && id !== 'belly'; });
+    if (remainingNonWhale.length === 0) return 'belly';
+    var taken = disc.concat(cl);
+    var avail = maps.filter(function (id) { return taken.indexOf(id) < 0 && id !== 'belly' && id !== opts.exclude; });
+    if (avail.length === 0) return 'belly';
+    return avail[Math.floor(Math.random() * avail.length)];
+  },
+
+  corrNodeState: function (id) {
+    if ((ACCOUNT.cleared || []).indexOf(id) >= 0) return 'purged';
+    if (this._corrPhase === 'locked' && id === this._corrTargetId) return 'found';
+    var active = this.activeCorruption();
+    if (active && id === active) return 'found';
+    if (id === 'belly') return 'whale';
+    return 'locked';
+  },
+  // item 9: the hover-tooltip payload for a region node — name + special
+  // mechanics when known (purged/discovered), anonymous otherwise.
+  corrNodeTip: function (id) {
+    var st = this.corrNodeState(id), nd = this.corrNodeById(id) || { name: id };
+    var mech = (DATA.console.mech && DATA.console.mech[id]) || '';
+    if (st === 'purged') return { title: (nd.name || id) + '  · PURGED', body: mech, color: '#96eb8c' };
+    if (st === 'found') return { title: (nd.name || id), body: mech, color: '#e8f0ff' };
+    if (st === 'whale') return { title: 'PATIENT ZERO', body: 'the final corruption — purge everything else first.', color: '#c79bff' };
+    return { title: '??? · UNDISCOVERED', body: 'an unidentified signal — scan to reveal it.', color: '#8aa0c8' };
+  },
+
+  // compute node + star positions once per panel size (cached)
+  corrLayout: function () {
+    var W = this.scale.width, H = this.scale.height, cx = W / 2, cy = H / 2;
+    var PW = 720, PH = 580;
+    this._corrPanel = { cx: cx, cy: cy, w: PW, h: PH };
+    var mapX0 = cx - PW / 2 + 16, mapY0 = cy - PH / 2 + 74, mapW = PW - 32, mapH = 338;
+    this._corrMap = { x0: mapX0, y0: mapY0, w: mapW, h: mapH, cx: mapX0 + mapW / 2, cy: mapY0 + mapH / 2 };
+    var key = Math.round(mapW) + 'x' + Math.round(mapH);
+    if (this._corrLayoutKey === key && this._corrNodes) return;
+    this._corrLayoutKey = key;
+    var maps = this.campaignMaps(), mcx = this._corrMap.cx, mcy = this._corrMap.cy;
+    var rmax = Math.min(mapW / 2 - 40, (mapH / 2 - 28) / 0.6), n = Math.max(1, maps.length - 1), nodes = [];
+    for (var i = 0; i < maps.length; i++) {
+      var a = i * (6.283 / 20) * 2.2 + 0.4, r = 42 + (i / n) * (rmax - 42);
+      var x = mcx + Math.cos(a) * r, y = mcy + Math.sin(a) * r * 0.6;
+      x = Math.min(mapX0 + mapW - 26, Math.max(mapX0 + 26, x));
+      y = Math.min(mapY0 + mapH - 24, Math.max(mapY0 + 24, y));
+      nodes.push({ x: x, y: y, id: maps[i].id, name: maps[i].name, sub: maps[i].sub });
+    }
+    this._corrNodes = nodes;
+    var seed = 20260717; function rr() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
+    var stars = [];
+    for (var s = 0; s < 150; s++) {
+      var sx, sy;
+      if (rr() < 0.6) { var aa = rr() * 6.28 + rr() * 7, rd = Math.sqrt(rr()) * rmax * 1.1; sx = mcx + Math.cos(aa) * rd; sy = mcy + Math.sin(aa) * rd * 0.6; }
+      else { sx = mapX0 + rr() * mapW; sy = mapY0 + rr() * mapH; }
+      if (sx > mapX0 + 2 && sx < mapX0 + mapW - 2 && sy > mapY0 + 2 && sy < mapY0 + mapH - 2) stars.push({ x: sx, y: sy, b: 0.2 + rr() * 0.55 });
+    }
+    this._corrStars = stars;
+  },
+
+  startCorrTick: function () {
+    if (this._corrTick) return;
+    var self = this;
+    this._corrTick = this.time.addEvent({ delay: 33, loop: true, callback: function () { try { self.corrFrame(); } catch (e) {} } });
+  },
+
+  // one animation frame — redraws the star-map + reticle into this._corrG and
+  // advances the hunt/fly phase timers.
+  corrFrame: function () {
+    var g = this._corrG; if (!g || !g.scene) return;
+    var M = this._corrMap, t = this.time.now, self = this; g.clear();
+    g.fillStyle(0x0b1024, 1); g.fillRect(M.x0, M.y0, M.w, M.h);
+    g.lineStyle(1, 0x35608f, 0.5); g.strokeRect(M.x0, M.y0, M.w, M.h);
+    (this._corrStars || []).forEach(function (st) {
+      var tw = st.b * (0.55 + 0.45 * Math.sin(t / 500 + st.x));
+      g.fillStyle(0x8fb6e6, Math.max(0, Math.min(1, tw))); g.fillRect(st.x, st.y, 1.5, 1.5);
+    });
+    var nodes = this._corrNodes || [];
+    g.lineStyle(1, 0x4a78be, 0.10);
+    for (var i = 0; i < nodes.length; i++) {
+      var a = nodes[i];
+      var near = nodes.slice().sort(function (p, q) { return Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(a.x - q.x, a.y - q.y); }).slice(1, 3);
+      for (var k = 0; k < near.length; k++) { g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(near[k].x, near[k].y); g.strokePath(); }
+    }
+    nodes.forEach(function (nd) {
+      var st = self.corrNodeState(nd.id);
+      if (st === 'found') {
+        g.fillStyle(0xe85050, 0.10); g.fillCircle(nd.x, nd.y, 22);
+        g.fillStyle(0xe85050, 0.22); g.fillCircle(nd.x, nd.y, 12);
+        g.fillStyle(0xffecec, 1); g.fillCircle(nd.x, nd.y, 3);
+        g.lineStyle(2, 0xe85050, 0.85); g.strokeCircle(nd.x, nd.y, 14 + 4 * Math.sin(t / 180));
+      } else if (st === 'purged') {
+        g.fillStyle(0x96eb8c, 0.26); g.fillCircle(nd.x, nd.y, 6); g.fillStyle(0x96eb8c, 1); g.fillCircle(nd.x, nd.y, 2.6);
+      } else if (st === 'whale') {
+        g.fillStyle(0xc79bff, 0.26); g.fillCircle(nd.x, nd.y, 8); g.fillStyle(0xc79bff, 1); g.fillCircle(nd.x, nd.y, 2.8);
+      } else {
+        g.fillStyle(0x5a698c, 0.22); g.fillCircle(nd.x, nd.y, 5); g.fillStyle(0x8aa0c8, 0.85); g.fillCircle(nd.x, nd.y, 2);
+      }
+    });
+    var ph = this._corrPhase;
+    if (ph === 'hunt') {
+      this._corrHunt += 33; this._corrHop += 33;
+      if (this._corrHop >= 105) {
+        this._corrHop = 0;
+        var rn = nodes[Math.floor(Math.random() * nodes.length)];
+        if (rn) { this._corrRet.x = rn.x; this._corrRet.y = rn.y; }
+        if (this._corrNameText) this._corrNameText.setText(this.corrGarble());
+      }
+      if (this._corrHunt >= 1700) { this._corrFly0 = { x: this._corrRet.x, y: this._corrRet.y }; this._corrFlyT = 0; this._corrPhase = 'fly'; }
+    } else if (ph === 'fly') {
+      this._corrFlyT = Math.min(1, this._corrFlyT + 0.05);
+      var e = 1 - Math.pow(1 - this._corrFlyT, 3), tg = this.corrNodeById(this._corrTargetId);
+      if (tg) { this._corrRet.x = this._corrFly0.x + (tg.x - this._corrFly0.x) * e; this._corrRet.y = this._corrFly0.y + (tg.y - this._corrFly0.y) * e; }
+      if (this._corrNameText) this._corrNameText.setText(this.corrGarble(tg ? tg.name : ''));
+      if (this._corrFlyT >= 1) { this.corrLock(); return; }
+    }
+    if (ph === 'hunt' || ph === 'fly' || ph === 'locked') {
+      var rx = this._corrRet.x, ry = this._corrRet.y, col = ph === 'locked' ? 0xffcd75 : 0x5fe8c2, rad = ph === 'locked' ? 24 : 18;
+      g.lineStyle(2, col, 1);
+      [[-1, 0], [1, 0], [0, -1], [0, 1]].forEach(function (d) { g.beginPath(); g.moveTo(rx + d[0] * rad * 0.55, ry + d[1] * rad * 0.55); g.lineTo(rx + d[0] * rad, ry + d[1] * rad); g.strokePath(); });
+      g.strokeCircle(rx, ry, rad);
+      if (this._corrNameText) {
+        if (ph === 'locked') this._corrNameText.setVisible(false);
+        else this._corrNameText.setVisible(true).setPosition(rx, ry - rad - 12).setColor('#7fd0ff');
+      }
+    } else if (this._corrNameText) { this._corrNameText.setVisible(false); }
+  },
+
+  corrLock: function () {
+    var id = this._corrTargetId;
+    if (ACCOUNT.discovered.indexOf(id) < 0) ACCOUNT.discovered.push(id);
+    if (!ACCOUNT.corrMode) ACCOUNT.corrMode = 'clear';
+    this._corrPhase = 'locked';
+    try { persist(); } catch (e) {}
+    try { AUDIO.play('spawn'); } catch (e) {}
+    this.buildCorruptionUi();
+  },
+
+  corrEnter: function () {
+    if (this._corrPhase === 'hunt' || this._corrPhase === 'fly') return;
+    if (this.activeCorruption()) this.corruptionStepThrough();
+    else this.corruptionScan();
+  },
+
+  corruptionScan: function () {
+    if (this._corrPhase === 'hunt' || this._corrPhase === 'fly') return;
+    if (this.activeCorruption()) return;
+    this._corrTargetId = this.pickCorruption();
+    this._corrPhase = 'hunt'; this._corrHunt = 0; this._corrHop = 999;
+    try { AUDIO.play('ui'); } catch (e) {}
+    this.startCorrTick();
+    this.buildCorruptionUi();
+  },
+
+  corruptionReroll: function () {
+    var active = this.activeCorruption();
+    if (!active || this._corrPhase === 'hunt' || this._corrPhase === 'fly') return;
+    if ((ACCOUNT.mapTokens || 0) <= 0) return;
+    ACCOUNT.mapTokens--;
+    var modes = (DATA.console.modes || ['clear']);
+    var others = modes.filter(function (m) { return m !== ACCOUNT.corrMode; });
+    if (others.length) ACCOUNT.corrMode = others[Math.floor(Math.random() * others.length)];
+    if (Math.random() < 0.5) {                 // 50%: relocate to a different region (never whale)
+      var di = ACCOUNT.discovered.indexOf(active); if (di >= 0) ACCOUNT.discovered.splice(di, 1);
+      this._corrTargetId = this.pickCorruption({ reroll: true, exclude: active });
+      this._corrPhase = 'hunt'; this._corrHunt = 0; this._corrHop = 999;
+      try { persist(); AUDIO.play('ui'); } catch (e) {}
+      this.startCorrTick(); this.buildCorruptionUi();
+    } else {                                    // else: mode swap only
+      try { persist(); AUDIO.play('ui'); } catch (e) {}
+      this.buildCorruptionUi();
+    }
+  },
+
+  corruptionStepThrough: function () {
+    var active = this.activeCorruption();
+    if (!active) return;
+    this.consoleMap = active;
+    this.consoleMode = ACCOUNT.corrMode || 'clear';
+    this.consoleAffixes = [];
+    this.consoleSpawnPortal();
+  },
+
+  buildCorruptionUi: function () {
+    if (this.consoleUi) { this.consoleUi.forEach(function (o) { try { o.destroy(); } catch (e) {} }); this.consoleUi = null; }
+    var self = this, ui = [];
+    this.corrLayout();
+    var P = this._corrPanel, M = this._corrMap, cx = P.cx, cy = P.cy;
+    // phase: mid-animation is preserved; otherwise derived from save state
+    if (this._corrPhase !== 'hunt' && this._corrPhase !== 'fly') {
+      var active0 = this.activeCorruption();
+      this._corrPhase = active0 ? 'locked' : 'idle';
+      if (active0) { this._corrTargetId = active0; var an = this.corrNodeById(active0); if (an) { this._corrRet.x = an.x; this._corrRet.y = an.y; } }
+    }
+    var mode = ACCOUNT.corrMode || 'clear', modeName = (DATA.modes[mode] && DATA.modes[mode].name) || 'REALM CLEAR';
+    var purged = (ACCOUNT.cleared || []).length, total = this.campaignMaps().length;
+
+    ui.push(this.add.rectangle(cx, cy, P.w, P.h, 0x0a0c14, 0.98).setDepth(80).setStrokeStyle(2, 0x35608f));
+    // HUD header
+    ui.push(this.add.text(cx - P.w / 2 + 18, cy - P.h / 2 + 16, 'GLOBAL CONSCIOUSNESS',
+      { fontFamily: 'monospace', fontSize: 20, color: '#5fe8c2', fontStyle: 'bold' }).setDepth(83));
+    ui.push(this.add.text(cx - P.w / 2 + 18, cy - P.h / 2 + 42, 'the sleeping dream · 8,204,551,300 minds linked · scan for infection',
+      { fontFamily: 'monospace', fontSize: 11, color: '#6a86a8' }).setDepth(83));
+    ui.push(this.add.text(cx + P.w / 2 - 18, cy - P.h / 2 + 20, 'PURGED ' + purged + ' / ' + total,
+      { fontFamily: 'monospace', fontSize: 13, color: '#ffcd75' }).setOrigin(1, 0).setDepth(83));
+    // dynamic star-map graphics
+    this._corrG = this.add.graphics().setDepth(81); ui.push(this._corrG);
+    // legend (compact, along the bottom of the map)
+    ui.push(this.add.text(M.x0 + 8, M.y0 + M.h - 16,
+      '● purged   ● corruption   ● undiscovered   ● patient zero',
+      { fontFamily: 'monospace', fontSize: 10, color: '#6a86a8' }).setDepth(83));
+    // floating spinning name (hunt/fly)
+    this._corrNameText = this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: 16, color: '#7fd0ff', fontStyle: 'bold' })
+      .setOrigin(0.5).setDepth(84).setVisible(false); ui.push(this._corrNameText);
+
+    // item 9: HOVER any region node → its name + SPECIAL MECHANICS. Purged and
+    // discovered regions read out (fog, bell toll, ghost train…); undiscovered
+    // signals stay anonymous until you scan them. One reused tooltip.
+    var tip = this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: 11, color: '#e8f0ff',
+      backgroundColor: 'rgba(11,16,36,0.94)', padding: { x: 6, y: 5 }, wordWrap: { width: 250 } })
+      .setDepth(90).setVisible(false); ui.push(tip);
+    this._corrTip = tip;
+    (this._corrNodes || []).forEach(function (nd) {
+      var z = self.add.circle(nd.x, nd.y, 15, 0xffffff, 0.001).setDepth(85).setInteractive({ useHandCursor: true });
+      z.on('pointerover', function () {
+        var info = self.corrNodeTip(nd.id);
+        tip.setColor(info.color).setText(info.title + (info.body ? ('\n' + info.body) : '')).setVisible(true);
+        var tx = Math.min(nd.x + 16, M.x0 + M.w - tip.width - 6), ty = Math.min(nd.y + 12, M.y0 + M.h - tip.height - 6);
+        tip.setPosition(Math.max(M.x0 + 6, tx), Math.max(M.y0 + 6, ty));
+      });
+      z.on('pointerout', function () { tip.setVisible(false); });
+      ui.push(z);
+    });
+
+    // ---- control strip / discovery card (below the map) ----
+    var by = M.y0 + M.h + 10, ph = this._corrPhase;
+    function btn(bx, yy, w, label, color, cb) {
+      var r = self.add.rectangle(bx, yy, w, 40, color, 1).setDepth(82).setStrokeStyle(2, 0xf4f4f4).setInteractive({ useHandCursor: true });
+      r.on('pointerdown', cb); ui.push(r);
+      ui.push(self.add.text(bx, yy, label, { fontFamily: 'monospace', fontSize: 14, color: '#0a0c14', fontStyle: 'bold' }).setOrigin(0.5).setDepth(83));
+    }
+    if (ph === 'hunt' || ph === 'fly') {
+      ui.push(this.add.text(cx, by + 60, 'SCANNING FOR INFECTION…', { fontFamily: 'monospace', fontSize: 16, color: '#5fe8c2' }).setOrigin(0.5).setDepth(83));
+    } else if (ph === 'locked') {
+      var id = this._corrTargetId, def = this.corrNodeById(id) || { name: id }, mech = (DATA.console.mech && DATA.console.mech[id]) || 'unknown corruption.';
+      var regionNo = this.campaignMaps().map(function (m) { return m.id; }).indexOf(id) + 1;
+      var lft = cx - P.w / 2 + 18;
+      ui.push(this.add.text(lft, by + 2, '! CORRUPTION DETECTED · REGION ' + ('0' + regionNo).slice(-2),
+        { fontFamily: 'monospace', fontSize: 11, color: '#e85050', fontStyle: 'bold' }).setDepth(83));
+      ui.push(this.add.text(lft, by + 18, def.name,
+        { fontFamily: 'monospace', fontSize: 20, color: '#ffcd75', fontStyle: 'bold' }).setDepth(83));
+      ui.push(this.add.text(cx + P.w / 2 - 18, by + 2, 'MODE: ' + modeName,
+        { fontFamily: 'monospace', fontSize: 11, color: '#ffcd75' }).setOrigin(1, 0).setDepth(83));
+      ui.push(this.add.text(cx + P.w / 2 - 18, by + 18, 'CLEAR REWARD: +1 MAP TOKEN',
+        { fontFamily: 'monospace', fontSize: 11, color: '#96eb8c' }).setOrigin(1, 0).setDepth(83));
+      // item 9: SHOW THE MAP — a framed thumbnail of the region's actual terrain
+      // (its biome floor tile), so a discovery reveals what the place looks like,
+      // then names its SPECIAL MECHANICS beside it (fog, bell toll, ghost train…).
+      var rdef = (DATA.realms && DATA.realms[id]) || {}, bdef = (DATA.biomes && DATA.biomes[rdef.biome]) || {};
+      var tileKey = bdef.tile, thW = 150, thH = 50, thX = lft + thW / 2, thY = by + 44 + thH / 2;
+      ui.push(this.add.rectangle(thX, thY, thW, thH, 0x0b1024, 1).setDepth(82).setStrokeStyle(2, 0x35608f));
+      if (tileKey && this.textures.exists(tileKey)) {
+        var ts = this.add.tileSprite(thX, thY, thW - 4, thH - 4, tileKey).setDepth(82);
+        try { ts.setTileScale(0.6, 0.6); } catch (e) {}
+        ui.push(ts);
+      } else {
+        ui.push(this.add.text(thX, thY, 'MAP', { fontFamily: 'monospace', fontSize: 12, color: '#5a698c' }).setOrigin(0.5).setDepth(83));
+      }
+      ui.push(this.add.text(thX, thY + thH / 2 - 8, (rdef.name || def.name || '').toUpperCase(),
+        { fontFamily: 'monospace', fontSize: 9, color: '#cfe0ff', backgroundColor: '#0009', padding: { x: 3, y: 1 } }).setOrigin(0.5, 0.5).setDepth(84));
+      // SPECIAL MECHANICS — labeled, to the right of the map thumbnail
+      var mxL = lft + thW + 16, mxW = P.w - 36 - thW - 16;
+      ui.push(this.add.text(mxL, by + 44, 'SPECIAL MECHANICS',
+        { fontFamily: 'monospace', fontSize: 11, color: '#5fe8c2', fontStyle: 'bold' }).setDepth(83));
+      ui.push(this.add.text(mxL, by + 60, mech,
+        { fontFamily: 'monospace', fontSize: 11, color: '#cdd7ea', wordWrap: { width: mxW } }).setDepth(83));
+      // buttons below the card text
+      var bY = by + 118;
+      btn(cx - 132, bY, 248, 'STEP THROUGH  ▸', 0x38b764, function () { self.corruptionStepThrough(); });
+      var hasTok = (ACCOUNT.mapTokens || 0) > 0;
+      var rb = this.add.rectangle(cx + 132, bY, 248, 40, hasTok ? 0x243a24 : 0x1a1c2c, 1).setDepth(82).setStrokeStyle(2, hasTok ? 0x3a6b3a : 0x333c57).setInteractive({ useHandCursor: true });
+      rb.on('pointerdown', function () { self.corruptionReroll(); }); ui.push(rb);
+      ui.push(this.add.text(cx + 132, bY, '↻ REROLL  (' + (ACCOUNT.mapTokens || 0) + ' TOKENS)',
+        { fontFamily: 'monospace', fontSize: 13, color: hasTok ? '#96eb8c' : '#66799e', fontStyle: 'bold' }).setOrigin(0.5).setDepth(83));
+    } else { // idle — can scan
+      ui.push(this.add.text(cx, by + 18, 'MAP TOKENS: ' + (ACCOUNT.mapTokens || 0),
+        { fontFamily: 'monospace', fontSize: 12, color: '#96eb8c' }).setOrigin(0.5).setDepth(83));
+      btn(cx, by + 60, 360, '◈ FIND THE CORRUPTION ◈', 0xffcd75, function () { self.corruptionScan(); });
+    }
+    ui.push(this.add.text(cx, cy + P.h / 2 - 12, 'ESC closes · ENTER ' + (ph === 'locked' ? 'steps through' : 'scans'),
+      { fontFamily: 'monospace', fontSize: 10, color: '#566c86' }).setOrigin(0.5).setDepth(83));
+
+    this.consoleUi = ui;
+    this.startCorrTick();
   },
 
   despawnPortal: function () {
@@ -1504,41 +2019,106 @@ var NexusScene = new Phaser.Class({
     if (near && this.rig.interactJustDown()) this.toggleBestiary();
   },
 
+  // M7k (user): the book is BY MAP now — 20 live realms made one flat ring of
+  // every known boss unbrowsable. bestiaryScope picks the realm (opens on the
+  // machine's selected destination); ARROW UP/DOWN cycles maps; TYPING searches
+  // every realm at once by creature name.
+  bestiaryMaps: function () {
+    return (DATA.console.maps || []).filter(function (m) {
+      return !m.locked && DATA.realms && DATA.realms[m.id];
+    });
+  },
+  // items 7/8: a creature is only "known" once you've BEATEN its realm. Until
+  // then the codex slot reads "??????????" (map-scope browse) and it can't be
+  // found by name search at all. Entries with no realm (suite/edge fallback)
+  // are treated as known so the classic flat book still works.
+  bestiaryKnown: function (entry) {
+    if (!entry || !entry.realm) return true;
+    var cl = (typeof ACCOUNT !== 'undefined' && ACCOUNT && ACCOUNT.cleared) || [];
+    return cl.indexOf(entry.realm) >= 0;
+  },
   bestiaryEntries: function () {
-    // M4.7: the mob pages are SCOPED TO THE REALM'S BIOME ("everything the
-    // realm sends at you" — literally); bosses all stay listed (the index of
-    // everything known). A future biome swap re-scopes the book for free.
-    var e = [], k;
-    // M5.0: the book follows the console's SELECTED destination — pick the
-    // grove at the machine and the bestiary shows the grove's roster.
+    var e = [];
+    var q = (this.bestiarySearch || '').toLowerCase();
+    var maps = this.bestiaryMaps();
+    var addRealm = function (rid, rname) {
+      var rdef = DATA.realms[rid]; if (!rdef) return;
+      var roster = (DATA.biomes[rdef.biome] || {}).mobs || [];
+      roster.forEach(function (key) { if (DATA.mobs[key]) e.push({ kind: 'mob', key: key, realm: rid, realmName: rname }); });
+      (rdef.bosses || [rdef.boss]).forEach(function (bk) { if (bk && DATA.bosses[bk]) e.push({ kind: 'boss', key: bk, realm: rid, realmName: rname }); });
+    };
+    if (q && maps.length) {                    // SEARCH MODE: all realms, name filter
+      maps.forEach(function (m) { addRealm(m.id, m.name); });
+      var selfK = this;
+      return e.filter(function (en) {
+        if (!selfK.bestiaryKnown(en)) return false;   // can't find what you haven't unlocked
+        var d = en.kind === 'mob' ? DATA.mobs[en.key] : DATA.bosses[en.key];
+        return ((d.name || en.key) + '').toLowerCase().indexOf(q) >= 0;
+      });
+    }
+    var scope = this.bestiaryScope || this.consoleMap;   // no persistence — the
+    // closed book keeps FOLLOWING the machine's destination (m5 suite contract)
+    var mSel = maps.filter(function (m) { return m.id === scope; })[0] || maps[0];
+    if (mSel) { addRealm(mSel.id, mSel.name); return e; }
+    // fallback (no console maps registered — suites/edge): pre-M7k behavior
     var bio = (DATA.realms && this.consoleMap && DATA.realms[this.consoleMap])
       ? DATA.realms[this.consoleMap].biome : DATA.realm.biome;
     var roster = (DATA.biomes[bio] || {}).mobs || Object.keys(DATA.mobs);
     roster.forEach(function (key) { if (DATA.mobs[key]) e.push({ kind: 'mob', key: key }); });
-    for (k in DATA.bosses) e.push({ kind: 'boss', key: k });
+    var k; for (k in DATA.bosses) e.push({ kind: 'boss', key: k });
     return e;
+  },
+  bestiaryMapNav: function (dir) {
+    if (!this.bestiaryUi) return;
+    var maps = this.bestiaryMaps(); if (!maps.length) return;
+    this.bestiarySearch = '';                  // map browse resolves the search
+    var cur = this.bestiaryScope || this.consoleMap;
+    var idx = 0; maps.forEach(function (m, i) { if (m.id === cur) idx = i; });
+    // (unknown scope falls back to index 0 — same as the entries fallback)
+    idx = (idx + dir + maps.length) % maps.length;
+    this.bestiaryScope = maps[idx].id;
+    this.bestiaryIndex = 0;
+    AUDIO.play('ui');
+    this.buildBestiaryUi();
   },
 
   toggleBestiary: function () {
     if (this.bestiaryUi) {
       this.bestiaryUi.forEach(function (o) { o.destroy(); });
       this.bestiaryUi = null;
+      this.bestiarySearch = '';                          // M7k: fresh search per visit
+      this.bestiaryScope = null;                         // re-open follows the machine again
+      this._typing = false;
       if (this._bestiaryKeys) { this.input.keyboard.off('keydown', this._bestiaryKeys); this._bestiaryKeys = null; }
       return;
     }
     if (this.vaultUi) this.toggleVault();                // one overlay at a time
     if (this.gyUi) this.toggleGraveyard();
     if (this.consoleUi) this.toggleConsole();
+    this.bestiaryScope = this.consoleMap;                // the book opens on the machine's destination
     this.buildBestiaryUi();
-    // AUDIT #9 fix (2026-07-13): page with the LEFT/RIGHT *actions* (moveLeft/
-    // moveRight, either slot) read LIVE from BINDS — paging follows a rebind
-    // instead of being nailed to the arrow keys. Default A/◄ back · D/► next.
+    // M7k (user): the book got a SEARCH BAR — printable keys type into it, so
+    // paging moved to the ARROW KEYS (◀▶ click targets still work): LEFT/RIGHT
+    // page entries, UP/DOWN cycle maps, BACKSPACE edits, ESC closes. Station
+    // hotkeys are muted while _typing (BINDS.wire guards).
     var self = this;
+    this._typing = true;
     this._bestiaryKeys = function (ev) {
       if (!self.bestiaryUi) return;
-      var id = BINDS.actionForEvent(ev);
-      if (id === 'moveLeft') self.bestiaryNav(-1);
-      else if (id === 'moveRight') self.bestiaryNav(1);
+      var c = ev.code;
+      if (c === 'ArrowLeft')  { self.bestiaryNav(-1); return; }
+      if (c === 'ArrowRight') { self.bestiaryNav(1); return; }
+      if (c === 'ArrowUp')    { self.bestiaryMapNav(-1); return; }
+      if (c === 'ArrowDown')  { self.bestiaryMapNav(1); return; }
+      var k = ev.key;
+      if (k === 'Escape') { self.toggleBestiary(); return; }
+      if (k === 'Backspace') {
+        if (self.bestiarySearch) { self.bestiarySearch = self.bestiarySearch.slice(0, -1); self.bestiaryIndex = 0; self.buildBestiaryUi(); }
+        return;
+      }
+      if (k && k.length === 1 && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+        if (self.bestiarySearch.length < 24) { self.bestiarySearch += k; self.bestiaryIndex = 0; self.buildBestiaryUi(); }
+      }
     };
     this.input.keyboard.on('keydown', this._bestiaryKeys);
     AUDIO.play('ui');
@@ -1547,6 +2127,7 @@ var NexusScene = new Phaser.Class({
   bestiaryNav: function (dir) {
     if (!this.bestiaryUi) return;
     var n = this.bestiaryEntries().length;
+    if (!n) return;                                      // M7k: empty search result
     this.bestiaryIndex = (this.bestiaryIndex + dir + n) % n;
     AUDIO.play('ui');
     this.buildBestiaryUi();
@@ -1557,26 +2138,83 @@ var NexusScene = new Phaser.Class({
     var self = this;
     var W = this.scale.width, H = this.scale.height, cx = W / 2, cy = H / 2;
     var entries = this.bestiaryEntries();
-    this.bestiaryIndex = ((this.bestiaryIndex % entries.length) + entries.length) % entries.length;
-    var entry = entries[this.bestiaryIndex];
+    var n = entries.length;
+    this.bestiaryIndex = n ? ((this.bestiaryIndex % n) + n) % n : 0;
+    var entry = n ? entries[this.bestiaryIndex] : null;
     var GREEN = '#49e83b', DIM = '#94b0c2', FAINT = '#566c86';
+    var sq = this.bestiarySearch || '';
     var ui = [];
     ui.push(this.add.rectangle(cx, cy, 640, 520, 0x0f0f1b, 0.97).setDepth(80).setStrokeStyle(2, 0x49e83b));
     ui.push(this.add.text(cx, cy - 232, 'BESTIARY', { fontFamily: 'monospace', fontSize: 22, color: GREEN }).setOrigin(0.5).setDepth(81));
-    ui.push(this.add.text(cx, cy - 206, 'field notes on everything the realm sends at you',
+    ui.push(this.add.text(cx, cy - 208, 'field notes on everything the realms send at you',
       { fontFamily: 'monospace', fontSize: 11, color: DIM }).setOrigin(0.5).setDepth(81));
 
+    // M7k (user): SEARCH BAR — type to hunt a creature across EVERY realm
+    ui.push(this.add.rectangle(cx, cy - 188, 460, 20, 0x1a1c2c, 1).setDepth(81)
+      .setStrokeStyle(1, sq ? 0xffcd75 : 0x333c57));
+    ui.push(this.add.text(cx - 222, cy - 188, sq ? ('SEARCH: ' + sq + '_') : 'SEARCH — type a creature name',
+      { fontFamily: 'monospace', fontSize: 10, color: sq ? '#ffcd75' : FAINT }).setOrigin(0, 0.5).setDepth(82));
+
+    // M7k (user): MAP ROW — the book is scoped BY MAP; ▲▼ (or click) cycles
+    var scopeName = sq ? ('ALL REALMS — ' + n + ' match' + (n === 1 ? '' : 'es'))
+                       : ((entry && entry.realmName) ? entry.realmName : DATA.realm.name);
+    var mapL = this.add.text(cx - 160, cy - 164, '▲', { fontFamily: 'monospace', fontSize: 16, color: sq ? FAINT : GREEN })
+      .setOrigin(0.5).setDepth(81).setInteractive({ useHandCursor: true });
+    mapL.on('pointerdown', function () { self.bestiaryMapNav(-1); });
+    ui.push(mapL);
+    var mapR = this.add.text(cx + 160, cy - 164, '▼', { fontFamily: 'monospace', fontSize: 16, color: sq ? FAINT : GREEN })
+      .setOrigin(0.5).setDepth(81).setInteractive({ useHandCursor: true });
+    mapR.on('pointerdown', function () { self.bestiaryMapNav(1); });
+    ui.push(mapR);
+    ui.push(this.add.text(cx, cy - 164, 'MAP: ' + scopeName,
+      { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }).setOrigin(0.5).setDepth(81));
+
     // navigation: ◀ entry n/N ▶ (arrow keys or click)
-    var navL = this.add.text(cx - 160, cy - 170, '◀', { fontFamily: 'monospace', fontSize: 26, color: GREEN })
+    var navL = this.add.text(cx - 160, cy - 140, '◀', { fontFamily: 'monospace', fontSize: 22, color: GREEN })
       .setOrigin(0.5).setDepth(81).setInteractive({ useHandCursor: true });
     navL.on('pointerdown', function () { self.bestiaryNav(-1); });
     ui.push(navL);
-    var navR = this.add.text(cx + 160, cy - 170, '▶', { fontFamily: 'monospace', fontSize: 26, color: GREEN })
+    var navR = this.add.text(cx + 160, cy - 140, '▶', { fontFamily: 'monospace', fontSize: 22, color: GREEN })
       .setOrigin(0.5).setDepth(81).setInteractive({ useHandCursor: true });
     navR.on('pointerdown', function () { self.bestiaryNav(1); });
     ui.push(navR);
-    ui.push(this.add.text(cx, cy - 170, 'entry ' + (this.bestiaryIndex + 1) + ' / ' + entries.length,
+    ui.push(this.add.text(cx, cy - 140, n ? ('entry ' + (this.bestiaryIndex + 1) + ' / ' + n) : 'entry - / -',
       { fontFamily: 'monospace', fontSize: 12, color: DIM }).setOrigin(0.5).setDepth(81));
+
+    if (!entry) {                              // empty search result
+      ui.push(this.add.text(cx, cy - 20, 'no creature matches "' + sq + '"\nBACKSPACE to edit the search',
+        { fontFamily: 'monospace', fontSize: 12, color: '#ff9e6d', align: 'center' }).setOrigin(0.5).setDepth(81));
+      ui.push(this.add.text(cx, cy + 236,
+        '[ type to search · BACKSPACE edit · ' + BINDS.keyLabel('bestiary') + ' / ESC close ]',
+        { fontFamily: 'monospace', fontSize: 11, color: GREEN }).setOrigin(0.5).setDepth(81));
+      this.bestiaryUi = ui;
+      return;
+    }
+
+    // items 7/8: REDACTED until you've beaten this creature's realm.
+    var known = this.bestiaryKnown(entry);
+    if (!known) {
+      var REDACT = '??????????';
+      ui.push(this.add.rectangle(cx - 180, cy - 60, 80, 80, 0x1a1c2c, 1).setDepth(81).setStrokeStyle(1, 0x333c57));
+      ui.push(this.add.text(cx - 180, cy - 60, '?', { fontFamily: 'monospace', fontSize: 52, color: '#566c86' }).setOrigin(0.5).setDepth(81));
+      ui.push(this.add.text(cx - 180, cy + 6, REDACT, { fontFamily: 'monospace', fontSize: 14, color: '#94b0c2' }).setOrigin(0.5).setDepth(81));
+      ui.push(this.add.text(cx - 180, cy + 24, 'UNIDENTIFIED', { fontFamily: 'monospace', fontSize: 10, color: '#566c86' }).setOrigin(0.5).setDepth(81));
+      if (entry.realmName) ui.push(this.add.text(cx - 180, cy + 40, '· ' + entry.realmName + ' ·',
+        { fontFamily: 'monospace', fontSize: 9, color: FAINT }).setOrigin(0.5).setDepth(81));
+      var rsy = cy - 112, rlabels = entry.kind === 'boss' ? ['HP', 'SPEED', 'XP', 'CONTACT DMG'] : ['HP', 'SPEED', 'XP', 'THREAT COST'];
+      rlabels.forEach(function (lab) {
+        ui.push(self.add.text(cx - 40, rsy, lab, { fontFamily: 'monospace', fontSize: 11, color: DIM }).setDepth(81));
+        ui.push(self.add.text(cx + 120, rsy, '??', { fontFamily: 'monospace', fontSize: 11, color: '#566c86' }).setDepth(81));
+        rsy += 20;
+      });
+      ui.push(this.add.text(cx - 285, cy + 60, '· ' + REDACT + ' ' + REDACT + '\n· Beat ' + (entry.realmName || 'this region') + ' to unlock this field note.',
+        { fontFamily: 'monospace', fontSize: 10, color: FAINT, wordWrap: { width: 570 } }).setDepth(81));
+      ui.push(this.add.text(cx, cy + 236,
+        '[ ◀ ▶ browse · ▲ ▼ change map · type to search · ESC close ]',
+        { fontFamily: 'monospace', fontSize: 11, color: GREEN }).setOrigin(0.5).setDepth(81));
+      this.bestiaryUi = ui;
+      return;
+    }
 
     var d, lines = [], role, tint;
     if (entry.kind === 'mob') {
@@ -1603,9 +2241,11 @@ var NexusScene = new Phaser.Class({
     ui.push(this.add.text(cx - 180, cy + 6, d.name, { fontFamily: 'monospace', fontSize: 14, color: '#f4f4f4' }).setOrigin(0.5).setDepth(81));
     ui.push(this.add.text(cx - 180, cy + 24, entry.kind === 'boss' ? (d.title || role) : role,
       { fontFamily: 'monospace', fontSize: 10, color: '#' + ('00000' + tint.toString(16)).slice(-6) }).setOrigin(0.5).setDepth(81));
+    if (entry.realmName) ui.push(this.add.text(cx - 180, cy + 40, '· ' + entry.realmName + ' ·',
+      { fontFamily: 'monospace', fontSize: 9, color: FAINT }).setOrigin(0.5).setDepth(81));
 
     // stat block
-    var sy = cy - 120;
+    var sy = cy - 112;
     lines.forEach(function (row) {
       ui.push(self.add.text(cx - 40, sy, row[0], { fontFamily: 'monospace', fontSize: 11, color: DIM }).setDepth(81));
       ui.push(self.add.text(cx + 120, sy, String(row[1]), { fontFamily: 'monospace', fontSize: 11, color: '#f4f4f4' }).setDepth(81));
@@ -1654,8 +2294,7 @@ var NexusScene = new Phaser.Class({
     });
 
     ui.push(this.add.text(cx, cy + 236,
-      '[ ' + BINDS.keyLabel('moveLeft') + ' ' + BINDS.keyLabel('moveRight') + ' browse · ' +
-      BINDS.keyLabel('bestiary') + ' / ESC close ]',
+      '[ ◀ ▶ browse · ▲ ▼ change map · type to search · ESC close ]',
       { fontFamily: 'monospace', fontSize: 11, color: GREEN }).setOrigin(0.5).setDepth(81));
     this.bestiaryUi = ui;
   },
@@ -1791,6 +2430,16 @@ var RealmScene = new Phaser.Class({
       this.physics.world.setBounds(0, 0, WW, HH);
       this.wallBodies = null;
       this.setupFactory(WW, HH);                            // M5.7: the robotics factory
+    } else if (this.hifiWorld && MAPS.defs && MAPS.defs[this.realmId] &&
+               MAPS.defs[this.realmId].scene && MAPS.defs[this.realmId].scene.setup) {
+      // M7 REGISTRY: a FOLDER-REGISTERED realm (maps 5-20) owns its terrain.
+      // setup() MUST reset all its own instance state (scene reuse, bug #1)
+      // and may set this._realmStart (graveyard pattern). Colliders that need
+      // the groups wire in scene.afterCreate below.
+      WW = HH = MAPS.defs[this.realmId].worldSize || DATA.realm.size;
+      this.physics.world.setBounds(0, 0, WW, HH);
+      this.wallBodies = null;
+      MAPS.defs[this.realmId].scene.setup(this, WW, HH);
     } else if (this.hifiWorld) {
       WW = HH = DATA.realm.size;
       this.physics.world.setBounds(0, 0, WW, HH);
@@ -1841,6 +2490,8 @@ var RealmScene = new Phaser.Class({
     // configured with affixes is visibly that run.
     this.mapAffixes = (data && data.affixes) || [];
     this.scanning = false; this.scanUi = null;                     // E3: scouter overlay
+    this.time.paused = false;                    // M7k: scene reuse — never inherit a frozen timer plane
+    this._scanStartAt = 0;                       // M7k: scouter freeze clock (scene reuse)
     this.looting = false; this.lootUi = null; this.pendingLoot = null; // E1: chest overlay
     this.lootItems = [];                                           // M3: chest gear rows
     this.chest = null; this.interactables = []; this.promptText = null; // E1/Q6
@@ -1947,6 +2598,11 @@ var RealmScene = new Phaser.Class({
       menu: function () { self.togglePause(); }
     });
 
+    // M7 REGISTRY: groups + core colliders exist now — the map wires its own
+    // (fence groups, hazard overlaps, ambient cycles) here.
+    var MREG = MAPS.forScene ? MAPS.forScene(this) : null;
+    if (MREG && MREG.scene && MREG.scene.afterCreate) MREG.scene.afterCreate(this);
+
     this.buildHud();
     this.wireEvents();
     AUDIO.play('portal');
@@ -1974,6 +2630,12 @@ var RealmScene = new Phaser.Class({
     this.pausedAt = this.time.now;
     this.physics.world.pause();
     this.spawnEvent.paused = true;
+    // M7k AUDIT (2026-07-17): freeze the timer plane too. Map verbs resolve
+    // windup damage through time.delayedCall — without this, a telegraphed
+    // hit (backhand, gaze, fire breath, water gun…) elapsed BEHIND the ESC
+    // menu and landed on the frozen player (the old train-telegraph bug class,
+    // now closed for every delayedCall at once). Menu code uses setTimeout.
+    this.time.paused = true;
     this.tweens.pauseAll();
     AUDIO.play('ui');
     var self = this;
@@ -2002,6 +2664,7 @@ var RealmScene = new Phaser.Class({
   unfreeze: function () {
     if (!this.paused) return;
     this.paused = false;
+    this.time.paused = false;                    // M7k: timer plane thaws with us
     var dt = this.time.now - this.pausedAt;
     this.startedAt += dt;                        // realm clock ignores paused time
     // AUDIT FIX 2026-07-14: the scene clock keeps running while paused, so
@@ -2112,6 +2775,10 @@ var RealmScene = new Phaser.Class({
     if (this.coolantPatches) this.coolantPatches.forEach(function (p) { if (!p.dead) p.dieAt += dt; });
     if (this.factoryTurrets) this.factoryTurrets.forEach(function (t) { if (t.fireAt) t.fireAt += dt; if (t.offAt) t.offAt += dt; });
     if (this.factory && this.factory.nextSparkAt) this.factory.nextSparkAt += dt;
+    // M7 REGISTRY: the map shifts EVERY absolute clock it owns (the #1
+    // recurring bug family — each map's PLAN.md carries its shift list).
+    var MRF = MAPS.forScene ? MAPS.forScene(this) : null;
+    if (MRF && MRF.scene && MRF.scene.unfreeze) MRF.scene.unfreeze(this, dt);
     if (this.player.state.curseUntil) { this.player.state.curseUntil += dt; if (this.player.state.curseNextAt) this.player.state.curseNextAt += dt; }
     if (this.ghostTrain && this.ghostTrain.warnUntil) this.ghostTrain.warnUntil += dt;   // M4.7 ghost track
     if (this.player.state.slowUntil) this.player.state.slowUntil += dt;                  // M4.7 the schedule
@@ -2218,6 +2885,9 @@ var RealmScene = new Phaser.Class({
     if (this.clearReaper) this.clearReaper();               // M5.6: the reaper marches no more
     // M5.7: the factory's coolant slow-field patches die with the swarm too
     if (this.coolantPatches) { this.coolantPatches.forEach(function (p) { if (p.obj && p.obj.active) { try { p.obj.destroy(); } catch (e) {} } }); this.coolantPatches = []; }
+    // M7 REGISTRY: the map's hazard pools die with the swarm too
+    var MRA = MAPS.forScene ? MAPS.forScene(this) : null;
+    if (MRA && MRA.scene && MRA.scene.annihilate) MRA.scene.annihilate(this);
     // full-screen destruction flash
     var W = this.scale.width, H = this.scale.height;
     var flash = this.add.rectangle(W / 2, H / 2, W, H, 0xffffff, 0.55).setScrollFactor(0).setDepth(75);
@@ -2232,6 +2902,15 @@ var RealmScene = new Phaser.Class({
     var x = Phaser.Math.Clamp(this.player.x + Math.cos(a) * 260, 100, this.worldW - 100);
     var y = Phaser.Math.Clamp(this.player.y + Math.sin(a) * 260, 100, this.worldH - 100);
     if (this.map) { var c = MAPS.findClearPx(this.map, x, y); x = c.x; y = c.y; }
+    // M7k AUDIT (2026-07-17): registry maps have no this.map, so barrier maps
+    // (neon canyon / vice-versa river of souls / prehistoria river) could get
+    // the portal placed INSIDE an impassable strip → run softlocked. The map's
+    // bossPortalSpot hook nudges it somewhere reachable.
+    var MPP = (typeof MAPS !== 'undefined' && MAPS.forScene) ? MAPS.forScene(this) : null;
+    if (MPP && MPP.scene && MPP.scene.bossPortalSpot) {
+      var ps2 = MPP.scene.bossPortalSpot(this, x, y);
+      if (ps2) { x = ps2.x; y = ps2.y; }
+    }
     this.bossPortal = this.physics.add.staticSprite(x, y, TEX.nexusKey('portal')).setScale(TEX.nexusScale('portal', 3)).setTint(0xb13e53).setDepth(6);
     this.tweens.add({ targets: this.bossPortal, angle: 360, duration: 3000, repeat: -1 });
     portalSwirl(this, x, y, 0xb13e53);
@@ -2286,6 +2965,11 @@ var RealmScene = new Phaser.Class({
     } else if (def.floorLift && this.arenaBay) {
       // M5.7: THE GRAND ENGINEER rises through the floor on the hydraulic lift
       this.engineerArrival(def);
+    } else if (def.mapOwned && MAPS.forScene && MAPS.forScene(this) &&
+               MAPS.forScene(this).scene.bossArrival) {
+      // M7 REGISTRY: the map stages its own arrival (hatch / cinematic / lift)
+      // and MUST end in scene.spawnBossNow(def, x, y) + scene.showScouter(def).
+      MAPS.forScene(this).scene.bossArrival(this, def, bx, by);
     } else {
       this.spawnBossNow(def, bx, by);
       this.showScouter(def);                             // E3: the workup sheet
@@ -2650,6 +3334,7 @@ var RealmScene = new Phaser.Class({
   showScouter: function (def) {
     var self = this;
     this.scanning = true;
+    this._scanStartAt = this.time.now;           // M7k: the read length shifts map clocks on dismiss
     this.physics.world.pause();
     var W = this.scale.width, H = this.scale.height, cx = W / 2, cy = H / 2;
     var ui = [];
@@ -2714,6 +3399,21 @@ var RealmScene = new Phaser.Class({
       // must not bank an instant TIMBER
       if (this.boss.boss.def.patterns.timber) this.initGrovekeeper(this.boss, this.time.now);
     }
+    // M7k AUDIT (2026-07-17): LAW 11 for the 16 REGISTRY MAPS — update() froze
+    // while the scan was up but the scene clock kept running, so every
+    // mapOwned verb clock armed pre-scan (nextVerbAt/nextSigAt/…) was banked
+    // and the whole kit fired the frame after dismissal. The read duration is
+    // a pause in all but name: shift the map's absolute clocks through its
+    // unfreeze hook (the same list the ESC menu uses) + the realm clock.
+    if (this._scanStartAt) {
+      var sdt = this.time.now - this._scanStartAt;
+      this._scanStartAt = 0;
+      if (sdt > 0) {
+        this.startedAt += sdt;                   // the realm clock ignores the read
+        var MSC = (typeof MAPS !== 'undefined' && MAPS.forScene) ? MAPS.forScene(this) : null;
+        if (MSC && MSC.scene && MSC.scene.unfreeze) MSC.scene.unfreeze(this, sdt);
+      }
+    }
     if (!this.paused && !this.hitstopActive) this.physics.world.resume();
     AUDIO.play('ui');
   },
@@ -2727,12 +3427,31 @@ var RealmScene = new Phaser.Class({
     var bx = boss.x, by = boss.y;
     this.burst(bx, by, 40, def.deathTint);
     if (def.patterns.ghostTrain) this.clearConductorFx();   // M4.7: beam/rails/ties die with him
-    if (def.patterns.timber) this.clearGrovekeeperFx();     // M5.0: beam/markers/vines die with him
+    if (def.patterns.timber) { this.clearGrovekeeperFx(); this.clearGroveTimber(); }   // M5.0 + item 10: fx + arena ring die with him
     if (def.floorLift) this.clearEngineerFx();              // M5.7: reactor/turrets/telegraphs die with him
+    // M7k AUDIT (2026-07-17): registry maps get the same courtesy — a boss
+    // killed MID-VERB (rooted overload, dash, judgment…) left its telegraph
+    // graphics painted forever. The map's bossCleanup hook tears them down.
+    var MBC = (typeof MAPS !== 'undefined' && MAPS.forScene) ? MAPS.forScene(this) : null;
+    if (MBC && MBC.scene && MBC.scene.bossCleanup) { try { MBC.scene.bossCleanup(this, boss); } catch (e) {} }
     boss.destroy(); this.boss = null;
     if (this.bossBar) { this.bossBar.destroy(); this.bossBarBg.destroy(); this.bossName.destroy(); this.bossBar = null; }
     AUDIO.stopMusic();                                   // M4.5: the battle is decided — silence is the release
     AUDIO.play('victory');
+    // v5 (2026-07-17): THE FINALE. The first Titan Whale (belly) kill BEATS THE
+    // GAME → grant the legendary set + flip beaten, then play the endgame
+    // cutscenes CS2 THE REBOOT → CS3 THE WAKE/FORK (item 1), then home. This
+    // replaces the normal loot chest for the finale (the unlocks ARE the reward).
+    if (this.realmId === 'belly' && ACCOUNT.cutscenesSeen && !ACCOUNT.cutscenesSeen.cs2 && typeof CutsceneScene !== 'undefined') {
+      var _cls = CURRENT.cls, _self = this;
+      beatTheGame(_cls);
+      this.time.delayedCall(700, function () {
+        _self.scene.start('Cutscene', { id: 'cs2', cls: _cls, next:
+          { scene: 'Cutscene', data: { id: 'cs3', cls: _cls, next:
+            { scene: 'Cutscene', data: { id: 'cs4', cls: _cls, next: { scene: 'Nexus', data: { entry: 'realm' } } } } } } });
+      });
+      return;
+    }
     var stat = DATA.potions.stats[Math.floor(SIM.rng() * DATA.potions.stats.length)];  // seam rule 4
     // M3: the chest also rolls GEAR from the boss's drop table (E1 phase 2 —
     // per-item take/leave is real now). Rolled here, once, through SIM.rng.
@@ -2786,6 +3505,17 @@ var RealmScene = new Phaser.Class({
     ACCOUNT.records.realmsClosed++;
     ACCOUNT.records.totalKills += st.kills; st.kills = 0;    // banked, not lost
     CURRENT.level = st.level; CURRENT.xp = st.xp;
+    // v5 (2026-07-17): FIRST-PLAYTHROUGH campaign progress. Opening the chest =
+    // the boss is down = this region is PURGED. Record it, pay one MAP TOKEN, and
+    // purging the whale (patient zero) BEATS THE GAME (flips to post-campaign).
+    (function (mid) {
+      if (!mid || !ACCOUNT || !Array.isArray(ACCOUNT.cleared)) return;
+      if (ACCOUNT.cleared.indexOf(mid) < 0) {
+        ACCOUNT.cleared.push(mid);
+        ACCOUNT.mapTokens = (ACCOUNT.mapTokens || 0) + 1;    // +1 token per NEW clear
+        if (mid === 'belly') ACCOUNT.beaten = true;           // patient zero purged
+      }
+    })(this.realmId);
     persist();                                               // reward on disk BEFORE any screen
     this.buildLootOverlay(L);
   },
@@ -3122,8 +3852,13 @@ var RealmScene = new Phaser.Class({
       AUDIO.play('levelup');
     });
     this.events.on('mob-died', function (mob) {
-      self.player.state.kills++;
-      Entities.grantXp(self, self.player, mob.mob.xp || mob.mob.def.xp);   // E9: affix bounty
+      // M7k AUDIT (2026-07-17): boss-summoned adds queued with noLoot pay no
+      // XP and tick no quota (Compy Call was a live XP farm) — the death still
+      // bursts/sounds and runs every cleanup hook below.
+      if (!mob.mob.noLoot) {
+        self.player.state.kills++;
+        Entities.grantXp(self, self.player, mob.mob.xp || mob.mob.def.xp);   // E9: affix bounty
+      }
       self.burst(mob.x, mob.y, DATA.juice.deathParticles, mob.mob.def.deathTint);
       AUDIO.play('die');
       // M5.7: a Bulwark's guard-aura ring dies with it (pooled sprite reuse
@@ -3221,6 +3956,21 @@ var RealmScene = new Phaser.Class({
     this.events.on('boss-died', function (boss) {
       if (!self.player.state.alive) return;
       var bd = boss.boss;
+      // M7k AUDIT (2026-07-17): a map may CONSUME a boss death entirely (Vice
+      // Versa's beat-BOTH gate — core melee/ability paths call hurtBoss
+      // directly, which used to clear the realm off the FIRST boss). The hook
+      // returns true when it handled the death.
+      if (bd.def.mapOwned) {
+        var MBD = MAPS.forScene ? MAPS.forScene(self) : null;
+        if (MBD && MBD.scene && MBD.scene.bossDefeated && MBD.scene.bossDefeated(self, boss)) return;
+      }
+      // M7 REGISTRY: a map-owned TWO-PHASE boss runs the MAP's transformation
+      // cutscene (def.transform + the folder's scene.bossTransform hook) —
+      // same branching seat as the engineer's mech swap below.
+      if (bd.def.mapOwned && bd.def.transform && !bd.phase2done && !bd.resurrecting) {
+        var MT = MAPS.forScene ? MAPS.forScene(self) : null;
+        if (MT && MT.scene && MT.scene.bossTransform) { MT.scene.bossTransform(self, boss); return; }
+      }
       // M5.7: the Engineer's phase-two is the mech transformation cutscene,
       // not the grovekeeper's pixie revive — branch on floorLift.
       if (bd.def.floorLift && bd.def.phaseTwo && !bd.phase2done && !bd.resurrecting) self.engineerTransform(boss);
@@ -3909,6 +4659,11 @@ var RealmScene = new Phaser.Class({
     this.updateGrove(time, delta);                         // M5.0: grove hazard/queues/revive
     this.updateGraveyard(time, delta);                     // M5.6: witching cycle + gate/fences
     this.updateFactory(time, delta);                       // M5.7: conveyors + alive props + engineer
+    // M7 REGISTRY: the map's per-frame loop — owns its toroidal wrap, ambient
+    // cycle, movers + hazard pools (checks scene.hitstopActive itself if its
+    // movers must freeze with the world, like the trains do).
+    var MRU = MAPS.forScene ? MAPS.forScene(this) : null;
+    if (MRU && MRU.scene && MRU.scene.update) MRU.scene.update(this, time, delta);
     if (!this.player.state.alive && this.lanternG) this.lanternG.clear();   // no beam over the death screen
     if (!this.player.state.alive && this.sunG) this.sunG.clear();           // M5.0: sunlance too
     this.updateHud();
@@ -4976,6 +5731,8 @@ var RealmScene = new Phaser.Class({
       if (e.cinematic) { m.mob.cinematic = true; }
       if (e.raisedBy) { m.mob.raisedBy = e.raisedBy; }    // M5.6: acolyte-raised (alive cap)
       if (e.bossWave) { m.mob.bossWave = true; }          // M5.6: gravekeeper wave (immunity gate)
+      if (e.crateChild) { m.mob.crateChild = true; }      // M7k: neon crate-punk alive cap
+      if (e.noLoot || e.noDrop) { m.mob.noLoot = true; }  // M7k: boss-summoned adds pay no XP/quota
       if (e.revive) self.burst(x, y, 10, 0x8ff0a5);       // the bloom / the risen take
     });
   },
@@ -5009,8 +5766,46 @@ var RealmScene = new Phaser.Class({
     this.groveFx = this.groveFx || [];           // re-init (phase two) keeps live fx tracked
   },
 
+  // item 10: raise a timber palisade ring around the clearing + plant the player
+  // inside it. The ring is the visible "wall"; groveBound is the real clamp.
+  raiseGroveTimber: function (cx, cy) {
+    var R = Math.min(340, Math.min(this.worldW, this.worldH) * 0.32);
+    // keep the ring fully inside the map
+    cx = Math.max(R + 40, Math.min(this.worldW - R - 40, cx));
+    cy = Math.max(R + 40, Math.min(this.worldH - R - 40, cy));
+    this._groveArena = { x: cx, y: cy, r: R };
+    var g = this.add.graphics().setDepth(1.6);
+    for (var a = 0; a < Math.PI * 2; a += 0.075) {
+      var px = cx + Math.cos(a) * R, py = cy + Math.sin(a) * R;
+      g.fillStyle(0x3c2f24, 0.98); g.fillEllipse(px, py + 5, 15, 22);   // trunk shadow/base
+      g.fillStyle(0x5b4636, 1); g.fillEllipse(px, py, 13, 20);          // timber post
+      g.fillStyle(0x6f5a40, 1); g.fillEllipse(px - 2, py - 2, 5, 16);   // lit side
+      g.fillStyle(0x2f251c, 1); g.fillCircle(px, py - 10, 6);           // sharpened top
+      g.fillStyle(0x7a8a4a, 0.7); g.fillCircle(px + 3, py + 6, 2);      // moss glint
+    }
+    this._groveRing = g;
+    // plant the player inside the ring (arena bosses start you in the pit)
+    try { this.player.body.reset(cx, cy + R * 0.5); } catch (e) {}
+  },
+  groveBound: function (player) {
+    var A = this._groveArena; if (!A || !player || !player.body) return;
+    var R = A.r - 12, dx = player.x - A.x, dy = player.y - A.y, d = Math.hypot(dx, dy);
+    if (d <= R) return;
+    var ox = dx / d, oy = dy / d, nx = A.x + ox * R, ny = A.y + oy * R;
+    if (player.body.enable && player.body.reset) {
+      var vx = player.body.velocity.x, vy = player.body.velocity.y, vn = vx * ox + vy * oy;
+      if (vn > 0) { vx -= vn * ox; vy -= vn * oy; }
+      player.body.reset(nx, ny); player.body.velocity.x = vx; player.body.velocity.y = vy;
+    } else { player.x = nx; player.y = ny; }
+  },
+  clearGroveTimber: function () {
+    if (this._groveRing) { try { this._groveRing.destroy(); } catch (e) {} this._groveRing = null; }
+    this._groveArena = null;
+  },
+
   grovekeeperUpdate: function (b, player, time) {
     var gd = b.boss, P = gd.def.patterns, rate = gd.rateMult || 1;
+    if (this._groveArena) this.groveBound(player);         // item 10: keep the player boxed in
     // TIMBER — his ghost train: an ancient tree across YOUR lane
     if (this.timberFall && this.timberFall.phase === 'warn') {
       this.timberFall.shadow.setAlpha(Math.floor(time / 110) % 2 === 0 ? 0.5 : 0.3);
@@ -5182,6 +5977,10 @@ var RealmScene = new Phaser.Class({
       // HE GROWS — spawn tiny at the ground line and swell to full height,
       // feet planted (y tracks the scale so the base never moves)
       self.spawnBossNow(def, bx, by);
+      // item 10: TIMBER WALLS BOX YOU IN — the mech promises it, so make it real.
+      // A palisade ring rises around the heartwood clearing and the player is
+      // clamped inside it for the whole fight (survives the phase-two revive).
+      self.raiseGroveTimber(bx, by - 30);
       if (self.boss) {
         var b = self.boss, fullScale = b.scaleX, fullH = b.displayHeight;
         var groundY = by + fullH / 2;

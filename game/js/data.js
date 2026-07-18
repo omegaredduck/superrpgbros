@@ -96,6 +96,26 @@ var DATA = {
       resource: { name: 'RAGE', color: 0xff5a1f, glow: 0xff8c2e, startsEmpty: true },
       weapon: 'sword',
       ability: 'whirlwind'
+    },
+    // NINJA "ONI KING" (Red 2026-07-17): the FINAL post-game class — a masked
+    // assassin. FASTEST class, dodge-based like the Ranger (no dmgTaken penalty +
+    // out-of-combat regen). Basic = a ricocheting SHURIKEN; special = SHURIKEN
+    // STORM (a bleeding ring of stars). Resource = CHI (fast-refill, spammy).
+    // `locked:true` → NOT selectable at new game until the campaign is beaten
+    // (beatTheGame adds it to unlockedClasses; class picker shows only unlocked).
+    ninja: {
+      name: 'Ninja', texture: 'ninja', accent: 0xe84545,
+      setGlow: 0xe84545,                 // full-legendary aura — oni RED
+      blurb: 'Masked assassin. Ricocheting shuriken + a bleeding star-storm. The fastest class.',
+      base:   { hp: 95, mp: 110, att: 12, def: 0, spd: 200, dex: 15 },
+      growth: { hp: 3.6, mp: 2.0, att: 0.32, def: 0.1, spd: 0.4, dex: 0.3 },   // ×19/59 for cap 60
+      caps:   { hp: 620, mp: 320, att: 60, def: 22, spd: 285, dex: 62 },
+      mpRegenPerSec: 11,
+      hpRegen: { delayMs: 2500, pctPerSec: 0.03 },   // dodge class (like Ranger, no dmgTaken)
+      resource: { name: 'CHI', color: 0x5fe8c2, glow: 0x9ffce8 },
+      weapon: 'shuriken',
+      ability: 'shurikenStorm',
+      locked: true
     }
   },
 
@@ -127,7 +147,13 @@ var DATA = {
     // with — carving a pack of 4 banks ~32 rage toward the whirlwind.
     sword: { melee: true, dmg: 30, range: 94, arcDeg: 115, swingMs: 160,
              baseRate: 1.25, dexRate: 0.05, sound: 'slash', rageGain: 8,
-             heldTexture: 'sword', holdOffset: 16 }
+             heldTexture: 'sword', holdOffset: 16 },
+    // NINJA basic — SHURIKEN: fast thrown stars on a quick CHI cadence. Each
+    // ricochets once to a nearby enemy (proj.ricochet; the shot→mob overlap
+    // bounces it). shots/sec = 1.9 + dex*0.06 (the fastest cadence in the game).
+    shuriken: { dmg: 12, projSpeed: 600, lifeMs: 720, texture: 'shurikenProj',
+                baseRate: 1.9, dexRate: 0.06, sound: 'shoot', spin: true, ricochet: 1,
+                heldTexture: 'shuriken64', holdOffset: 15 }
   },
 
   abilities: {
@@ -179,7 +205,15 @@ var DATA = {
     whirlwind: { type: 'whirlwind', mpDrainPerSec: 20, tickMs: 150,
                  dmg: 15, radius: 94, knockback: 30, sound: 'whirl', hpPerHit: 2,
                  tornado: { chance: 0.18, speed: 205, lifeMs: 1500, radius: 40,
-                            dmg: 18, reHitMs: 260, sound: 'whirl' } }
+                            dmg: 18, reHitMs: 260, sound: 'whirl' } },
+    // NINJA special — SHURIKEN STORM: a full 360° RING of stars flung outward
+    // (spreadDeg 360 over the volley path), each carrying a BLEED (reuses the
+    // burn-rider plumbing). Pierces the swarm. CHI-fueled. (v5 MVP; the return
+    // boomerang is a follow-up polish pass.)
+    shurikenStorm: { type: 'volley', mpCost: 24, count: 8, spreadDeg: 360, dmgMult: 1.0,
+                     projSpeed: 560, lifeMs: 700, pierce: true, cooldownMs: 700,
+                     sound: 'volley', tint: 0xe84545,
+                     burn: { dmg: 4, everyMs: 500, ms: 2500 } }
   },
 
   // --- XP curve (Fusion Law F4): xp needed to go from level L to L+1 --------
@@ -635,6 +669,32 @@ var DATA = {
       { id: 'sealed4',   name: '??? — SEALED',   sub: 'build it in the map builder (M)', locked: true },
       { id: 'sealed5',   name: '??? — SEALED',   sub: 'build it in the map builder (M)', locked: true }
     ],
+    // v5 (2026-07-17): FIRST-PLAYTHROUGH loop config.
+    startTokens: 3,              // reroll tokens the campaign begins with
+    // Per-region SPECIAL MECHANICS — shown on the discovery card when a corruption
+    // is found, and on hover in the scanner (item 9). One or two short lines each.
+    mech: {
+      trainyard:   'THE SCHEDULE BOARD lights the tracks — the ghost express one-shots anything on the rails when the whistle blows. Clear the line.',
+      grove:       'THE GROVEKEEPER grows from the heartwood. TIMBER walls and thorn mortar box you in — and you must kill him TWICE, his pixies revive him.',
+      graveyard:   'THE FOG rolls in and blinds your sightline. THE BELL TOLLS on a cycle — every toll drags the buried up to swarm you.',
+      factory:     'THE CONVEYOR BELTS drag you off your aim. The Grand Engineer purges the reactor in telegraphed vents — read the floor.',
+      skyisles:    'LOW GRAVITY — long floaty jumps between crumbling islands while the tempest circles the archipelago.',
+      pyramid:     'QUICKSAND pits swallow the careless, and every treasure you grab carries a curse.',
+      castle:      'A perpetual BLOOD MOON feeds the swarm. The Pale Rider hunts the halls between the feedings.',
+      lunar:       'LOW-G vacuum station — the airlocks cycle and SPECIMEN ZERO stirs where the virus first woke.',
+      pirate:      'THE DECK ROCKS underfoot, sliding every shot you fire, while broadsides rake the boards.',
+      crystal:     'A GROWING CRYSTAL slowly closes the arena; shattered shards ricochet through the cave.',
+      carnival:    'The rigged GAME BOOTHS turn on you one by one — the Ringmaster runs the whole show.',
+      swamp:       'HEX TOTEMS curse the mire; poison fog rises and the mud drags you under.',
+      west:        'HIGH-NOON showdowns in the dust — and the Noon Express barrels straight down Main Street.',
+      colosseum:   'A ROUND arena — no edge wrap, nowhere to run. DIVINITY HIMSELF judges each escalating wave.',
+      abyss:       'THE UNDERTOW drags you toward the trench. Smash the destructible coral for lanes, or drown in the dark.',
+      sugar:       'Candy drops FULL-HEAL you and the fences shatter — SUGAR BEAR guards the stash (a guaranteed epic weapon the first time he falls).',
+      neon:        'THE GRID blacks out in pulses — stay lit, stay moving. The Social Engineer talks your defenses down.',
+      viceversa:   'A HELL / HOLY split with faction warfare and a DOUBLE BOSS — the leash will not let you flee the fight.',
+      prehistoria: 'A METEOR SHOWER rains fire and THE HATCH spills fresh dino swarms as THE PRIMORDIAL wakes.',
+      belly:       'PATIENT ZERO. The Titan Whale swallowed the way in — stationary but merciless, riding the digestion tide. The end of the line.'
+    },
     live: false                  // M5: flip to make slotted affixes mutate the realm
   },
 
@@ -1083,7 +1143,38 @@ var DATA = {
           bonus: { hp: 80, def: 3 },     desc: '+80 HP · +3 DEF' },
     r5: { name: 'Ring of the Realm',    slot: 'ring', tier: 5, texture: 'ring',
           bonus: { hp: 50, att: 5, spd: 15, def: 2 },
-          desc: '+50 HP · +5 ATT · +15 SPD · +2 DEF' }
+          desc: '+50 HP · +5 ATT · +15 SPD · +2 DEF' },
+    // NINJA weapons (shuriken) — same flat-add ladder as bows; the legendary
+    // grants UNLIMITED CHI (freeEnergy) like the other classes' epic/legendary.
+    nw0: { name: 'Rusted Shuriken',  slot: 'weapon', tier: 0, texture: 'shuriken64', cls: 'ninja',
+           mod: { dmg: 2 },  desc: '+2 weapon damage' },
+    nw1: { name: 'Iron Shuriken',    slot: 'weapon', tier: 1, texture: 'shuriken64', cls: 'ninja',
+           mod: { dmg: 4 },  desc: '+4 weapon damage' },
+    nw2: { name: 'Steel Shuriken',   slot: 'weapon', tier: 2, texture: 'shuriken64', cls: 'ninja',
+           mod: { dmg: 6 },  desc: '+6 weapon damage' },
+    nw3: { name: 'Fanged Shuriken',  slot: 'weapon', tier: 3, texture: 'shuriken64', cls: 'ninja',
+           mod: { dmg: 9 },  bonus: { dex: 2 }, desc: '+9 weapon damage · +2 DEX' },
+    nw4: { name: 'Bloodmoon Star',   slot: 'weapon', tier: 4, texture: 'shuriken64', cls: 'ninja',
+           mod: { dmg: 13, freeEnergy: true }, bonus: { dex: 4 },
+           desc: '+13 weapon damage · +4 DEX · UNLIMITED chi' },
+    nw5: { name: "Oni's Fang",       slot: 'weapon', tier: 5, texture: 'shuriken64', cls: 'ninja',
+           mod: { dmg: 18, freeEnergy: true }, bonus: { dex: 6 },
+           desc: '+18 weapon damage · +6 DEX · UNLIMITED chi' },
+    // NINJA ability items (charms) — cut SHURIKEN STORM cost + add stars (mp = CHI)
+    na0: { name: 'Frayed Charm',     slot: 'ability', tier: 0, texture: 'shuriken64', cls: 'ninja',
+           mod: { mpCost: -2 },            desc: 'shuriken storm costs 2 less chi' },
+    na1: { name: 'Worn Charm',       slot: 'ability', tier: 1, texture: 'shuriken64', cls: 'ninja',
+           mod: { mpCost: -3 },            desc: 'shuriken storm costs 3 less chi' },
+    na2: { name: 'Jade Charm',       slot: 'ability', tier: 2, texture: 'shuriken64', cls: 'ninja',
+           mod: { mpCost: -4 },            desc: 'shuriken storm costs 4 less chi' },
+    na3: { name: 'Serpent Charm',    slot: 'ability', tier: 3, texture: 'shuriken64', cls: 'ninja',
+           mod: { mpCost: -4, count: 2 },  desc: '+2 storm stars · costs 4 less chi' },
+    na4: { name: 'Storm Charm',      slot: 'ability', tier: 4, texture: 'shuriken64', cls: 'ninja',
+           mod: { mpCost: -6, count: 4 },  bonus: { mp: 20 },
+           desc: '+4 storm stars · costs 6 less chi · +20 CHI' },
+    na5: { name: 'Oni Charm',        slot: 'ability', tier: 5, texture: 'shuriken64', cls: 'ninja',
+           mod: { mpCost: -8, count: 6 },  bonus: { mp: 40 },
+           desc: '+6 storm stars · costs 8 less chi · +40 CHI' }
   },
 
   // --- M4.6: CLASS GEAR LINES — slot → [T0..T3] item keys per class. This is
@@ -1096,7 +1187,9 @@ var DATA = {
     wizard: { weapon: ['ww0', 'ww1', 'ww2', 'ww3', 'ww4', 'ww5'],
               ability: ['wa0', 'wa1', 'wa2', 'wa3', 'wa4', 'wa5'] },
     knight: { weapon: ['kw0', 'kw1', 'kw2', 'kw3', 'kw4', 'kw5'],
-              ability: ['ka0', 'ka1', 'ka2', 'ka3', 'ka4', 'ka5'] }
+              ability: ['ka0', 'ka1', 'ka2', 'ka3', 'ka4', 'ka5'] },
+    ninja:  { weapon: ['nw0', 'nw1', 'nw2', 'nw3', 'nw4', 'nw5'],
+              ability: ['na0', 'na1', 'na2', 'na3', 'na4', 'na5'] }
   },
 
   // --- M3: DROP TABLES — weighted rolls (SIM.rollDrop, seam rule 4). A chest

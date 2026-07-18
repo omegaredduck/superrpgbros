@@ -182,7 +182,11 @@ var TEX = (function () {
               heldOffset: 20,              // world px out to the OUTSTRETCHED hand (user ref: staff at arm's length, clear of the robe)
               drawBody: 'drawWizardBody', drawHeld: 'drawStaffHi' },
     knight: { key: 'knight64', heldKey: 'sword64', heldW: 64, heldH: 14, heldScale: 0.72,
-              drawBody: 'drawKnightBody', drawHeld: 'drawSwordHi' }
+              drawBody: 'drawKnightBody', drawHeld: 'drawSwordHi' },
+    // NINJA "Oni King" (Red pick 2026-07-17) — body from ninja_art.js (attached
+    // onto CLASS_ART); a held shuriken in-hand. Same 64px contract.
+    ninja: { key: 'ninja64', heldKey: 'shuriken64', heldW: 20, heldH: 20, heldScale: 0.85,
+             heldOffset: 16, drawBody: 'drawNinjaBody', drawHeld: 'drawShurikenHi' }
   };
   function classModelDesc(cls) {
     var ch = CLASS_HI[cls]; if (!ch) return null;
@@ -228,6 +232,12 @@ var TEX = (function () {
         var th = scene.textures.createCanvas(ch.heldKey, ch.heldW, ch.heldH), hctx = th.getContext();
         drawCell(hctx, 0, ch.heldW, ch.heldH, function (put) { CLASS_ART[ch.drawHeld](put, ch.heldW, ch.heldH); });
         outlineCanvas(hctx, ch.heldW, ch.heldH); th.refresh();
+      }
+      // NINJA: also build the flying SHURIKEN projectile texture (weapons.shuriken)
+      if (cls === 'ninja' && !scene.textures.exists('shurikenProj') && typeof CLASS_ART.drawShurikenHi === 'function') {
+        var tp = scene.textures.createCanvas('shurikenProj', 12, 12), pctx = tp.getContext();
+        drawCell(pctx, 0, 12, 12, function (put) { CLASS_ART.drawShurikenHi(put, 12, 12); });
+        outlineCanvas(pctx, 12, 12); tp.refresh();
       }
       if (!scene.anims.exists(d.idle)) {
         var idleF = []; for (var a = 0; a < IDLE_FRAMES; a++) idleF.push({ key: d.key, frame: 'idle' + a });
@@ -528,6 +538,21 @@ var TEX = (function () {
     tex('factoryCatwalk', 48, 48, A.drawFactoryCatwalk);
     tex('factoryHazard', 48, 48, A.drawFactoryHazard);
     tex('convBelt', 48, 48, A.drawBeltTile);
+    // M7 REGISTRY: registered map folders build their art through the SAME
+    // helpers the core mobs use. Each art.js gets spr/tex + the entry tables,
+    // so mobModel()/bossModel() serve map mobs/bosses with zero core edits:
+    //   ctx.spr(key, W, H, drawFn)   outlined creature/object
+    //   ctx.tex(key, W, H, drawFn)   seamless tile (no outline)
+    //   ctx.MOB_HI[mobKey] = 'texKey'      hi-fi texture per mob
+    //   ctx.MOB_DISPLAY[mobKey] = px       on-screen size (default 40)
+    //   ctx.BOSS_HI[bossKey] = { key, size, display, bodyW, bodyH }
+    if (typeof MAPS !== 'undefined' && MAPS.defs) {
+      Object.keys(MAPS.defs).forEach(function (id) {
+        var d = MAPS.defs[id];
+        if (d.buildArt) d.buildArt({ scene: scene, spr: spr, tex: tex,
+          MOB_HI: MOB_HI, MOB_DISPLAY: MOB_DISPLAY, BOSS_HI: BOSS_HI, SIZE: MOB_HI_SIZE });
+      });
+    }
     _worldBuilt = true;
   }
 

@@ -36,25 +36,97 @@
 <!-- BUMP ?v= ON EVERY SHIP (bug #4): localhost/http servers send no cache
      headers, so Chrome can serve a stale mix of old+new js — which crashes
      scenes mid-create (black screen). New query string = guaranteed fresh. -->
-<script src="js/data.js?v=m6e"></script>
-<script src="js/save.js?v=m6e"></script>
-<script src="js/binds.js?v=m6e"></script>
-<script src="js/audio.js?v=m6e"></script>
-<script src="js/sim.js?v=m6e"></script>
-<script src="js/maps.js?v=m6e"></script>
+<script src="js/data.js?v=m8i"></script>
+<script src="js/save.js?v=m8i"></script>
+<script src="js/achievements.js?v=m8i"></script>
+<script src="js/binds.js?v=m8i"></script>
+<script src="js/audio.js?v=m8i"></script>
+<script src="js/sim.js?v=m8i"></script>
+<script src="js/maps.js?v=m8i"></script>
 <!-- ART-FIDELITY TEST (2026-07-13): procedural hi-fi art. Must load BEFORE
      textures.js, which builds the spritesheets/world textures from them at boot.
      world_art.js reuses ranger_art.js's primitives, so it loads after it. -->
-<script src="js/ranger_art.js?v=m6e"></script>
-<script src="js/class_art.js?v=m6e"></script>
-<script src="js/world_art.js?v=m6e"></script>
-<script src="js/nexus_art.js?v=m6e"></script>
-<script src="js/textures.js?v=m6e"></script>
-<script src="js/entities.js?v=m6e"></script>
-<script src="js/menu.js?v=m6e"></script>
-<script src="js/scenes.js?v=m6e"></script>
-<script src="js/builder.js?v=m6e"></script>
-<script src="js/main.js?v=m6e"></script>
+<script src="js/ranger_art.js?v=m8i"></script>
+<script src="js/class_art.js?v=m8i"></script>
+<script src="js/ninja_art.js?v=m8i"></script>
+<script src="js/world_art.js?v=m8i"></script>
+<script src="js/nexus_art.js?v=m8i"></script>
+<script src="js/textures.js?v=m8i"></script>
+<script src="js/entities.js?v=m8i"></script>
+<script src="js/menu.js?v=m8i"></script>
+<script src="js/scenes.js?v=m8i"></script>
+<script src="js/cutscenes/cutscene.js?v=m8i"></script>
+<script src="js/builder.js?v=m8i"></script>
+<!-- M7 MAP REGISTRY (REGISTRY_SPEC.md): registry first, then one folder per
+     new realm (map.js data + art.js textures + scene.js hooks). Core never
+     changes per map - the folder registers itself. main.js stays LAST. -->
+<script src="js/maps/registry.js?v=m8i"></script>
+<!-- REALM 5 - STORM SKY ISLES (art -> scene -> map registers last) -->
+<script src="js/maps/skyisles/art.js?v=m8i"></script>
+<script src="js/maps/skyisles/scene.js?v=m8i"></script>
+<script src="js/maps/skyisles/map.js?v=m8i"></script>
+<!-- REALM 6 - PYRAMID PLUNDER -->
+<script src="js/maps/pyramid/art.js?v=m8i"></script>
+<script src="js/maps/pyramid/scene.js?v=m8i"></script>
+<script src="js/maps/pyramid/map.js?v=m8i"></script>
+<!-- REALM 7 - VAMPIRE CASTLE -->
+<script src="js/maps/castle/art.js?v=m8i"></script>
+<script src="js/maps/castle/scene.js?v=m8i"></script>
+<script src="js/maps/castle/map.js?v=m8i"></script>
+<!-- MAP 4/16: LUNAR STATION (realm 8) — art, scene hooks, then data/registration -->
+<script src="js/maps/lunar/art.js?v=m8i"></script>
+<script src="js/maps/lunar/scene.js?v=m8i"></script>
+<script src="js/maps/lunar/map.js?v=m8i"></script>
+<!-- MAP 5/16: PIRATE SHIP (realm 9) — art, scene hooks, then data/registration -->
+<script src="js/maps/pirate/art.js?v=m8i"></script>
+<script src="js/maps/pirate/scene.js?v=m8i"></script>
+<script src="js/maps/pirate/map.js?v=m8i"></script>
+<!-- MAP 6/16: CRYSTAL CAVERNS (realm 10) — art, scene hooks, then data/registration -->
+<script src="js/maps/crystal/art.js?v=m8i"></script>
+<script src="js/maps/crystal/scene.js?v=m8i"></script>
+<script src="js/maps/crystal/map.js?v=m8i"></script>
+
+<script src="js/maps/carnival/art.js?v=m8i"></script>
+<script src="js/maps/carnival/scene.js?v=m8i"></script>
+<script src="js/maps/carnival/map.js?v=m8i"></script>
+
+<script src="js/maps/swamp/art.js?v=m8i"></script>
+<script src="js/maps/swamp/scene.js?v=m8i"></script>
+<script src="js/maps/swamp/map.js?v=m8i"></script>
+<!-- REALM 13 - WILD WEST TOWN -->
+<script src="js/maps/west/art.js?v=m8i"></script>
+<script src="js/maps/west/scene.js?v=m8i"></script>
+<script src="js/maps/west/map.js?v=m8i"></script>
+<!-- REALM 14 - COLOSSEUM -->
+<script src="js/maps/colosseum/art.js?v=m8i"></script>
+<script src="js/maps/colosseum/scene.js?v=m8i"></script>
+<script src="js/maps/colosseum/map.js?v=m8i"></script>
+<!-- REALM 15 - THE ABYSS -->
+<script src="js/maps/abyss/art.js?v=m8i"></script>
+<script src="js/maps/abyss/scene.js?v=m8i"></script>
+<script src="js/maps/abyss/map.js?v=m8i"></script>
+<!-- REALM 16 - SUGAR WORLD -->
+<script src="js/maps/sugar/art.js?v=m8i"></script>
+<script src="js/maps/sugar/scene.js?v=m8i"></script>
+<script src="js/maps/sugar/map.js?v=m8i"></script>
+<!-- REALM 17 - NEON CITY -->
+<script src="js/maps/neon/art.js?v=m8i"></script>
+<script src="js/maps/neon/scene.js?v=m8i"></script>
+<script src="js/maps/neon/map.js?v=m8i"></script>
+<!-- REALM 18 - VICE VERSA -->
+<script src="js/maps/viceversa/art.js?v=m8i"></script>
+<script src="js/maps/viceversa/scene.js?v=m8i"></script>
+<script src="js/maps/viceversa/map.js?v=m8i"></script>
+<!-- REALM 19 - PREHISTORIA -->
+<script src="js/maps/prehistoria/art.js?v=m8i"></script>
+<script src="js/maps/prehistoria/scene.js?v=m8i"></script>
+<script src="js/maps/prehistoria/map.js?v=m8i"></script>
+<!-- REALM 20 - BELLY OF THE BEAST -->
+<script src="js/maps/belly/art.js?v=m8i"></script>
+<script src="js/maps/belly/scene.js?v=m8i"></script>
+<script src="js/maps/belly/map.js?v=m8i"></script>
+
+<script src="js/main.js?v=m8i"></script>
 <script>
   // Footer controls line is BUILT from the live keybinds so it updates the
   // moment a key is remapped (the menu calls window.updateFooter after a bind).

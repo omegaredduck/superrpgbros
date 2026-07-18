@@ -66,7 +66,8 @@ var MENU = (function () {
     function renderRoot() {
       var extras = cfg.extraButtons || [];
       var cx = Wd() / 2, cy = Hd() / 2, w = 460;
-      var rows = 2 + extras.length;                        // Resume, Settings, + extras
+      var hasAch = (typeof ACH !== 'undefined') ? 1 : 0;
+      var rows = 2 + hasAch + extras.length;               // Resume, Settings, [Achievements], + extras
       var h = 150 + rows * 46;
       box(cx, cy, w, h);
       var y = cy - h / 2 + 44;
@@ -74,6 +75,11 @@ var MENU = (function () {
       y += 52;
       btn(cx, y, 'Resume', function () { close(); }, { size: 20, ox: 0.5, color: '#a7f070' }); y += 46;
       btn(cx, y, 'Settings', function () { page = 'settings'; render(); }, { size: 20, ox: 0.5 }); y += 46;
+      if (typeof ACH !== 'undefined') {
+        var ac = ACH.count();
+        btn(cx, y, 'Achievements  ' + ac.earned + '/' + ac.total, function () { page = 'achievements'; render(); },
+          { size: 20, ox: 0.5, color: '#ffd479' }); y += 46;
+      }
       extras.forEach(function (b) {
         btn(cx, y, b.label, function () { close(true); if (b.onClick) b.onClick(); },
           { size: 19, ox: 0.5, color: b.color || '#ff9e6d' });
@@ -114,7 +120,7 @@ var MENU = (function () {
     }
 
     function renderSettings() {
-      var cx = Wd() / 2, cy = Hd() / 2, w = 700, h = 580;
+      var cx = Wd() / 2, cy = Hd() / 2, w = 700, h = 552;   // v5: Dev mode row removed (Red)
       box(cx, cy, w, h);
       var top = cy - h / 2, L = cx - 320;
       txt(cx, top + 30, 'SETTINGS', { size: 26, color: '#ffcd75', ox: 0.5, bold: true });
@@ -132,35 +138,24 @@ var MENU = (function () {
       txt(L + 176, top + 184, af ? 'fires on its own — no button held' : 'hold mouse / interact to fire',
         { size: 11, color: '#8a93a8' });
 
-      // M5.3 DEV MODE (user): one toggle → all gear (vault) + max level +
-      // immortality, for testing. Turning it ON applies the save grants now
-      // (global applyDevMode); immortality reads the flag live in-game.
-      var dev = SAVE.settings().dev;
-      txt(L, top + 212, 'Dev mode', { size: 16, color: dev ? '#ffcd75' : '#f4f4f4' });
-      btn(L + 92, top + 212, dev ? '[ ON ]' : '[ OFF ]', function () {
-        var s = SAVE.settings(); s.dev = !s.dev; SAVE.saveSettings();
-        if (s.dev && typeof applyDevMode === 'function') applyDevMode();
-        if (scene.buildVaultUi && scene.vaultUi) scene.buildVaultUi();   // reflect granted gear
-        render();
-      }, { size: 14, ox: 0, color: dev ? '#a7f070' : '#8a93a8' });
-      txt(L + 176, top + 212, dev ? 'ALL GEAR · MAX LEVEL · IMMORTAL' : 'grants all gear, max level, immortality',
-        { size: 11, color: dev ? '#ffcd75' : '#8a93a8' });
-
+      // v5 (2026-07-17): DEV MODE removed at Red's request (was: one toggle →
+      // all gear + max level + immortality). devOn() is now hard-false in scenes.js
+      // and a one-time save wipe (main.js) clears old characters.
       // M6c WHITE-GEAR TEST (Red): lock the weakest starter set on every realm
       // entry so balance testing stays in white gear across deaths.
       var wt = SAVE.settings().whiteTest;
-      txt(L, top + 240, 'White-gear test', { size: 16, color: wt ? '#ffcd75' : '#f4f4f4' });
-      btn(L + 148, top + 240, wt ? '[ ON ]' : '[ OFF ]', function () {
+      txt(L, top + 212, 'White-gear test', { size: 16, color: wt ? '#ffcd75' : '#f4f4f4' });
+      btn(L + 148, top + 212, wt ? '[ ON ]' : '[ OFF ]', function () {
         var s = SAVE.settings(); s.whiteTest = !s.whiteTest; SAVE.saveSettings(); render();
       }, { size: 14, ox: 0, color: wt ? '#a7f070' : '#8a93a8' });
-      txt(L + 232, top + 240, wt ? 'locks the COMMON starter set on every realm entry' : 'keeps your best owned gear on entry (normal)',
+      txt(L + 232, top + 212, wt ? 'locks the COMMON starter set on every realm entry' : 'keeps your best owned gear on entry (normal)',
         { size: 11, color: wt ? '#ffcd75' : '#8a93a8' });
 
-      txt(L, top + 272, 'KEYBINDS', { size: 13, color: '#7cc7ff' });
-      txt(cx + 320, top + 272, 'primary · alternate — click to rebind', { size: 11, color: '#8a93a8', ox: 1 });
+      txt(L, top + 244, 'KEYBINDS', { size: 13, color: '#7cc7ff' });
+      txt(cx + 320, top + 244, 'primary · alternate — click to rebind', { size: 11, color: '#8a93a8', ox: 1 });
 
       var list = (DATA.keybinds && DATA.keybinds.list) || [];
-      var perCol = Math.ceil(list.length / 2), rowH = 28, y0 = top + 300;
+      var perCol = Math.ceil(list.length / 2), rowH = 28, y0 = top + 272;
       for (var i = 0; i < list.length; i++) {
         var col = i < perCol ? 0 : 1, row = i - col * perCol;
         keyRow(L + col * 330, y0 + row * rowH, list[i]);
@@ -193,12 +188,45 @@ var MENU = (function () {
         }
         render();
         // keep dispatch suppressed a hair past this event so the rebind key
-        // doesn't also fire its new action on the same press.
-        scene.time.delayedCall(80, function () { scene._bindsCapture = false; });
+        // doesn't also fire its new action on the same press. M7k: real time —
+        // scene.time is FROZEN while the pause menu is up (pauseGame pauses
+        // the timer plane), so a delayedCall here would never fire.
+        setTimeout(function () { scene._bindsCapture = false; }, 80);
       });
     }
 
-    function render() { clearObjs(); if (page === 'settings') renderSettings(); else renderRoot(); }
+    // ---- ACHIEVEMENTS PAGE (item 6) -------------------------------------
+    // Two columns of the full list. Earned = gold glyph + white name + ✓;
+    // locked = dim; secret+locked hides its name/desc until it's earned.
+    function renderAchievements() {
+      var cx = Wd() / 2, cy = Hd() / 2, w = 720, h = 552;
+      box(cx, cy, w, h);
+      var top = cy - h / 2, L = cx - w / 2 + 34;
+      // live re-evaluate on open so anything just earned shows immediately
+      if (typeof ACH !== 'undefined' && ACH.check) { try { ACH.check(); } catch (e) {} }
+      var list = (typeof ACH !== 'undefined' && ACH.LIST) || [];
+      var c = (typeof ACH !== 'undefined') ? ACH.count() : { earned: 0, total: 0 };
+      txt(cx, top + 30, 'ACHIEVEMENTS', { size: 26, color: '#ffcd75', ox: 0.5, bold: true });
+      txt(cx, top + 58, c.earned + ' / ' + c.total + ' earned', { size: 14, color: '#94b0c2', ox: 0.5 });
+
+      var perCol = Math.ceil(list.length / 2), colW = (w - 68) / 2, rowH = 58, y0 = top + 92;
+      for (var i = 0; i < list.length; i++) {
+        var a = list[i], got = (typeof ACH !== 'undefined') && ACH.unlocked(a.id);
+        var hidden = a.secret && !got;
+        var col = i < perCol ? 0 : 1, row = i - col * perCol;
+        var x = L + col * (colW + 8), y = y0 + row * rowH;
+        var gcol = got ? '#ffd479' : (hidden ? '#3a4258' : '#5a6478');
+        txt(x, y, hidden ? '?' : a.glyph, { size: 22, color: gcol });
+        var name = hidden ? '???' : a.name;
+        txt(x + 34, y - 9, name, { size: 16, color: got ? '#ffffff' : '#8a93a8', bold: got });
+        if (got) txt(x + 34 + name.length * 9.5 + 10, y - 9, '✓', { size: 14, color: '#a7f070' });
+        txt(x + 34, y + 11, hidden ? 'Hidden — keep playing.' : a.desc,
+          { size: 11, color: got ? '#b7c2d6' : '#6b7590' });
+      }
+      btn(cx, cy + h / 2 - 24, 'Back', function () { page = 'root'; render(); }, { size: 16, ox: 0.5, color: '#a7f070' });
+    }
+
+    function render() { clearObjs(); if (page === 'settings') renderSettings(); else if (page === 'achievements') renderAchievements(); else renderRoot(); }
 
     function close(silent) {
       clearObjs();

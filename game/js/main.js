@@ -1,4 +1,17 @@
 // main.js — Phaser boot config. See docs/ARCHITECTURE.md.
+
+// v5 (2026-07-17, Red): DELETE ALL CHARACTERS — a one-time wipe of every save
+// slot so the reworked first-playthrough starts clean. Flag-guarded → runs a
+// single time on the next load; normal saving is untouched afterward.
+(function () {
+  try {
+    if (typeof SAVE !== 'undefined' && SAVE.storageOk && SAVE.storageOk() && !localStorage.getItem('srb_reset_v5')) {
+      for (var s = 1; s <= SAVE.SLOTS; s++) SAVE.clear(s);
+      localStorage.setItem('srb_reset_v5', '1');
+    }
+  } catch (e) {}
+})();
+
 var game = new Phaser.Game({
   type: Phaser.AUTO,
   backgroundColor: '#0f0f1b',
@@ -17,7 +30,7 @@ var game = new Phaser.Game({
     height: 640
   },
   physics: { default: 'arcade', arcade: { debug: false } },
-  scene: [BootScene, TitleScene, NexusScene, RealmScene, BuilderScene]   // M3: map builder (dev tool)
+  scene: [BootScene, TitleScene, NexusScene, RealmScene, BuilderScene, CutsceneScene]   // M3: map builder · v5: story cutscenes
 });
 
 // ESC-in-fullscreen fix (2026-07-12): by default the browser eats the Escape

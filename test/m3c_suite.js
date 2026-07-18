@@ -75,36 +75,43 @@ function check(name, ok, extra) {
   check('P walks to the portal machine and opens the board', pkey);
 
   // -- 0b. M3.6 BESTIARY: field notes read straight from data.js -------------------
-  // M4.7: the book is biome-scoped now — the TRAIN YARD's 8 mobs + ALL bosses
-  // (Grovekeeper + Conductor + M5.6 Gravekeeper, all listed in the index) = 11.
+  // M7k (user): the book is BY MAP now — the TRAIN YARD scope lists the yard's
+  // mobs + the yard's OWN boss; other realms' bosses are reached via the
+  // SEARCH BAR (or ▲▼ map paging).
   const beast = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    // items 7/8: the bestiary is REDACTED until a realm is beaten — this suite
+    // inspects real field notes, so mark every campaign realm cleared first.
+    ACCOUNT.cleared = n.campaignMaps().map(function(m){ return m.id; });
     n.toggleBestiary();
     var t1=[]; n.bestiaryUi.forEach(function(c){ if (c.text) t1.push(c.text); });
     var first = t1.join(' | ');
     var nMobs = DATA.biomes[DATA.realm.biome].mobs.length;
-    for (var i = 0; i < nMobs; i++) n.bestiaryNav(1);                          // → first boss
+    for (var i = 0; i < nMobs; i++) n.bestiaryNav(1);                          // → the yard's boss
     var t2=[]; n.bestiaryUi.forEach(function(c){ if (c.text) t2.push(c.text); });
     var boss = t2.join(' | ');
-    n.bestiaryNav(1);                                                          // → the Conductor
+    // M7k: cross-realm lookups go through the search
+    n.bestiarySearch = 'grovekeeper'; n.bestiaryIndex = 0; n.buildBestiaryUi();
     var t3=[]; n.bestiaryUi.forEach(function(c){ if (c.text) t3.push(c.text); });
     var boss2 = t3.join(' | ');
-    n.bestiaryNav(1);                                                          // → M5.6 the Gravekeeper
+    n.bestiarySearch = 'gravekeeper'; n.bestiaryIndex = 0; n.buildBestiaryUi();
     var t4=[]; n.bestiaryUi.forEach(function(c){ if (c.text) t4.push(c.text); });
     var boss3 = t4.join(' | ');
-    n.bestiaryNav(1);                                                          // wraps → entry 1
+    n.bestiarySearch = ''; n.bestiaryIndex = 0; n.buildBestiaryUi();
+    var expected = nMobs + 1;                    // yard roster + the Conductor
+    for (var j = 0; j < expected; j++) n.bestiaryNav(1);                       // full lap wraps → entry 1
     var wrapped = n.bestiaryIndex === 0;
     n.toggleBestiary();
     var closed = !n.bestiaryUi;
-    return { entries: n.bestiaryEntries().length, first: first, boss: boss, boss2: boss2, boss3: boss3,
+    return { entries: n.bestiaryEntries().length, expected: expected,
+             first: first, boss: boss, boss2: boss2, boss3: boss3,
              wrapped: wrapped, closed: closed };})()`);
-  check('M3.6 bestiary opens on the YARD roster (8 mobs + 3 bosses = 11 entries)',
-    beast.entries === 11 && beast.first.indexOf('Coal Golem') >= 0 && beast.first.indexOf('CHASER') >= 0 &&
-    beast.first.indexOf('HP') >= 0, beast.entries + ' entries');
-  check('M3.6 arrows navigate the bosses: Grovekeeper · Conductor · Gravekeeper (title + hints)',
-    // M5.0: the Grovekeeper is WARDEN OF THE HEARTWOOD; M5.6 adds the Gravekeeper
-    beast.boss.indexOf('Grovekeeper') >= 0 && beast.boss.indexOf('HEARTWOOD') >= 0 &&
-    beast.boss2.indexOf('Conductor') >= 0 && beast.boss2.indexOf('STYX') >= 0 &&
-    beast.boss2.indexOf('GHOST TRACK') >= 0 &&
+  check('M3.6 bestiary opens on the YARD roster (biome mobs + the yard boss — M7k by-map)',
+    beast.entries === beast.expected && beast.first.indexOf('Coal Golem') >= 0 && beast.first.indexOf('CHASER') >= 0 &&
+    beast.first.indexOf('HP') >= 0, beast.entries + ' entries (expected ' + beast.expected + ')');
+  check('M3.6 boss pages: Conductor in-scope; Grovekeeper + Gravekeeper via SEARCH (title + hints)',
+    beast.boss.indexOf('Conductor') >= 0 && beast.boss.indexOf('STYX') >= 0 &&
+    beast.boss.indexOf('GHOST TRACK') >= 0 &&
+    beast.boss2.indexOf('Grovekeeper') >= 0 && beast.boss2.indexOf('HEARTWOOD') >= 0 &&
     beast.boss3.indexOf('Gravekeeper') >= 0 && beast.boss3.indexOf('HOLLOW EARTH') >= 0);
   check('M3.6 navigation wraps around; B/ESC closes the book', beast.wrapped && beast.closed);
 
@@ -167,6 +174,7 @@ function check(name, ok, extra) {
     walking.walking && walking.notYetOpen);
   check('M3.8 arrival just below the station auto-opens the window', arrived);
   const board = await page.evaluate(`(function(){var n=${scene('Nexus')};
+    ACCOUNT.beaten = true;                       // v5 (2026-07-17): the classic map/affix board is now the POST-CAMPAIGN UI; pre-campaign shows the corruption scanner
     n.toggleConsole();
     n.consoleToggleAffix('apex'); n.consoleToggleAffix('hordes');
     var texts=[]; n.consoleUi.forEach(function(c){ if (c.text) texts.push(c.text); });
@@ -184,8 +192,10 @@ function check(name, ok, extra) {
     var t0=[]; n.consoleUi.forEach(function(c){ if (c.text) t0.push(c.text); });
     var collapsed = t0.join(' | ');
     var startMap = n.consoleMap;
-    // expand it → the ??? sealed placeholders appear
+    // expand it → the ??? sealed placeholders appear (M7k: the list is
+    // WINDOWED now — 20 live realms scroll; the sealed rows sit at the tail)
     n.toggleMapDropdown();
+    n.mapListScroll = 99; n.buildConsoleUi();
     var t1=[]; n.consoleUi.forEach(function(c){ if (c.text) t1.push(c.text); });
     var expanded = t1.join(' | ');
     // try to pick a LOCKED map → refused (stays on the real one)

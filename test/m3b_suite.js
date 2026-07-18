@@ -38,7 +38,7 @@ function check(name, ok, extra) {
   }))`);
   const mig = await page.evaluate(`SAVE.load(2)`);
   check('v2 save loads (not flagged corrupt)', mig.ok === true);
-  check('migrated to v4: equipment slots added empty, vault kept', mig.ok && mig.data.v === 4 &&
+  check('migrated to v5: equipment slots added empty, vault kept', mig.ok && mig.data.v === 5 &&
     mig.data.character.equipment && mig.data.character.equipment.weapon === null &&
     Array.isArray(mig.data.vault) && mig.data.vault.length === 0);
   check('migration is lossless (potions/records/level kept)', mig.ok &&
@@ -73,7 +73,7 @@ function check(name, ok, extra) {
     var r = SAVE.load(3);
     return r.ok && { v: r.data.v, vault: r.data.vault, eq: r.data.character.equipment };})()`);
   check('v3→v4: vault keys renumbered, identity kept (w3→w4 Grovepiercer, r1→r2)',
-    v3mig && v3mig.v === 4 && v3mig.vault[0] === 'w4' && v3mig.vault[1] === 'r2');
+    v3mig && v3mig.v === 5 && v3mig.vault[0] === 'w4' && v3mig.vault[1] === 'r2');
   check("v3→v4: a wizard's old ranger gear REFLAVORS to her line (w1→w2→ww2, a2→a3→wa3), armor untouched",
     v3mig && v3mig.eq.weapon === 'ww2' && v3mig.eq.ability === 'wa3' && v3mig.eq.armor === 'ar2');
 
@@ -90,9 +90,9 @@ function check(name, ok, extra) {
       if (!DATA.items[e.item] || !(e.w > 0)) tableBad++; });
     return { n: n, bySlot: bySlot, bad: bad, tableBad: tableBad,
              bossTable: DATA.bosses.grovekeeper.lootTable, trialTable: DATA.modes.survival.lootTable };})()`);
-  check('48 items — 18 weapons + 18 ability (6 tiers × 3 classes) + 6 armor + 6 rings, all well-formed',
-    data.n === 48 && data.bad === 0 &&
-    data.bySlot.weapon === 18 && data.bySlot.ability === 18 && data.bySlot.armor === 6 && data.bySlot.ring === 6);
+  check('60 items — 24 weapons + 24 ability (6 tiers × 4 classes incl. NINJA) + 6 armor + 6 rings, all well-formed',
+    data.n === 60 && data.bad === 0 &&
+    data.bySlot.weapon === 24 && data.bySlot.ability === 24 && data.bySlot.armor === 6 && data.bySlot.ring === 6);
   check('drop tables reference real items; boss + trial wired', data.tableBad === 0 &&
     data.bossTable === 'grovekeeper' && data.trialTable === 'trial');
 
@@ -166,25 +166,30 @@ function check(name, ok, extra) {
   await sleep(150);
   await page.keyboard.press('Space');
   await sleep(250);
+  // M6c (Red) PORT: the chest is COMPARE-AND-SELECT now — opening it OFFERS
+  // the drops (nothing owned yet, no auto-equip); [EQUIP] on an item collects
+  // + equips it. Declined drops are never owned (white-gear runs stay white).
   const overlay = await page.evaluate(`(function(){var r=${scene('Realm')};
     var texts = []; r.children.list.forEach(function(c){ if (c.text) texts.push(c.text); });
     var L = r.pendingLoot;
-    var owned = (L.items || []).every(function(k){ return ACCOUNT.collected.indexOf(k) >= 0; });
-    return { looting: r.looting, owned: owned,
+    var offeredOnly = (L.items || []).every(function(k){ return ACCOUNT.collected.indexOf(k) < 0; });
+    return { looting: r.looting, offeredOnly: offeredOnly,
              summary: texts.join(' | ').indexOf('LOOT') >= 0 };})()`);
-  check('opening the chest COLLECTS its items (owned) and shows the summary',
-    overlay.looting && overlay.owned && overlay.summary);
+  check('opening the chest OFFERS its items (compare-and-select, nothing auto-owned)',
+    overlay.looting && overlay.offeredOnly && overlay.summary);
   const took = await page.evaluate(`(function(){var r=${scene('Realm')};
     var L = r.pendingLoot, ok = true;
-    // every rolled item is either equipped (best) or a better piece is owned/equipped
+    // SELECT every offered drop — [EQUIP] collects + equips + persists each
+    (L.items || []).forEach(function(k){ r.equipDropped(L, k); });
     (L.items || []).forEach(function(k){
-      var slot = DATA.items[k].slot, eq = CURRENT.equipment[slot];
-      if (!eq || DATA.items[eq].tier < DATA.items[k].tier) ok = false;
+      if (ACCOUNT.collected.indexOf(k) < 0) ok = false;                 // now owned
+      if (CURRENT.equipment[DATA.items[k].slot] !== k &&                // and equipped
+          (L.items || []).indexOf(CURRENT.equipment[DATA.items[k].slot]) < 0) ok = false;
     });
     var d = JSON.parse(localStorage.getItem('srb_save_1'));
     return { ok: ok, persisted: JSON.stringify(d.character.equipment) === JSON.stringify(CURRENT.equipment),
              collectedSaved: JSON.stringify(d.account.collected) === JSON.stringify(ACCOUNT.collected) };})()`);
-  check('chest AUTO-EQUIPS the best owned gear + PERSISTS (equipment + collection)',
+  check('[EQUIP] on an offered drop COLLECTS + EQUIPS it + PERSISTS (equipment + collection)',
     took.ok && took.persisted && took.collectedSaved);
 
   // -- 7. ENTER closes the chest summary ------------------------------------------

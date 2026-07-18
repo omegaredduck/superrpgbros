@@ -35,10 +35,12 @@ function check(name, ok, detail) {
     var after = nx.bestiaryEntries().map(function(e){ return e.key; });
     return { live: grove && !grove.locked, sel: nx.consoleMap,
              beforeFirst: before[0], afterFirst: after[0], afterN: after.length,
+             expected: DATA.biomes.grove.mobs.length + 1,
              hasMoth: after.indexOf('moonmoth') >= 0, hasBloom: after.indexOf('bloomPixie') >= 0 };})()`);
   check('THE GROVE is unlocked on the portal machine + selectable', con.live && con.sel === 'grove');
-  check('bestiary follows the selected map: grove roster (8) + 3 bosses',
-    con.afterN === 11 && con.hasMoth && con.hasBloom && con.beforeFirst === 'coalGolem');
+  // M7k: the book is BY MAP — grove roster + the grove's OWN boss
+  check('bestiary follows the selected map: grove roster + its boss (M7k by-map)',
+    con.afterN === con.expected && con.hasMoth && con.hasBloom && con.beforeFirst === 'coalGolem');
 
   // -- 2. realm routing: map:'grove' → grove biome/boss/world ----------------------
   await page.evaluate(`game.scene.getScene('Nexus').scene.start('Realm', { mode: 'clear', map: 'grove' })`);
@@ -532,37 +534,9 @@ function check(name, ok, detail) {
     wiz.balls === 8 && wiz.homing === 8 && wiz.cost <= 1.5, `${wiz.balls} balls, cost ${wiz.cost}`);
   check('homing missiles STEER toward prey', wiz.steered);
 
-  // -- M5.3 DEV MODE: 24-slot vault, all-gear + max-level grant, immortality --------
-  const dev = await page.evaluate(`(function(){var r=${scene('Realm')};
-    var p = r.player, st = p.state;
-    var slots = DATA.vault.slots;
-    SAVE.settings().dev = true;
-    applyDevMode();
-    var maxed = CURRENT.level === DATA.xp.cap;
-    var vaultN = GAME_SAVE.vault.length;
-    var hasLegendaryWeapon = GAME_SAVE.vault.indexOf(DATA.classGear[CURRENT.cls].weapon[5]) >= 0;
-    var allTiers = true;
-    for (var t=0;t<=5;t++){ if (GAME_SAVE.vault.indexOf('ar'+t)<0 || GAME_SAVE.vault.indexOf('r'+t)<0) allTiers=false; }
-    // immortality: hurtPlayer is a no-op
-    st.hp = st.stats.hp; st.lastHitAt = -99999; st.alive = true;
-    var before = st.hp;
-    Entities.hurtPlayer(r, p, 9999, r.time.now, 'test', true);
-    var immortal = st.hp === before && st.alive;
-    // the train instakill is survived too
-    st.alive = true; r.trainKill();
-    var trainSafe = st.alive;
-    // toggle OFF restores mortality (survivable hit still lands)
-    SAVE.settings().dev = false;
-    st.lastHitAt = -99999; st.alive = true; st.hp = st.stats.hp; var hp0 = st.hp;
-    Entities.hurtPlayer(r, p, 40, r.time.now + 600, 'test', false);
-    var mortalAgain = st.hp < hp0;
-    return { slots: slots, maxed: maxed, vaultN: vaultN, weap: hasLegendaryWeapon,
-             allTiers: allTiers, immortal: immortal, trainSafe: trainSafe, mortalAgain: mortalAgain };})()`);
-  check('DEV MODE: 24-slot vault filled with the full class ladder + MAX LEVEL',
-    dev.slots === 24 && dev.maxed && dev.vaultN === 24 && dev.weap && dev.allTiers,
-    `${dev.vaultN}/${dev.slots}, lvl-cap ${dev.maxed}`);
-  check('DEV MODE: IMMORTALITY (hurtPlayer + train no-op); toggling off restores mortality',
-    dev.immortal && dev.trainSafe && dev.mortalAgain);
+  // -- DEV MODE REMOVED (v5, 2026-07-17, Red): the Settings toggle + immortality
+  // are gone; devOn() is hard-false. The old 2-check dev-mode block was deleted.
+  // The 24-slot vault + legendary/tier data are still covered by other suites.
 
   // -- M5.4 LEVEL IS COSMETIC + MOBS SCALE WITH LEVEL ------------------------------
   const flat = await page.evaluate(`(function(){

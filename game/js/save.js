@@ -7,7 +7,7 @@
 // ============================================================================
 var SAVE = (function () {
 
-  var VERSION = 4;   // v4 (M4.6): six-tier item keys + class-locked gear
+  var VERSION = 5;   // v5 (2026-07-17): first-playthrough campaign flags (discovered/cleared/beaten/tokens)
   var SLOTS = 3;
   var KEY = function (slot) { return 'srb_save_' + slot; };
 
@@ -32,10 +32,19 @@ var SAVE = (function () {
     return {
       v: VERSION,
       account: {
-        unlockedClasses: allClasses(),                   // M4: both classes open
+        // v5: base classes open; `locked` classes (the NINJA) unlock on beating
+        // the game (beatTheGame pushes them; the class picker shows only these).
+        unlockedClasses: allClasses().filter(function (k) { return !(DATA.classes[k] && DATA.classes[k].locked); }),
         graveyard: [],                                   // {cls, level, kills, killer}
         potions: zeroPots(),                             // v2: unclaimed stash — SURVIVES death (Pillar 3)
         collected: [],                                   // M5.5: item keys ever OWNED — SURVIVES death (dupe→XP; gear auto-upgrades + remains)
+        // v5 (2026-07-17): FIRST-PLAYTHROUGH campaign — the FIND THE CORRUPTION loop.
+        discovered: [],                                  // region ids revealed by the scanner, in reveal order (train first)
+        cleared: [],                                     // region ids whose boss was beaten (drives bestiary gating too)
+        beaten: false,                                   // whale/patient-zero purged → post-campaign state unlocks
+        mapTokens: 3,                                    // reroll currency — START with 3, +1 per clear
+        corrMode: 'clear',                               // the active corruption's game mode (reroll can swap it)
+        cutscenesSeen: { cs0: false, cs1: false, cs2: false, cs3: false, cs4: false },  // v5: story cutscene triggers (fire once)
         records: { bestLevel: 1, deaths: 0, totalKills: 0, realmsEntered: 0, realmsClosed: 0 }
       },
       vault: [],                                         // v3: item keys, ≤ DATA.vault.slots — SURVIVES death
@@ -83,6 +92,16 @@ var SAVE = (function () {
       }
       data.v = 4;
     }
+    if (data.v === 4) {
+      // v5 (2026-07-17): first-playthrough campaign fields — additive, lossless.
+      var a5 = data.account;
+      if (!Array.isArray(a5.discovered)) a5.discovered = [];
+      if (!Array.isArray(a5.cleared)) a5.cleared = [];
+      if (typeof a5.beaten !== 'boolean') a5.beaten = false;
+      if (typeof a5.mapTokens !== 'number') a5.mapTokens = 3;
+      if (typeof a5.corrMode !== 'string') a5.corrMode = 'clear';
+      data.v = 5;
+    }
     if (data.v !== VERSION) return null;                    // future/unknown version
     // Sanitize (never a crash): drop vault/equipment references to item keys
     // that no longer exist in data.js — valid items are untouched (lossless).
@@ -91,6 +110,17 @@ var SAVE = (function () {
     // saves and drop any stale keys (lossless for real items).
     if (!Array.isArray(data.account.collected)) data.account.collected = [];
     data.account.collected = data.account.collected.filter(function (k) { return DATA.items[k]; });
+    // v5 campaign fields — default-fill so a hand-edited/older save never crashes.
+    if (!Array.isArray(data.account.discovered)) data.account.discovered = [];
+    if (!Array.isArray(data.account.cleared)) data.account.cleared = [];
+    if (typeof data.account.beaten !== 'boolean') data.account.beaten = false;
+    if (typeof data.account.mapTokens !== 'number') data.account.mapTokens = 3;
+    if (typeof data.account.corrMode !== 'string') data.account.corrMode = 'clear';
+    if (!data.account.cutscenesSeen || typeof data.account.cutscenesSeen !== 'object') data.account.cutscenesSeen = { cs0: false, cs1: false, cs2: false, cs3: false, cs4: false };
+    // v5: an already-beaten save unlocks the locked (ninja) class(es).
+    if (data.account.beaten && Array.isArray(data.account.unlockedClasses)) {
+      for (var lc in DATA.classes) { if (DATA.classes[lc].locked && data.account.unlockedClasses.indexOf(lc) < 0) data.account.unlockedClasses.push(lc); }
+    }
     if (data.character.equipment) {
       for (var s in data.character.equipment) {
         var k2 = data.character.equipment[s];
@@ -196,7 +226,9 @@ var SAVE = (function () {
       sfxVolume: seed,
       sfxOn: true,
       autoFire: true,          // Q2 default: ON (now a Settings checkbox, not a key)
-      dev: false,              // M5.3: DEV MODE toggle — all gear + max level + immortality (Settings)
+      dev: false,              // (legacy; the Dev mode toggle was removed v5 — devOn() hard-false)
+      ninjaUnlocked: false,    // v5: DEVICE-LEVEL — set true when any slot beats the game; gates the NINJA in class-select
+      achievements: {},        // v5 (item 6): DEVICE-LEVEL earned-achievement map (id -> true), persists across characters
       // 2026-07-14: HI-FI ART IS THE GAME NOW (user call) — the ex-ART-TEST
       // rangerModel / hifiWorld / hifiChamber settings were REMOVED. Hi-fi is
       // hardwired on in textures.js; stale keys in old saved settings are
