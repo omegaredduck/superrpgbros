@@ -762,16 +762,16 @@
       ctx.spr('orbitalMineHi', MS, MS, drawOrbitalMine);
       ctx.spr('starHorrorHi', MS, MS, drawStarHorror);
       ctx.spr('scuttlerHi', MS, MS, drawScuttler);
-      ctx.MOB_HI.greyWatcher = 'greyWatcherHi';     ctx.MOB_DISPLAY.greyWatcher = 52;
-      ctx.MOB_HI.broodSac = 'broodSacHi';           ctx.MOB_DISPLAY.broodSac = 56;
-      ctx.MOB_HI.sentryDrone = 'sentryDroneHi';     ctx.MOB_DISPLAY.sentryDrone = 50;
-      ctx.MOB_HI.haywireTurret = 'haywireTurretHi'; ctx.MOB_DISPLAY.haywireTurret = 54;
-      ctx.MOB_HI.astroRevenant = 'astroRevenantHi'; ctx.MOB_DISPLAY.astroRevenant = 54;
-      ctx.MOB_HI.magnetron = 'magnetronHi';         ctx.MOB_DISPLAY.magnetron = 52;
-      ctx.MOB_HI.lunaLeaper = 'lunaLeaperHi';       ctx.MOB_DISPLAY.lunaLeaper = 50;
-      ctx.MOB_HI.orbitalMine = 'orbitalMineHi';     ctx.MOB_DISPLAY.orbitalMine = 48;
-      ctx.MOB_HI.starHorror = 'starHorrorHi';       ctx.MOB_DISPLAY.starHorror = 60;
-      ctx.MOB_HI.scuttler = 'scuttlerHi';           ctx.MOB_DISPLAY.scuttler = 30;
+      ctx.MOB_HI.greyWatcher = 'greyWatcherHi';     ctx.MOB_DISPLAY.greyWatcher = 109;
+      ctx.MOB_HI.broodSac = 'broodSacHi';           ctx.MOB_DISPLAY.broodSac = 118;
+      ctx.MOB_HI.sentryDrone = 'sentryDroneHi';     ctx.MOB_DISPLAY.sentryDrone = 105;
+      ctx.MOB_HI.haywireTurret = 'haywireTurretHi'; ctx.MOB_DISPLAY.haywireTurret = 113;
+      ctx.MOB_HI.astroRevenant = 'astroRevenantHi'; ctx.MOB_DISPLAY.astroRevenant = 113;
+      ctx.MOB_HI.magnetron = 'magnetronHi';         ctx.MOB_DISPLAY.magnetron = 109;
+      ctx.MOB_HI.lunaLeaper = 'lunaLeaperHi';       ctx.MOB_DISPLAY.lunaLeaper = 105;
+      ctx.MOB_HI.orbitalMine = 'orbitalMineHi';     ctx.MOB_DISPLAY.orbitalMine = 101;
+      ctx.MOB_HI.starHorror = 'starHorrorHi';       ctx.MOB_DISPLAY.starHorror = 126;
+      ctx.MOB_HI.scuttler = 'scuttlerHi';           ctx.MOB_DISPLAY.scuttler = 63;
       // ---- boss: SPECIMEN ZERO · THE OVERMIND (canon final, 128px) ----
       ctx.spr('specimenzeroHi', 128, 128, drawOvermind);
       ctx.BOSS_HI.specimenzero = { key: 'specimenzeroHi', size: 128, display: 150, bodyW: 64, bodyH: 76 };

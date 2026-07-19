@@ -6,6 +6,87 @@
 
 ---
 
+## 2026-07-19 · M9 · PREHISTORIA RE-THEMED DINOS → INSECTS (?v=m9d)
+
+**Red: "i dont like the mobs on prehistoric maps... redo the mobs and the
+boss to a insect theme."** Full Master-List pass on realm 15 PREHISTORIA:
+map scene/decor/tiles + PRIMAL.EXE music KEPT; the 8 mobs and the boss
+were reselected and rebuilt as PREHISTORIC MEGAFAUNA BUGS (side-profile,
+house matte style, boss-grade).
+
+**Roster (8, Red picked from a 20-candidate sheet):** Termite Swarm
+(swarm + boss add) · Goliath Grub (slow HP tank) · Giant Wasp (shadow
+dive) · Hornet (enrager — ramps spd/dmg the longer it's near you) · Honey
+Bee (pollen buff aura, kill-first) · Giant Mayfly (fast fragile flit) ·
+Giant Centipede (burrow ambush; serpentine) · Arthropleura (neutral
+colossus + trample charge; serpentine). All animate via the 2-frame
+`def.flap` toggle (wing-flap for flyers, serpentine undulation for
+worm/centipede/millipede).
+
+**NEW MAP CYCLE — ARMY ANT MARCH** (replaces METEOR SHOWER): a telegraphed
+MOVING column sweeps the plateau; dodge out of its x-band. (Fresh
+moving-hazard mechanic — not a reused cycle.)
+
+**BOSS — THE PRIMORDIAL METAMORPH** (two-phase metamorphosis). DIGS OUT of
+the ground as a WORM (5-beat dig-out entrance, untargetable till it crawls
+free). P1 WORM kit: burrow-&-re-emerge lunge (signature) · dirt-spray cone
+· body-slam quake ring · termite call. At 50% it wraps into a COCOON
+(ribbed chrysalis w/ gold flecks; cracks) and the EMBER MOTH emerges to
+finish the fight. P2 MOTH kit: dive strafes (shadow lanes) · burning
+scale-dust zones · wing-gust (capped KB) · moonlight lure + summon. Title
+THE FINAL INSTAR. Warm/ember palette (ties to the volcano quarter). 6
+bestiary hints (text-fit).
+
+**Files:** maps/prehistoria/{art.js,map.js,scene.js} (full rewrite of the
+mob/boss draws + data + behavior; 20 decor + 10 tiles + PRIMAL composer
+kept verbatim) · index.html (?v=m9c→m9d). Art authored in the ranger_art
+draw API; verified via Node harness (57 textures register, all draws run
+0 fails) + full installData/buildArt integration test. In-engine size
+renders + wing-flap GIF approved by Red during the build.
+**Next:** rewrite test/m21_prehistoria_verify.js (old suite asserts the
+retired dino content) + full headless battery + Red playtest; git via .bat.
+
+---
+
+## 2026-07-18 · M7/M8 · FOLDER-MAP MOB SIZES TUNED DOWN 30% (?v=m8l)
+
+**Red playtested m8k: "3x the size of mobs is too much — reduce by 30 percent."**
+Every folder-map `MOB_DISPLAY` value cut to 0.7x of the m8k triple, i.e.
+**2.1x the original** (e.g. vvImp 42→126→88, vvBrute 62→186→130,
+colosseum big elite 72→216→151, dyno mole 28→84→59). All 173 entries across
+the same 16 maps; bosses still untouched; hitboxes track the sprite as before.
+
+**Files:** 16 x maps/*/art.js · index.html (?v=m8k→m8l).
+**Next:** Red re-checks in play; further per-mob nudges on request.
+
+---
+
+## 2026-07-18 · M7/M8 · FOLDER-MAP MOB SIZES TRIPLED (?v=m8k)
+
+**Red (with screenshot, VICE VERSA hell side): "the non boss mobs in vice
+versa need to be tripled in size — lots of maps still have super small mobs."**
+The core four realms (yard/grove/graveyard/factory) were hand-tuned in
+M4.8/M5.x and are untouched; every FOLDER map's roster was registering
+40-60px displays that read tiny in play.
+
+**Landed:** every `ctx.MOB_DISPLAY.<mob> = N` in all 16 folder-map art.js
+files multiplied ×3 (abyss, belly, carnival, castle, colosseum, crystal,
+lunar, neon, pirate, prehistoria, pyramid, skyisles, sugar, swamp, west,
+viceversa — 173 mob entries, e.g. vvImp 42→126, vvBrute 62→186, mole 28→84).
+Bosses (BOSS_HI) untouched. Hitboxes scale WITH the sprite automatically
+(mobModel keeps the constant texture-space body ratio), so bigger mobs stay
+fair-sized targets, not cheap ones. Relative sizing inside each roster
+(minis vs elites) is preserved by the uniform multiplier.
+
+**Files:** 16 × maps/*/art.js · index.html (?v=m8j→m8k).
+**⚠ Battery not re-run this session** (display-size data only, no logic) —
+run the full battery next session per process; if any map verify suite
+asserts exact MOB_DISPLAY numbers it needs its expectations ×3'd.
+**Next:** Red eyeballs sizes in play (vice versa first) and calls tune-downs
+per mob if any read too big vs their boss.
+
+---
+
 ## 2026-07-17 · M7 BUILD · MAP 8/16 WITCH'S SWAMP SHIPPED (?v=m7i)
 
 **Realm 12 — game/js/maps/swamp/{art,scene,map}.js** (folder-registered,

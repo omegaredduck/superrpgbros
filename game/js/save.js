@@ -44,7 +44,7 @@ var SAVE = (function () {
         beaten: false,                                   // whale/patient-zero purged → post-campaign state unlocks
         mapTokens: 3,                                    // reroll currency — START with 3, +1 per clear
         corrMode: 'clear',                               // the active corruption's game mode (reroll can swap it)
-        cutscenesSeen: { cs0: false, cs1: false, cs2: false, cs3: false, cs4: false },  // v5: story cutscene triggers (fire once)
+        cutscenesSeen: { cs0: false, cs1: false, cs2: false, cs3: false, cs4: false, csBoat: false, csBeach: false },  // v5: story cutscene triggers (fire once); csBoat/csBeach = belly two-act (2026-07-19)
         records: { bestLevel: 1, deaths: 0, totalKills: 0, realmsEntered: 0, realmsClosed: 0 }
       },
       vault: [],                                         // v3: item keys, ≤ DATA.vault.slots — SURVIVES death
@@ -116,7 +116,9 @@ var SAVE = (function () {
     if (typeof data.account.beaten !== 'boolean') data.account.beaten = false;
     if (typeof data.account.mapTokens !== 'number') data.account.mapTokens = 3;
     if (typeof data.account.corrMode !== 'string') data.account.corrMode = 'clear';
-    if (!data.account.cutscenesSeen || typeof data.account.cutscenesSeen !== 'object') data.account.cutscenesSeen = { cs0: false, cs1: false, cs2: false, cs3: false, cs4: false };
+    if (!data.account.cutscenesSeen || typeof data.account.cutscenesSeen !== 'object') data.account.cutscenesSeen = { cs0: false, cs1: false, cs2: false, cs3: false, cs4: false, csBoat: false, csBeach: false };
+    if (typeof data.account.cutscenesSeen.csBoat !== 'boolean') data.account.cutscenesSeen.csBoat = false;   // belly two-act migrate
+    if (typeof data.account.cutscenesSeen.csBeach !== 'boolean') data.account.cutscenesSeen.csBeach = false;
     // v5: an already-beaten save unlocks the locked (ninja) class(es).
     if (data.account.beaten && Array.isArray(data.account.unlockedClasses)) {
       for (var lc in DATA.classes) { if (DATA.classes[lc].locked && data.account.unlockedClasses.indexOf(lc) < 0) data.account.unlockedClasses.push(lc); }
@@ -228,6 +230,8 @@ var SAVE = (function () {
       autoFire: true,          // Q2 default: ON (now a Settings checkbox, not a key)
       dev: false,              // (legacy; the Dev mode toggle was removed v5 — devOn() hard-false)
       ninjaUnlocked: false,    // v5: DEVICE-LEVEL — set true when any slot beats the game; gates the NINJA in class-select
+      arcadeUnlocked: false,   // v6 (2026-07-19, Red): DEVICE-LEVEL — set true on first beat; gates ARCADE mode at char creation
+      mapTokens: 3,            // v6 (Red): DEVICE-LEVEL cross-character token pool (moved OFF per-account). +1 per clear, spend on reroll / 30 = legendary unlock
       achievements: {},        // v5 (item 6): DEVICE-LEVEL earned-achievement map (id -> true), persists across characters
       // 2026-07-14: HI-FI ART IS THE GAME NOW (user call) — the ex-ART-TEST
       // rangerModel / hifiWorld / hifiChamber settings were REMOVED. Hi-fi is
@@ -292,10 +296,19 @@ var SAVE = (function () {
     catch (e) { return false; }
   }
 
+  // v6 (2026-07-19, Red): MAP TOKENS are CROSS-CHARACTER now — they live in
+  // device settings, not the per-slot account. One shared pool: earned +1 per
+  // region clear (any character), spent on reroll (1) or the vault's LEGENDARY
+  // UNLOCK (30). All the old ACCOUNT.mapTokens read/write sites route here.
+  function tokens() { return settings().mapTokens || 0; }
+  function addTokens(n) { var s = settings(); s.mapTokens = Math.max(0, (s.mapTokens || 0) + (n || 0)); saveSettings(); return s.mapTokens; }
+  function spendTokens(n) { var s = settings(); if ((s.mapTokens || 0) < n) return false; s.mapTokens -= n; saveSettings(); return true; }
+
   return { VERSION: VERSION, SLOTS: SLOTS, blank: blank, load: load, save: save,
            clear: clear, peek: peek, storageOk: storageOk, zeroPots: zeroPots,
            emptyEquip: emptyEquip, settings: settings, saveSettings: saveSettings,
-           resetBinds: resetBinds };
+           resetBinds: resetBinds,
+           tokens: tokens, addTokens: addTokens, spendTokens: spendTokens };
 })();
 
 // Headless Node tests (TM-4) can stub localStorage and require this module.

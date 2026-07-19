@@ -60,7 +60,11 @@ var CUT = (function () {
   var HERO_PAL = {
     ranger: { main: '#347846', dark: '#22522f', accent: '#5fe88c', trim: '#785a32' },
     wizard: { main: '#4054ba', dark: '#2c3a84', accent: '#5f96e8', trim: '#c8be78' },
-    knight: { main: '#4a4c5a', dark: '#30323c', accent: '#d8463c', trim: '#8c909e' }
+    knight: { main: '#4a4c5a', dark: '#30323c', accent: '#d8463c', trim: '#8c909e' },
+    // ninja "Oni King" (matches ninja_art.js): near-black gi, crimson accents,
+    // bone-gold blade. v7 (2026-07-19, Red): so the ninja body renders as ITSELF
+    // in every cutscene instead of silently falling back to the ranger.
+    ninja:  { main: '#241318', dark: '#100810', accent: '#e84545', trim: '#e2c49a' }
   };
   function hero(x, X, Y, cls, facing, pose) {
     var p = HERO_PAL[cls] || HERO_PAL.ranger, cx = X + 4;
@@ -75,14 +79,35 @@ var CUT = (function () {
     else { px(x, cx, Y + 3, '#1e1e24'); px(x, cx + 2, Y + 3, '#1e1e24'); }
     if (cls === 'wizard') { px(x, cx, Y - 3, p.main); rect(x, cx - 1, Y - 2, cx + 1, Y - 1, p.main); rect(x, cx - 3, Y, cx + 4, Y, p.dark); }
     else if (cls === 'knight') { rect(x, cx - 2, Y, cx + 3, Y + 2, p.trim); px(x, cx, Y - 1, p.accent); px(x, cx + 1, Y - 1, p.accent); }
+    else if (cls === 'ninja') {
+      // dark hood pulled over the head; crimson band + amber eye slit (front view)
+      rect(x, cx - 2, Y - 1, cx + 3, Y + 1, p.dark);       // hood crown
+      rect(x, cx - 1, Y + 1, cx + 2, Y + 5, p.dark);       // hood shrouds the face
+      if (facing !== 'back') { rect(x, cx - 1, Y + 2, cx + 2, Y + 2, p.accent); px(x, cx, Y + 3, C.AMBER); px(x, cx + 1, Y + 3, C.AMBER); }
+    }
     else { rect(x, cx - 2, Y, cx + 3, Y + 1, p.main); px(x, cx - 2, Y + 2, p.main); px(x, cx + 3, Y + 2, p.main); }
     // weapon
     if (cls === 'wizard') { var sx = facing === 'back' ? X + 9 : X - 1; line(x, sx, Y + 2, sx, Y + 16, '#785a32'); px(x, sx, Y + 1, p.accent); }
     else if (cls === 'knight') { var kx = facing === 'back' ? X + 7 : X + 1; line(x, kx, Y - 2, kx, Y + 8, p.trim); rect(x, kx - 1, Y + 6, kx + 1, Y + 6, '#785a32'); }
+    else if (cls === 'ninja') { var nx2 = facing === 'back' ? X + 8 : X - 1; line(x, nx2, Y + 3, nx2, Y + 12, p.trim); px(x, nx2, Y + 2, p.accent); }
     else { var bx = facing === 'back' ? X + 8 : X - 1; line(x, bx + 2, Y + 5, bx + 2, Y + 13, '#c8c8c8'); line(x, bx - 2, Y + 5, bx - 2, Y + 12, p.trim); }
     px(x, cx + 1, Y + 8, p.accent);
   }
   function person(x, X, Y, col) { rect(x, X, Y + 3, X + 4, Y + 7, col); var d = 'rgb(' + Math.max(0, mixHexArr(col)[0] - 8) + ',' + Math.max(0, mixHexArr(col)[1] - 8) + ',' + Math.max(0, mixHexArr(col)[2] - 8) + ')'; rect(x, X + 1, Y + 7, X + 1, Y + 9, d); rect(x, X + 3, Y + 7, X + 3, Y + 9, d); efill(x, X + 1, Y, X + 3, Y + 2, C.SKIN); }
+  // civ — a PLAIN, un-chosen human (same 9px footprint as hero, no class gear or
+  // weapon). v7 (2026-07-19, Red): "the last unplugged mind" is just a person
+  // until you pick a dream body, so cs0/cs1 (before "caretaker online") draw this.
+  function civ(x, X, Y, facing) {
+    var cx = X + 4, COAT = '#3a3f4a', COAT_D = '#282c34', HAIR = '#2a2320';
+    rect(x, X + 2, Y + 13, X + 3, Y + 18, COAT_D); rect(x, X + 5, Y + 13, X + 6, Y + 18, COAT_D);   // legs
+    rect(x, X + 2, Y + 18, X + 3, Y + 19, '#1e1e24'); rect(x, X + 5, Y + 18, X + 6, Y + 19, '#1e1e24');
+    rect(x, X + 1, Y + 6, X + 7, Y + 12, COAT); rect(x, X + 1, Y + 11, X + 7, Y + 12, COAT_D);        // plain coat
+    rect(x, X, Y + 6, X, Y + 11, COAT_D); rect(x, X + 8, Y + 6, X + 8, Y + 11, COAT_D);               // arms
+    px(x, X, Y + 12, C.SKIN); px(x, X + 8, Y + 12, C.SKIN);                                            // hands
+    rect(x, cx - 1, Y + 1, cx + 2, Y + 5, C.SKIN);                                                     // head
+    if (facing === 'back') rect(x, cx - 1, Y + 1, cx + 2, Y + 4, HAIR);                                // hair (back of head)
+    else { rect(x, cx - 1, Y, cx + 2, Y + 1, HAIR); px(x, cx, Y + 3, '#1e1e24'); px(x, cx + 2, Y + 3, '#1e1e24'); }
+  }
 
   function drawPod(x, X, Y, w, h, glow, face, light) {
     rrect(x, X, Y, X + w, Y + h, C.GREY_DD, C.GREY_D);
@@ -123,7 +148,7 @@ var CUT = (function () {
       });
     }
     for (var i2 = 0; i2 < 5; i2++) line(x, vx, vy - 4, i2 * (W / 4 | 0), 8, C.GREY_DD);
-    if (standing) { var fy = 104 + (v % 2 ? 1 : 0); hero(x, vx - 4, fy - 19, cls, 'back'); }
+    if (standing) { var fy = 104 + (v % 2 ? 1 : 0); if (opt.plain) civ(x, vx - 4, fy - 19, 'back'); else hero(x, vx - 4, fy - 19, cls, 'back'); }
   }
 
   // =========================== CS0 SHOT ART ===========================
@@ -175,7 +200,7 @@ var CUT = (function () {
     person(x, 117, 96, 'rgb(52,56,64)'); bars(x);
   }
   function linkUp(x, v) { serverHall(x, v, { warm: 0, standing: false, cascade: 1.0, seed: 5 }); ctext(x, 16, 'SLEEPERS LINKED: 8,204,551,300', C.CYAN); bars(x); }
-  function lastMind(x, v) { serverHall(x, v, { warm: 0, standing: true, cascade: 1.0, seed: 5 }); bars(x); }
+  function lastMind(x, v) { serverHall(x, v, { warm: 0, standing: true, cascade: 1.0, seed: 5, plain: true }); bars(x); }
 
   // crisp centered text baked into the canvas (for persistent labels/counters)
   function ctext(x, y, s, col) { x.save(); x.imageSmoothingEnabled = false; x.font = '8px monospace'; x.textBaseline = 'top'; x.fillStyle = col; var w = x.measureText(s).width; x.fillText(s, Math.round((W - w) / 2), y); x.restore(); }
@@ -208,10 +233,10 @@ var CUT = (function () {
       tline(x, 10 + ox + twidth(x, body + '... ', 8), y2, fail, C.RED, 8);
     }
   }
-  function dyingHall(x, v) { serverHall(x, v, { dying: true, standing: true, seed: 13, cls: 'ranger' }); bars(x); }
+  function dyingHall(x, v) { serverHall(x, v, { dying: true, standing: true, seed: 13, plain: true }); bars(x); }
   var FIL_PATH = [[120, 60], [117, 70], [114, 79], [117, 86], [119, 91]];
   function filament(x, v, prog) {
-    serverHall(x, v % 2, { dying: true, standing: true, seed: 13, cls: 'ranger' });
+    serverHall(x, v % 2, { dying: true, standing: true, seed: 13, plain: true });
     var n = FIL_PATH.length, idx = Math.min(n - 1, Math.floor(prog * n)), pt = FIL_PATH[idx];
     for (var j = Math.max(0, idx - 2); j < idx; j++) px(x, FIL_PATH[j][0], FIL_PATH[j][1], C.CYAN_D);
     if (prog >= 0.98) { [[-3, -3], [3, -3], [-3, 3], [3, 3], [0, -4], [0, 4]].forEach(function (a) { px(x, 119 + a[0], 91 + a[1], C.WHITE); }); efill(x, 116, 88, 122, 94, C.CYAN); }
@@ -467,6 +492,211 @@ var CUT = (function () {
     bars(x);
   }
 
+  // ============ csBoat + csBeach SHOT ART (belly two-act finale) ============
+  // The TRUE opener into the finale: you're on a little boat, ask where the
+  // corruption you came to purge is — and the system's last asset, the whale,
+  // eats you whole. Later it beaches itself and SPITS you onto the sand for the
+  // last stand. NES look, ORCA-DRESS whale (black hide / white chin / red eye).
+  var SEA='rgb(30,60,98)', SEA_D='rgb(16,36,64)', SEA_L='rgb(64,118,158)',
+      SKYB='rgb(40,46,78)', SKYB_L='rgb(112,92,120)', FOAM='rgb(214,240,248)',
+      HIDE='rgb(30,34,42)', HIDE_D='rgb(15,17,22)', HIDE_L='rgb(56,62,74)',
+      BELLYW='rgb(222,230,238)', SANDC='rgb(198,170,104)', SAND_D='rgb(150,124,68)',
+      SAND_L='rgb(226,202,140)', MAWR='rgb(150,40,52)', MAWR_D='rgb(92,22,32)',
+      REDEYE='rgb(232,69,69)', WOOD='rgb(120,84,44)', WOOD_D='rgb(74,52,26)';
+  function ef(x, ax, ay, bx, by, col){ efill(x, Math.min(ax,bx), Math.min(ay,by), Math.max(ax,bx), Math.max(ay,by), col); }
+
+  // Living water: several scrolling sine swell-lines, near rows taller/faster,
+  // foam beading on the crests. v is the monotonic frame counter → it scrolls.
+  function seaWaves(x, v, y0, y1, rows) {
+    rows = rows || 7;
+    for (var i = 0; i < rows; i++) {
+      var yy = y0 + 5 + Math.round(i * (y1 - y0 - 5) / rows);
+      var depth = i / (rows - 1), amp = 1 + depth * 3.2, wl = 22 - depth * 9, sp = 0.30 + depth * 0.85;
+      for (var xx = -2; xx <= W; xx += 2) {
+        var s = Math.sin(xx / wl + v * sp), yc = Math.round(yy + s * amp);
+        var crest = s > 0.5;
+        px(x, xx, yc, crest ? FOAM : SEA_L);
+        if (crest) { px(x, xx + 1, yc, FOAM); px(x, xx, yc + 1, 'rgb(40,84,120)'); }
+      }
+    }
+  }
+  function seaSky(x, v, hz) {
+    hz = hz || 82;
+    rect(x, 0, 0, W, H, SEA_D);
+    vgrad(x, 8, hz, SKYB, SKYB_L);
+    efill(x, 176, 26, 198, 48, 'rgb(150,120,124)'); efill(x, 179, 29, 195, 45, SKYB_L);  // low sad moon
+    var glim = Math.round(Math.sin(v * 0.4) * 3);                 // moon glimmer wobbling on the water
+    for (var g = hz + 4; g < H - 12; g += 4) px(x, 186 + Math.round(Math.sin(g + v * 0.5) * 2) + glim, g, 'rgb(120,110,120)');
+    vgrad(x, hz, H, SEA, SEA_D);
+    seaWaves(x, v, hz, H - 10, 8);
+  }
+  function beachBg(x, v) {
+    rect(x, 0, 0, W, H, SANDC);
+    vgrad(x, 8, 58, SKYB, SKYB_L);
+    vgrad(x, 58, 92, SEA_L, SEA);                                 // sea band
+    seaWaves(x, v, 60, 92, 4);                                    // rolling surf out at sea
+    rect(x, 0, 92, W, H, SANDC);
+    dither(x, 0, 92, W, 150, SAND_L, 3, 0); dither(x, 0, 100, W, 150, SAND_D, 4, 1);
+    for (var sx = -2; sx < W; sx += 2) {                          // washing surf line (scrolls)
+      var s2 = Math.sin(sx / 12 + v * 0.7); if (s2 > 0.2) px(x, sx, 91 + Math.round(s2 * 1.5), FOAM);
+    }
+  }
+  function boat(x, bx, by, v) {                                   // little wooden dinghy
+    for (var i=-18;i<=18;i++){ var d=Math.abs(i)/18, top=by-Math.round((1-d*d)*3); rect(x, bx+i, top, bx+i, by+6, (i&1)?WOOD:WOOD_D); }
+    rect(x, bx-18, by+6, bx+18, by+8, WOOD_D);
+    line(x, bx-18, by-3, bx+18, by-3, 'rgb(150,108,58)');         // gunwale
+    line(x, bx-9, by-22, bx-9, by-3, WOOD_D);                     // mast
+    rect(x, bx-9, by-22, bx-4, by-10, FOAM); rect(x, bx-9, by-22, bx-4, by-20, 'rgb(196,206,214)');  // furled sail
+    if (v%2===0){ px(x, bx-20, by+7, FOAM); px(x, bx+20, by+7, FOAM); }
+  }
+  // ORCA-DRESS titan whale side silhouette (echoes the boss). facing +1 = head
+  // to the RIGHT. Tall dorsal + notched flukes + blunt snout read it as an orca.
+  function tri(x, ax, ay, bx, by, cx2, cy2, col){ x.fillStyle=col; x.beginPath(); x.moveTo(ax,ay); x.lineTo(bx,by); x.lineTo(cx2,cy2); x.closePath(); x.fill(); }
+  function whaleSide(x, cx, cy, s, facing, v, maw){
+    facing = facing || 1; var f = facing;
+    var bw=Math.round(50*s), bh=Math.round(25*s), R=function(n){return Math.round(n*s);};
+    var head = cx + f*bw, tail = cx - f*bw;
+    // pectoral fin (behind body, front-lower)
+    tri(x, cx+f*R(6), cy+R(bh*0.4), cx+f*R(4), cy+bh+R(12), cx+f*R(24), cy+R(bh*0.7), HIDE_D);
+    // body
+    ef(x, cx-bw, cy-bh, cx+bw, cy+bh, HIDE);
+    ef(x, cx-bw, cy+R(2), cx+bw, cy+bh, HIDE_D);
+    // blunt snout bulge at the head end
+    ef(x, head-f*R(16), cy-R(bh*0.7), head+f*R(9), cy+R(bh*0.7), HIDE);
+    // grey saddle patch behind the dorsal (orca tell)
+    ef(x, cx-f*R(10), cy-bh+R(2), cx+f*R(14), cy-R(bh*0.3), HIDE_L);
+    // TALL swept dorsal fin
+    tri(x, cx-f*R(6), cy-bh+R(3), cx+f*R(10), cy-bh+R(2), cx-f*R(2), cy-bh-R(22), HIDE);
+    // notched tail flukes (raised, clearly a tail)
+    var pk=tail+f*R(6);                                   // peduncle
+    tri(x, pk, cy-R(2), tail-f*R(20), cy-R(20), tail-f*R(6), cy-R(3), HIDE);      // upper fluke
+    tri(x, pk, cy+R(4), tail-f*R(20), cy+R(15), tail-f*R(4), cy+R(4), HIDE_D);    // lower fluke
+    // white lower jaw / chin + slim belly band (not a big oval)
+    ef(x, head-f*R(20), cy+R(bh*0.45), head+f*R(6), cy+bh, BELLYW);
+    ef(x, cx-f*R(18), cy+R(bh*0.78), cx+f*R(24), cy+bh, BELLYW);
+    // MOUTH — a closed line, or a GAPING red maw (fang ring) when maw>0
+    if (maw && maw > 0.05){
+      var my=cy+R(bh*0.12), mo=Math.round(3 + maw*16);
+      x.fillStyle=MAWR_D; x.beginPath(); x.moveTo(head-f*R(24), my-mo); x.lineTo(head+f*R(9), my); x.lineTo(head-f*R(24), my+mo); x.closePath(); x.fill();
+      x.fillStyle=MAWR; x.beginPath(); x.moveTo(head-f*R(18), my-mo+2); x.lineTo(head+f*R(2), my); x.lineTo(head-f*R(18), my+mo-2); x.closePath(); x.fill();
+      for(var tk=0;tk<5;tk++){ var fx2=head-f*(R(20)-tk*R(5)); px(x, fx2, my-mo+tk, BELLYW); px(x, fx2, my+mo-tk, BELLYW); }
+    } else {
+      line(x, cx+f*R(bh*0.1), cy+R(bh*0.42), head+f*R(4), cy+R(bh*0.2), HIDE_D);
+      for(var tt=0;tt<4;tt++) px(x, head-f*(R(14)-tt*R(5)), cy+R(bh*0.3), BELLYW);
+    }
+    // white eye patch + red eye near the snout
+    var ex=cx+f*R(bw*0.58), ey=cy-R(bh*0.32);
+    ef(x, ex-4, ey-4, ex+4, ey+3, BELLYW); ef(x, ex-1, ey-1, ex+3, ey+3, REDEYE);
+    if(v%2===0) px(x, ex, ey, '#fff');
+  }
+  // ---- csBoat ----
+  function boatCalm(x, v, prog, cls){
+    seaSky(x, v, 82);
+    var by = 111 + Math.round(Math.sin(v*0.5)*2);                 // rides the swell
+    boat(x, 120, by, v);
+    hero(x, 116, by-22, cls, 'back');
+    if(v%2===0){ line(x,54,30,57,28,HIDE_L); line(x,57,28,60,30,HIDE_L); line(x,70,24,73,22,HIDE_L); line(x,73,22,76,24,HIDE_L); }  // two gulls
+    else { line(x,54,29,57,31,HIDE_L); line(x,57,31,60,29,HIDE_L); line(x,70,23,73,25,HIDE_L); line(x,73,25,76,23,HIDE_L); }
+    bars(x);
+  }
+  // THE BREACH — the whale surfaces MOUTH OPEN right under the boat; the boat
+  // tips into the maw; then (dive shot) it arcs through the air and crashes back
+  // into the sea, taking you down into the guts.
+  function breachRise(x, v, prog, cls){
+    seaSky(x, v, 82);
+    var t = prog||0, bx=145;
+    var wy = 210 - Math.round(t*66);                             // rises from under the boat
+    x.save(); x.translate(bx, wy); x.rotate(-Math.PI/2 + 0.22);   // head points UP, maw gaping
+    whaleSide(x, 0, 0, 1.5, 1, v, Math.min(1, t*1.5));
+    x.restore();
+    if (t < 0.52){ var lift=Math.round(t*24); boat(x, bx, 116-lift, v); hero(x, bx-4, 94-lift, cls, 'back'); }   // boat tips into the maw, then gone
+    rect(x, 0, 132, W, H, SEA); dither(x, 0, 128, W, 133, SEA_L, 2, v);   // it rises THROUGH the surface
+    var rng=RNG(6); for(var k=0;k<22;k++){ var sxp=bx-42+((rng()*84)|0), syp=132-((rng()*Math.round(t*38))|0); px(x, sxp, syp, rng()<0.5?FOAM:SEA_L); }
+    bars(x);
+  }
+  function breachDive(x, v, prog, cls){
+    seaSky(x, v, 82);
+    var t = prog||0;
+    var cx = 145 + Math.round(t*52), cy = 96 + Math.round(t*66);   // arcs over and down into the sea
+    var ang = (-Math.PI/2 + 0.22) + t*(Math.PI/2 + 0.85);          // topples from head-up to nose-DOWN
+    x.save(); x.translate(cx, cy); x.rotate(ang);
+    whaleSide(x, 0, 0, 1.5, 1, v, 0);                              // mouth CLOSED — boat swallowed
+    x.restore();
+    rect(x, 0, 134, W, H, SEA); dither(x, 0, 130, W, 135, SEA_L, 2, v);
+    if (t > 0.6){ var d=(t-0.6)/0.4, rng=RNG(9); for(var k=0;k<30;k++){ var sxp=cx-30+((rng()*60)|0), syp=142-((rng()*Math.round(d*50))|0); px(x, sxp, syp, rng()<0.5?FOAM:SEA_L); } }
+    if (t > 0.9) rect(x, 0, 0, W, H, t>0.97?'#000':'rgba(8,10,16,0.55)');   // sink to black → the guts
+    bars(x);
+  }
+  // ---- csBeach ----
+  // it HURLS itself out of the surf and crashes onto the sand (then gets stuck).
+  function whaleLeap(x, v, prog, cls){
+    beachBg(x, v);
+    var t = prog || 0;
+    var cx = 44 + Math.round(120 * t), cy = 116 - Math.round(Math.sin(t * Math.PI) * 74);
+    if (t < 0.38){ var rng=RNG(3); for (var k=0;k<20;k++) px(x, 26+((rng()*54)|0), 78+((rng()*20)|0)-Math.round(t*34), rng()<0.5?FOAM:SEA_L); }  // launch splash
+    whaleSide(x, cx, cy, 1.35, 1, v);
+    if (t > 0.72){ var d=(t-0.72)/0.28, rng2=RNG(8); for (var k2=0;k2<24;k2++){ var sxp=cx-32+((rng2()*64)|0), syp=118-((rng2()*Math.round(d*30))|0); px(x, sxp, syp, rng2()<0.5?SAND_L:SAND_D); } }  // sand kick-up
+    bars(x);
+  }
+  function whaleBeachedShot(x, v, prog, cls){
+    beachBg(x, v);
+    whaleSide(x, 120, 92+(v%2?0:1), 1.5, 1, v);                   // beached, heaving
+    var rng=RNG(4); for(var k=0;k<10;k++){ var sxp=40+((rng()*160)|0); if((v+k)%2===0) px(x, sxp, 108, FOAM); }
+    bars(x);
+  }
+  // HEAD-ON MAW — a mini-port of the actual boss (whaleGod ORCA final): black
+  // hide face widening down, white chin, two red eyes, and a dark-red oval maw
+  // RINGED with bone teeth pointing INWARD (the teeth-inside-the-maw canon).
+  // openT 0..1 gapes the maw. Used for the spit (and it previews the arena boss).
+  function mawWidthAt(tt, mw){ return (0.35 + Math.sin(Math.min(tt*1.3,1)*Math.PI)*0.65) * mw; }
+  function mawHeadOn(x, cx, cy, s, openT, v){
+    var R=function(n){return Math.round(n*s);};
+    var top=cy-R(40), bot=cy+R(46);
+    for (var y=top; y<=bot; y++){                                 // face: hide widening downward, white chin
+      var t=(y-top)/(bot-top), w=R(20+Math.sin(Math.min(t*1.6,1)*Math.PI*0.5)*46), chin=t>0.66;
+      x.fillStyle = chin ? BELLYW : (t<0.15?HIDE:HIDE); x.fillRect(cx-w, y, 2*w, 1);
+      if(!chin){ x.fillStyle=HIDE_D; x.fillRect(cx-w, y, R(3), 1); x.fillRect(cx+w-R(3), y, R(3), 1); }
+    }
+    ef(x, cx-R(20), cy-R(30), cx+R(20), cy-R(20), HIDE_L);        // grey brow saddle
+    ef(x, cx-R(31), cy-R(23), cx-R(13), cy-R(11), 'rgb(210,220,230)');  // orca eye patches
+    ef(x, cx+R(13), cy-R(23), cx+R(31), cy-R(11), 'rgb(210,220,230)');
+    ef(x, cx-R(27), cy-R(21), cx-R(20), cy-R(14), REDEYE); ef(x, cx+R(20), cy-R(21), cx+R(27), cy-R(14), REDEYE);
+    if(v%2===0){ px(x, cx-R(24), cy-R(18), '#ffd0c0'); px(x, cx+R(23), cy-R(18), '#ffd0c0'); }
+    var mw=6+openT*22, m0=cy-R(6), mh=R(40);                      // THE MAW — vertical oval red cavern
+    for (var y2=m0; y2<=m0+mh; y2++){
+      var tt=(y2-m0)/mh, w2=Math.round(mawWidthAt(tt,mw)*s);
+      if(w2<=0) continue;
+      x.fillStyle=MAWR_D; x.fillRect(cx-w2, y2, 2*w2, 1);
+      x.fillStyle=MAWR; x.fillRect(cx-Math.round(w2*0.6), y2, Math.round(w2*1.2), 1);
+    }
+    for (var i=-4;i<=4;i++){                                      // upper teeth hang DOWN into the maw
+      var dx=i*R(6.5), tt2=0; while(tt2<1 && mawWidthAt(tt2,mw)*s < Math.abs(dx)+2) tt2+=0.02;
+      if(tt2>=1) continue; var ty=m0+tt2*mh, len=R(6)+(4-Math.abs(i))*R(0.8);
+      tri(x, cx+dx, ty+len, cx+dx-R(2), ty, cx+dx+R(2), ty, BELLYW);
+    }
+    for (var i2=-4;i2<=3;i2++){                                   // lower teeth rise UP into the maw
+      var dx2=i2*R(6.5)+R(3.2), tb=1; while(tb>0 && mawWidthAt(tb,mw)*s < Math.abs(dx2)+2) tb-=0.02;
+      if(tb<=0) continue; var by=m0+tb*mh, len2=R(5)+(3.5-Math.abs(i2+0.5))*R(0.7);
+      tri(x, cx+dx2, by-len2, cx+dx2-R(1.8), by, cx+dx2+R(1.8), by, BELLYW);
+    }
+  }
+  function whaleSpit(x, v, prog, cls){
+    beachBg(x, v);
+    var cx=108, cy=74, s=1.35, openT = prog<0.42 ? (prog/0.42) : 1;
+    mawHeadOn(x, cx, cy, s, openT, v);                           // cut to the gaping maw (boss-shape)
+    var tt=prog||0, x0=cx, y0=cy+Math.round(14*s), x1=156, y1=132;   // player launches OUT toward the camera
+    var pxo=x0+(x1-x0)*tt, pyo=y0+(y1-y0)*tt-Math.sin(tt*Math.PI)*26;
+    hero(x, Math.round(pxo)-4, Math.round(pyo)-16, cls, 'front', 'gasp');
+    if(tt<0.4){ var rng=RNG(9); for(var k=0;k<18;k++) px(x, cx-14+((rng()*28)|0), cy+((rng()*30)|0), rng()<0.5?FOAM:MAWR); }
+    bars(x);
+  }
+  function beachLand(x, v, prog, cls){
+    beachBg(x, v);
+    whaleSide(x, 150, 72, 1.2, -1, v);                            // looms up the beach, watching
+    hero(x, 116, 112, cls, 'front', (v%2===0)?'gasp':'stand');
+    bars(x);
+  }
+
   // =========================== TIMELINES ===========================
   // each shot: { base:fn(x,v), nvar, texts:[ {lines:[[str,color]], y, cps, cursor, hold} ] }
   var G = C.GOLD, WH = C.WHITE, CY = C.CYAN;
@@ -485,8 +715,13 @@ var CUT = (function () {
       { base: bootLog, dur: 13000 },                                   // cursor → fast scroll → the FAIL log
       { base: blackTerm, texts: [ { lines: [['> spawning caretaker process', CY]], y: 72, hold: 2200, cursor: true } ] },
       { base: dyingHall, texts: [ { lines: [['THE LAST DEFENSE NEEDS A CLEAN', WH], ['MIND TO RUN ON.', WH], ['THERE WAS EXACTLY ONE LEFT.', WH]], y: 122, hold: 1800, cps: 22 } ] },
-      { base: filament, dur: 1700 },                                   // the light flies at the neck
-      { base: chamberFramed, dur: 6500 }                              // caretaker online. // begin
+      { base: filament, dur: 1700 }                                    // the light flies at the neck
+    ],
+    // csReveal — "caretaker online". v7 (2026-07-19, Red): split out of cs1 so the
+    // player picks their DREAM BODY between the cold boot and this reveal; the
+    // chamber then shows the body they chose (chamberFramed draws hero(cls)).
+    csReveal: [
+      { base: chamberFramed, dur: 6500 }                              // caretaker online. // begin — YOUR body
     ],
     cs2: [
       { base: coreQuiet, texts: [ { lines: [['THE CORE GOES QUIET.', WH]], y: 140, hold: 1200 },
@@ -511,10 +746,36 @@ var CUT = (function () {
       { base: qZoom, dur: 2200, texts: [ { lines: [['SOMETHING WAS ALWAYS LOCKED IN HERE.', WH]], y: 118, hold: 1200 } ] },
       { base: oniResolve, dur: 2600, texts: [ { lines: [['IT STEPS OUT OF THE DARK.', WH]], y: 118, hold: 1400 } ] },
       { base: ninjaCard, dur: 4200 }                                   // THE ONI KING — NINJA unlocked
+    ],
+    // csBoat — THE OPENER into the finale (before you spawn inside the whale).
+    csBoat: [
+      { base: boatCalm, texts: [ { lines: [['hey...', WH]], y: 128, hold: 1100, cps: 18 },
+                                 { lines: [['isnt there supposed to be', WH], ['corruption to clense......', WH]], y: 120, hold: 1900, cps: 20 } ] },
+      { base: breachRise, dur: 2000, texts: [ { lines: [['...oh.', G]], y: 128, hold: 800 } ] },   // mouth open, boat tips in
+      { base: breachDive, dur: 2000 }                                   // arcs over → dives back into the sea → guts
+    ],
+    // csBeach — clearing the guts BEACHES the whale; it leaps out, gets stuck,
+    // and spits you onto the sand for the last stand.
+    csBeach: [
+      { base: whaleLeap, dur: 2000, texts: [ { lines: [['it HURLS itself out of the surf...', WH]], y: 128, hold: 800, cps: 26 } ] },
+      { base: whaleBeachedShot, texts: [ { lines: [['...and beaches itself in the sand — STUCK.', WH]], y: 128, hold: 1400, cps: 24 } ] },
+      { base: whaleSpit, dur: 2200 },                                   // it hacks you up onto the beach
+      { base: beachLand, dur: 2400 }                                    // wordless — you land, it looms; you just know
     ]
   };
 
-  return { W: W, H: H, C: C, SCENES: SCENES, ctext: ctext };
+  // Per-scene music cue (The Caretaker Theme). Scene-length WAVs in assets/;
+  // played once on the music bus by CutsceneScene. CS1 (cold boot) + CS4 are
+  // SILENT by design — no entry = no cue. Paths are relative to index.html.
+  var CUE_URL = {
+    cs0: 'js/cutscenes/assets/cue_cs0_musicbox.wav',
+    cs2: 'js/cutscenes/assets/cue_cs2_swell.wav',
+    cs3: 'js/cutscenes/assets/cue_cs3_resolve.wav',
+    csBoat: 'js/cutscenes/assets/cue_csboat.wav',      // calm sea → the breach
+    csBeach: 'js/cutscenes/assets/cue_csbeach.wav'     // heave → the spit
+  };
+
+  return { W: W, H: H, C: C, SCENES: SCENES, CUE_URL: CUE_URL, ctext: ctext };
 })();
 
 // ---------------------------------------------------------------------------
@@ -557,6 +818,16 @@ var CutsceneScene = new Phaser.Class({
 
     this.shots = (CUT.SCENES[this.sceneId] || CUT.SCENES.cs0);
     this.si = 0; this.bi = 0; this.mode = 'fade'; this.t = 0; this.charN = 0; this.v = 0; this.shotT = 0; this.prog = 0; this.done = false;
+
+    // MUSIC: kick off this scene's cue (The Caretaker Theme). CS1/CS4 have no
+    // cue entry → stopCue leaves them silent. Cutscenes fire after a click/key
+    // so audio is already unlocked; playCue queues if not.
+    try {
+      if (typeof AUDIO !== 'undefined') {
+        var cueUrl = CUT.CUE_URL && CUT.CUE_URL[this.sceneId];
+        if (cueUrl) AUDIO.playCue(cueUrl); else AUDIO.stopCue();
+      }
+    } catch (e) {}
 
     // input: SPACE skip block, hold SPACE / ESC skip whole scene
     this.holdMs = 0;
@@ -669,6 +940,9 @@ var CutsceneScene = new Phaser.Class({
 
   finish: function () {
     if (this.done) return; this.done = true;
+    // stop the cue so it never bleeds into the next scene / Nexus (a chained
+    // cs0→cs1 or cs2→cs3 restarts the correct cue from the next create()).
+    try { if (typeof AUDIO !== 'undefined') AUDIO.stopCue(); } catch (e) {}
     var self = this, next = this.nextFn;
     this.cameras.main.fadeOut(250, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', function () {

@@ -717,14 +717,14 @@
       ctx.spr('stormvaneHi', MS, MS, drawStormvane);
       ctx.spr('rainShepherdHi', MS, MS, drawRainShepherd);
       ctx.spr('rocHatchlingHi', MS, MS, drawRocHatchling);
-      ctx.MOB_HI.stormSprite = 'stormSpriteHi';   ctx.MOB_DISPLAY.stormSprite = 42;
-      ctx.MOB_HI.cloudRay = 'cloudRayHi';         ctx.MOB_DISPLAY.cloudRay = 56;
-      ctx.MOB_HI.griffinCub = 'griffinCubHi';     ctx.MOB_DISPLAY.griffinCub = 54;
-      ctx.MOB_HI.nimbusGolem = 'nimbusGolemHi';   ctx.MOB_DISPLAY.nimbusGolem = 62;
-      ctx.MOB_HI.windWarden = 'windWardenHi';     ctx.MOB_DISPLAY.windWarden = 50;
-      ctx.MOB_HI.stormvane = 'stormvaneHi';       ctx.MOB_DISPLAY.stormvane = 54;
-      ctx.MOB_HI.rainShepherd = 'rainShepherdHi'; ctx.MOB_DISPLAY.rainShepherd = 52;
-      ctx.MOB_HI.rocHatchling = 'rocHatchlingHi'; ctx.MOB_DISPLAY.rocHatchling = 58;
+      ctx.MOB_HI.stormSprite = 'stormSpriteHi';   ctx.MOB_DISPLAY.stormSprite = 88;
+      ctx.MOB_HI.cloudRay = 'cloudRayHi';         ctx.MOB_DISPLAY.cloudRay = 118;
+      ctx.MOB_HI.griffinCub = 'griffinCubHi';     ctx.MOB_DISPLAY.griffinCub = 113;
+      ctx.MOB_HI.nimbusGolem = 'nimbusGolemHi';   ctx.MOB_DISPLAY.nimbusGolem = 130;
+      ctx.MOB_HI.windWarden = 'windWardenHi';     ctx.MOB_DISPLAY.windWarden = 105;
+      ctx.MOB_HI.stormvane = 'stormvaneHi';       ctx.MOB_DISPLAY.stormvane = 113;
+      ctx.MOB_HI.rainShepherd = 'rainShepherdHi'; ctx.MOB_DISPLAY.rainShepherd = 109;
+      ctx.MOB_HI.rocHatchling = 'rocHatchlingHi'; ctx.MOB_DISPLAY.rocHatchling = 122;
       // ---- boss (Gravekeeper-class display ~160) ----
       ctx.spr('nimbustalonHi', 96, 96, drawNimbusTalon);
       ctx.BOSS_HI.nimbustalon = { key: 'nimbustalonHi', size: 96, display: 160, bodyW: 54, bodyH: 48 };

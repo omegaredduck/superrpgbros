@@ -46,6 +46,49 @@ var SIM = (function () {
     return 1 + (Math.max(1, playerLevel || 1) - 1) * k;
   }
 
+  // 2026-07-18 (Red): PROGRESSION SCALING axis = campaign DEPTH (how many
+  // regions you've already cleared, ACCOUNT.cleared.length, 0..maxDepth). The
+  // scene stamps it on scene.progressDepth at create; spawn/boss/loot sites
+  // read these. Deeper corruptions hit harder AND drop better, in lockstep, so
+  // the game stays HARD until the guaranteed legendary set. depth 0 == the old
+  // flat game (every multiplier is exactly 1.0), so fresh-save suites are
+  // unaffected BY CONSTRUCTION. All knobs live in DATA.progression.
+  function depthMult(depth) {
+    var pr = DATA.progression || {};
+    var d = Math.max(0, Math.min(depth || 0, pr.maxDepth != null ? pr.maxDepth : 99));
+    return { mobHp:   1 + d * (pr.mobHpPerDepth   || 0),
+             mobDmg:  1 + d * (pr.mobDmgPerDepth  || 0),
+             mobXp:   1 + d * (pr.mobXpPerDepth   || 0),
+             bossHp:  1 + d * (pr.bossHpPerDepth  || 0),
+             bossDmg: 1 + d * (pr.bossDmgPerDepth || 0) };
+  }
+
+  // Reshape a drop table's entries by depth: each weight is multiplied by its
+  // tier's geometric factor^depth (DATA.progression.lootShift). Returns a NEW
+  // array (never mutates the registered table). Identity at depth 0 (factor^0
+  // = 1) AND identity when no shift configured, so rollDrop consumes exactly
+  // one rng() either way — the loot RNG stream is untouched at depth 0.
+  function depthLootShift(entries, depth) {
+    var pr = DATA.progression || {};
+    if (!depth || !pr.lootShift) return entries;
+    var sh = pr.lootShift;
+    return entries.map(function (e) {
+      var it = DATA.items[e.item];
+      var tier = it ? it.tier : 0;
+      var f = (sh[tier] != null) ? sh[tier] : 1;
+      return { item: e.item, w: e.w * Math.pow(f, depth) };
+    });
+  }
+
+  // DEV projectile-frequency dials (DATA.tuning.projFreq.{mob,boss,player}).
+  // >1 = fire more often, <1 = less. Default 1.0 = no change. Cadence sites
+  // DIVIDE an interval / MULTIPLY a rate by this.
+  function projFreq(kind) {
+    var t = DATA.tuning && DATA.tuning.projFreq;
+    var v = t && t[kind];
+    return (v && v > 0) ? v : 1;
+  }
+
   // M5.5: the highest-tier COLLECTED item a class can use in a slot (weapons +
   // abilities are class-locked; armor + rings are universal). null if none.
   function bestCollected(collected, cls, slot) {
@@ -185,6 +228,7 @@ var SIM = (function () {
 
   return { seed: seed, rng: rng, damage: damage, fireRate: fireRate,
            statsAtLevel: statsAtLevel, statsFor: statsFor, mobLevelMult: mobLevelMult,
+           depthMult: depthMult, depthLootShift: depthLootShift, projFreq: projFreq,
            bestCollected: bestCollected, potionWasted: potionWasted,
            equipBonus: equipBonus, weaponMod: weaponMod, abilityFor: abilityFor,
            fullLegendSet: fullLegendSet,

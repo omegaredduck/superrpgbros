@@ -763,14 +763,14 @@
       ctx.spr('tumbleweedHi', MS, MS, drawTumbleweed);
       ctx.spr('scorpionHi', MS, MS, drawScorpion);
       ctx.spr('dustDevilHi', MS, MS, drawDustDevil);
-      ctx.MOB_HI.gangRustler = 'gangRustlerHi';   ctx.MOB_DISPLAY.gangRustler = 44;
-      ctx.MOB_HI.sixGunBandit = 'sixGunBanditHi';  ctx.MOB_DISPLAY.sixGunBandit = 48;
-      ctx.MOB_HI.dynamiteDan = 'dynamiteDanHi';    ctx.MOB_DISPLAY.dynamiteDan = 52;
-      ctx.MOB_HI.rattlesnake = 'rattlesnakeHi';    ctx.MOB_DISPLAY.rattlesnake = 48;
-      ctx.MOB_HI.vulture = 'vultureHi';            ctx.MOB_DISPLAY.vulture = 50;
-      ctx.MOB_HI.tumbleweed = 'tumbleweedHi';      ctx.MOB_DISPLAY.tumbleweed = 42;
-      ctx.MOB_HI.scorpion = 'scorpionHi';          ctx.MOB_DISPLAY.scorpion = 48;
-      ctx.MOB_HI.dustDevil = 'dustDevilHi';        ctx.MOB_DISPLAY.dustDevil = 56;
+      ctx.MOB_HI.gangRustler = 'gangRustlerHi';   ctx.MOB_DISPLAY.gangRustler = 92;
+      ctx.MOB_HI.sixGunBandit = 'sixGunBanditHi';  ctx.MOB_DISPLAY.sixGunBandit = 101;
+      ctx.MOB_HI.dynamiteDan = 'dynamiteDanHi';    ctx.MOB_DISPLAY.dynamiteDan = 109;
+      ctx.MOB_HI.rattlesnake = 'rattlesnakeHi';    ctx.MOB_DISPLAY.rattlesnake = 101;
+      ctx.MOB_HI.vulture = 'vultureHi';            ctx.MOB_DISPLAY.vulture = 105;
+      ctx.MOB_HI.tumbleweed = 'tumbleweedHi';      ctx.MOB_DISPLAY.tumbleweed = 88;
+      ctx.MOB_HI.scorpion = 'scorpionHi';          ctx.MOB_DISPLAY.scorpion = 101;
+      ctx.MOB_HI.dustDevil = 'dustDevilHi';        ctx.MOB_DISPLAY.dustDevil = 118;
       // ---- boss: THE OUTLAW SHERIFF (128px; P1 white hat + P2 hatless) ----
       ctx.spr('westSheriffHi', 128, 128, drawSheriffP1);
       ctx.spr('westSheriffP2Hi', 128, 128, drawSheriffP2);

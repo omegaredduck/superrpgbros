@@ -278,6 +278,9 @@ function check(name, ok, extra) {
   await page.waitForFunction(`game.scene.isActive('Realm') && ${scene('Realm')}.player`, null, { timeout: 15000 });
   await sleep(300);
   await page.evaluate(`(function(){var r=${scene('Realm')};
+    // 2026-07-18: the no-one-shot cap clamps a single hit to <max HP, so the
+    // test harness drops HP to 1 first to force the killing blow (as m2 does).
+    r.player.state.hp = 1;
     Entities.hurtPlayer(r, r.player, 99999, r.time.now + 99999, 'the test harness');})()`);
   await sleep(300);
   const after = await page.evaluate(`(function(){

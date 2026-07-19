@@ -936,24 +936,24 @@
     buildInto: function (ctx) {
       var MS = ctx.SIZE;
       // ---- HELL mobs (8) ----
-      ctx.spr('vvImpHi', MS, MS, drawImp);          ctx.MOB_HI.vvImp = 'vvImpHi';           ctx.MOB_DISPLAY.vvImp = 42;
-      ctx.spr('vvFireImpHi', MS, MS, drawFireImp);  ctx.MOB_HI.vvFireImp = 'vvFireImpHi';   ctx.MOB_DISPLAY.vvFireImp = 44;
-      ctx.spr('vvSuccubusHi', MS, MS, drawSuccubus);ctx.MOB_HI.vvSuccubus = 'vvSuccubusHi'; ctx.MOB_DISPLAY.vvSuccubus = 52;
-      ctx.spr('vvBruteHi', MS, MS, drawBrute);      ctx.MOB_HI.vvBrute = 'vvBruteHi';       ctx.MOB_DISPLAY.vvBrute = 62;
-      ctx.spr('vvSkeletonHi', MS, MS, drawSkeleton);ctx.MOB_HI.vvSkeleton = 'vvSkeletonHi'; ctx.MOB_DISPLAY.vvSkeleton = 50;
-      ctx.spr('vvGhostHi', MS, MS, drawGhost);      ctx.MOB_HI.vvGhost = 'vvGhostHi';       ctx.MOB_DISPLAY.vvGhost = 48;
-      ctx.spr('vvGaolerHi', MS, MS, drawGaoler);    ctx.MOB_HI.vvGaoler = 'vvGaolerHi';     ctx.MOB_DISPLAY.vvGaoler = 54;
-      ctx.spr('vvTormentorHi', MS, MS, drawTormentor); ctx.MOB_HI.vvTormentor = 'vvTormentorHi'; ctx.MOB_DISPLAY.vvTormentor = 52;
+      ctx.spr('vvImpHi', MS, MS, drawImp);          ctx.MOB_HI.vvImp = 'vvImpHi';           ctx.MOB_DISPLAY.vvImp = 88;
+      ctx.spr('vvFireImpHi', MS, MS, drawFireImp);  ctx.MOB_HI.vvFireImp = 'vvFireImpHi';   ctx.MOB_DISPLAY.vvFireImp = 92;
+      ctx.spr('vvSuccubusHi', MS, MS, drawSuccubus);ctx.MOB_HI.vvSuccubus = 'vvSuccubusHi'; ctx.MOB_DISPLAY.vvSuccubus = 109;
+      ctx.spr('vvBruteHi', MS, MS, drawBrute);      ctx.MOB_HI.vvBrute = 'vvBruteHi';       ctx.MOB_DISPLAY.vvBrute = 130;
+      ctx.spr('vvSkeletonHi', MS, MS, drawSkeleton);ctx.MOB_HI.vvSkeleton = 'vvSkeletonHi'; ctx.MOB_DISPLAY.vvSkeleton = 105;
+      ctx.spr('vvGhostHi', MS, MS, drawGhost);      ctx.MOB_HI.vvGhost = 'vvGhostHi';       ctx.MOB_DISPLAY.vvGhost = 101;
+      ctx.spr('vvGaolerHi', MS, MS, drawGaoler);    ctx.MOB_HI.vvGaoler = 'vvGaolerHi';     ctx.MOB_DISPLAY.vvGaoler = 113;
+      ctx.spr('vvTormentorHi', MS, MS, drawTormentor); ctx.MOB_HI.vvTormentor = 'vvTormentorHi'; ctx.MOB_DISPLAY.vvTormentor = 109;
       // ---- HOLY mobs (9) ----
-      ctx.spr('vvCherubHi', MS, MS, drawCherub);    ctx.MOB_HI.vvCherub = 'vvCherubHi';     ctx.MOB_DISPLAY.vvCherub = 40;
-      ctx.spr('vvAngelHi', MS, MS, drawAngel);      ctx.MOB_HI.vvAngel = 'vvAngelHi';       ctx.MOB_DISPLAY.vvAngel = 52;
-      ctx.spr('vvSeraphHi', MS, MS, drawSeraph);    ctx.MOB_HI.vvSeraph = 'vvSeraphHi';     ctx.MOB_DISPLAY.vvSeraph = 54;
-      ctx.spr('vvValkyrieHi', MS, MS, drawValkyrie);ctx.MOB_HI.vvValkyrie = 'vvValkyrieHi'; ctx.MOB_DISPLAY.vvValkyrie = 50;
-      ctx.spr('vvAcolyteHi', MS, MS, drawAcolyte);  ctx.MOB_HI.vvAcolyte = 'vvAcolyteHi';   ctx.MOB_DISPLAY.vvAcolyte = 48;
-      ctx.spr('vvStatueHi', MS, MS, drawGuardian);  ctx.MOB_HI.vvStatue = 'vvStatueHi';     ctx.MOB_DISPLAY.vvStatue = 54;
-      ctx.spr('vvSirenHi', MS, MS, drawSiren);      ctx.MOB_HI.vvSiren = 'vvSirenHi';       ctx.MOB_DISPLAY.vvSiren = 52;
-      ctx.spr('vvHeraldHi', MS, MS, drawHerald);    ctx.MOB_HI.vvHerald = 'vvHeraldHi';     ctx.MOB_DISPLAY.vvHerald = 50;
-      ctx.spr('vvArchonHi', MS, MS, drawArchon);    ctx.MOB_HI.vvArchon = 'vvArchonHi';     ctx.MOB_DISPLAY.vvArchon = 60;
+      ctx.spr('vvCherubHi', MS, MS, drawCherub);    ctx.MOB_HI.vvCherub = 'vvCherubHi';     ctx.MOB_DISPLAY.vvCherub = 84;
+      ctx.spr('vvAngelHi', MS, MS, drawAngel);      ctx.MOB_HI.vvAngel = 'vvAngelHi';       ctx.MOB_DISPLAY.vvAngel = 109;
+      ctx.spr('vvSeraphHi', MS, MS, drawSeraph);    ctx.MOB_HI.vvSeraph = 'vvSeraphHi';     ctx.MOB_DISPLAY.vvSeraph = 113;
+      ctx.spr('vvValkyrieHi', MS, MS, drawValkyrie);ctx.MOB_HI.vvValkyrie = 'vvValkyrieHi'; ctx.MOB_DISPLAY.vvValkyrie = 105;
+      ctx.spr('vvAcolyteHi', MS, MS, drawAcolyte);  ctx.MOB_HI.vvAcolyte = 'vvAcolyteHi';   ctx.MOB_DISPLAY.vvAcolyte = 101;
+      ctx.spr('vvStatueHi', MS, MS, drawGuardian);  ctx.MOB_HI.vvStatue = 'vvStatueHi';     ctx.MOB_DISPLAY.vvStatue = 113;
+      ctx.spr('vvSirenHi', MS, MS, drawSiren);      ctx.MOB_HI.vvSiren = 'vvSirenHi';       ctx.MOB_DISPLAY.vvSiren = 109;
+      ctx.spr('vvHeraldHi', MS, MS, drawHerald);    ctx.MOB_HI.vvHerald = 'vvHeraldHi';     ctx.MOB_DISPLAY.vvHerald = 105;
+      ctx.spr('vvArchonHi', MS, MS, drawArchon);    ctx.MOB_HI.vvArchon = 'vvArchonHi';     ctx.MOB_DISPLAY.vvArchon = 126;
       // ---- DOUBLE BOSS ----
       ctx.spr('vvSatanHi', 160, 160, function (put, W) { drawSatan(put, W); });
       ctx.spr('vvSatanVentHi', 160, 160, drawSatanVent);

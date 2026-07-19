@@ -47,6 +47,10 @@ function beatTheGame(cls) {
   if (cls === 'ninja') ACCOUNT.ninjaEmpowered = true;
   // DEVICE-level unlock so the ninja is pickable at NEW GAME on any slot.
   try { SAVE.settings().ninjaUnlocked = true; SAVE.saveSettings(); } catch (e) {}
+  // v6 (2026-07-19, Red): beating the game (once, on any slot) UNLOCKS ARCADE
+  // MODE device-wide — the char-creation toggle that skips the campaign and
+  // drops a fresh character straight at the post-campaign corruption portal.
+  try { SAVE.settings().arcadeUnlocked = true; SAVE.saveSettings(); } catch (e) {}
   grantLegendarySet(cls);
   try { if (typeof ACH !== 'undefined') ACH.check(); } catch (e) {}   // item 6: unlock any freshly-earned achievements
   try { persist(); } catch (e) {}
@@ -329,100 +333,93 @@ var TitleScene = new Phaser.Class({
     var r = SAVE.load(slot);
     if (r.ok) { this.enterSlot(slot, r.data); return; }
     if (r.reason === 'corrupt') return;                    // must delete first
-    this.promptClass(slot);                                // M4: empty slot → choose a class first
+    this.beginNewGame(slot);                               // v7: empty slot → intro → pick your dream body
   },
 
-  // M4: the class-select overlay shown when starting a NEW GAME in an empty
-  // slot. One card per class (data-driven from DATA.classes — a new class adds
-  // a card, no code); click a card or press its number to pick; ESC cancels.
-  promptClass: function (slot) {
-    if (this.classPicking) return;
+  // ---- NEW GAME FLOW (v7, 2026-07-19, Red) -----------------------------
+  // Reordered so the STORY intro plays BEFORE you pick a body: click NEW GAME →
+  // (mode, only if ARCADE is unlocked) → CS0 preamble + CS1 cold boot (a PLAIN,
+  // un-chosen human — "the last unplugged mind") → the BodySelect scene ("SELECT
+  // YOUR DREAM BODY") → CS-REVEAL "caretaker online" showing the body you picked
+  // → the Chamber. ARCADE skips the cutscenes: mode → dream body → the portal.
+  // (createNewGame/enterSlot below are UNCHANGED — the headless suites still call
+  // them directly to land straight in the Chamber.)
+  beginNewGame: function (slot) {
+    var arcadeUnlocked = false; try { arcadeUnlocked = !!SAVE.settings().arcadeUnlocked; } catch (e) {}
+    if (arcadeUnlocked) this.promptMode(slot);            // a veteran picks STORY vs ARCADE
+    else this.startNewGame(slot, 'story');                // first playthrough is always the story
+  },
+
+  // Small STORY / ARCADE chooser — only shown once ARCADE is unlocked (device
+  // flag). A brand-new player never sees it (there is only one option).
+  promptMode: function (slot) {
+    if (this.classPicking || this.starting) return;
     this.classPicking = true;
     var self = this, W = this.scale.width, H = this.scale.height, cx = W / 2, cy = H / 2;
     var ui = [];
-    ui.push(this.add.rectangle(cx, cy, W, H, 0x000000, 0.78).setDepth(80).setInteractive());
-    ui.push(this.add.text(cx, cy - 150, 'CHOOSE YOUR CLASS', { fontFamily: 'monospace', fontSize: 30, color: '#ffcd75', fontStyle: 'bold' }).setOrigin(0.5).setDepth(81));
-    ui.push(this.add.text(cx, cy - 116, 'SLOT ' + slot + ' — new game · this slot keeps its class through permadeath', { fontFamily: 'monospace', fontSize: 12, color: '#94b0c2' }).setOrigin(0.5).setDepth(81));
-    // v5: the NINJA (locked) only appears once the game has been beaten (device flag).
-    var ninjaUnlocked = false; try { ninjaUnlocked = !!SAVE.settings().ninjaUnlocked; } catch (e) {}
-    var keys = Object.keys(DATA.classes).filter(function (k) { return !DATA.classes[k].locked || ninjaUnlocked; }), n = keys.length;
-    // adaptive card width so 3+ class cards still fit the min 960-wide screen
-    var gap = 24, cardW = Math.min(300, Math.floor((W - 40 - (n - 1) * gap) / n));
-    var totalW = n * cardW + (n - 1) * gap, x0 = cx - totalW / 2 + cardW / 2;
-    keys.forEach(function (key, i) {
-      var cls = DATA.classes[key], ccx = x0 + i * (cardW + gap), ccy = cy + 6;
-      var accent = cls.accent || 0x38b764;          // per-class accent (data-driven)
-      var card = self.add.rectangle(ccx, ccy, cardW, 190, 0x1a1c2c, 0.96).setStrokeStyle(2, accent).setDepth(81).setInteractive({ useHandCursor: true });
-      ui.push(card);
-      // HI-FI DEFAULT (2026-07-14): every class card previews its hi-fi
-      // animated model (Ranger 64 / Starweaver / Dark Knight). Classic sprite
-      // only if the art module failed to load.
-      var rd = (typeof TEX !== 'undefined' && TEX.playerModel) ? TEX.playerModel(key) : null;
-      if (rd && self.textures.exists(rd.key)) {
-        var rsp = self.add.sprite(ccx, ccy - 54, rd.key, 'idle0').setScale(54 / rd.size).setDepth(82);
-        try { rsp.play(rd.idle); } catch (e) {}
-        ui.push(rsp);
-      } else {
-        ui.push(self.add.sprite(ccx, ccy - 54, cls.texture || 'ranger').setScale(3.4).setDepth(82));
-      }
-      if (cls.weapon && DATA.weapons[cls.weapon] && DATA.weapons[cls.weapon].heldTexture) {
-        var hw = DATA.weapons[cls.weapon];
-        if (rd && rd.bowKey && self.textures.exists(rd.bowKey)) {
-          // hi-fi Ranger card: the lead ARM out to the side (aim right) with the
-          // bow held UPRIGHT at its hand — matches the in-game hold.
-          var cd = 54, sc = cd / rd.size;
-          var shX = ccx + (rd.shoulder.x - 0.5) * cd, shY = (ccy - 54) + (rd.shoulder.y - 0.5) * cd;
-          if (self.textures.exists(rd.armKey))
-            ui.push(self.add.sprite(shX, shY, rd.armKey).setScale(sc).setOrigin(rd.armPivotX, 0.5).setDepth(83));
-          ui.push(self.add.sprite(shX + rd.armLenTex * sc, shY, rd.bowKey).setScale(sc).setOrigin(rd.bowGrip.x, rd.bowGrip.y).setDepth(84));
-        } else if (rd && rd.heldKey && self.textures.exists(rd.heldKey)) {
-          // hi-fi Wizard/Knight card: the hi-fi weapon beside the model (staff
-          // stands upright like the in-game carry; sword rests at a ready angle).
-          var wsc = (54 / rd.size) * (rd.heldScale || 1) * 1.2;
-          ui.push(self.add.sprite(ccx + 26, ccy - 54, rd.heldKey).setScale(wsc).setDepth(84)
-            .setRotation(hw.upright ? -Math.PI / 2 : -Math.PI / 5));
-        } else {
-          ui.push(self.add.sprite(ccx + 26, ccy - 54, hw.heldTexture).setScale(2.2).setDepth(82)
-            .setRotation(hw.upright ? -Math.PI / 2 : 0));   // walking staffs stand up on the card too
-        }
-      }
-      ui.push(self.add.text(ccx, ccy + 6, (i + 1) + '.  ' + cls.name.toUpperCase(), { fontFamily: 'monospace', fontSize: 18, color: '#f4f4f4', fontStyle: 'bold' }).setOrigin(0.5).setDepth(82));
-      ui.push(self.add.text(ccx, ccy + 44, cls.blurb || '', { fontFamily: 'monospace', fontSize: 11, color: '#94b0c2', align: 'center', wordWrap: { width: cardW - 30 } }).setOrigin(0.5).setDepth(82));
-      ui.push(self.add.text(ccx, ccy + 82, 'SELECT ▶', { fontFamily: 'monospace', fontSize: 13, color: '#38b764' }).setOrigin(0.5).setDepth(82));
-      card.on('pointerover', function () { card.setFillStyle(0x29366f, 0.96); });
-      card.on('pointerout', function () { card.setFillStyle(0x1a1c2c, 0.96); });
-      card.on('pointerdown', function () { self.pickClass(slot, key); });
-    });
-    var numHint = keys.map(function (_, i) { return i + 1; }).join(' / ');
-    ui.push(this.add.text(cx, cy + 150, 'press ' + numHint + ' · or ESC to go back', { fontFamily: 'monospace', fontSize: 12, color: '#566c86' }).setOrigin(0.5).setDepth(81));
-    this.classUi = ui;
-    // number keys pick the class; ESC cancels
-    this._classKeys = function (e) {
-      if (!self.classPicking) return;
-      if (e.code === 'Escape') { self.closeClassPick(); return; }
-      var idx = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3 }[e.code];
-      if (idx != null && keys[idx]) self.pickClass(slot, keys[idx]);
-    };
-    this.input.keyboard.on('keydown', this._classKeys);
+    ui.push(this.add.rectangle(cx, cy, W, H, 0x000000, 0.82).setDepth(80).setInteractive());
+    ui.push(this.add.text(cx, cy - 74, 'NEW GAME', { fontFamily: 'monospace', fontSize: 30, color: '#ffcd75', fontStyle: 'bold' }).setOrigin(0.5).setDepth(81));
+    ui.push(this.add.text(cx, cy - 38, 'SLOT ' + slot + ' — how do you want to play?', { fontFamily: 'monospace', fontSize: 12, color: '#94b0c2' }).setOrigin(0.5).setDepth(81));
+    var story = this.add.text(cx, cy + 6, 'STORY  ▶', { fontFamily: 'monospace', fontSize: 22, color: '#a7f070', fontStyle: 'bold' }).setOrigin(0.5).setDepth(81).setInteractive({ useHandCursor: true });
+    var arcade = this.add.text(cx, cy + 44, 'ARCADE  ▶', { fontFamily: 'monospace', fontSize: 22, color: '#ffcd75', fontStyle: 'bold' }).setOrigin(0.5).setDepth(81).setInteractive({ useHandCursor: true });
+    ui.push(story, arcade);
+    ui.push(this.add.text(cx, cy + 80, 'STORY = the full campaign from the intro   ·   ARCADE = skip to the endgame corruption portal', { fontFamily: 'monospace', fontSize: 10, color: '#7c8aa5' }).setOrigin(0.5).setDepth(81));
+    ui.push(this.add.text(cx, cy + 110, 'ESC to go back', { fontFamily: 'monospace', fontSize: 12, color: '#566c86' }).setOrigin(0.5).setDepth(81));
+    story.on('pointerover', function () { story.setColor('#ffffff'); });
+    story.on('pointerout', function () { story.setColor('#a7f070'); });
+    arcade.on('pointerover', function () { arcade.setColor('#ffffff'); });
+    arcade.on('pointerout', function () { arcade.setColor('#ffcd75'); });
+    function go(mode) { AUDIO.play('ui'); self._closeOverlay(); self.startNewGame(slot, mode); }
+    story.on('pointerdown', function () { go('story'); });
+    arcade.on('pointerdown', function () { go('arcade'); });
+    this._overlayUi = ui;
+    this._overlayKeys = function (e) { if (self.classPicking && e.code === 'Escape') self._closeOverlay(); };
+    this.input.keyboard.on('keydown', this._overlayKeys);
   },
 
-  closeClassPick: function () {
-    if (this._classKeys) { this.input.keyboard.off('keydown', this._classKeys); this._classKeys = null; }
-    if (this.classUi) { this.classUi.forEach(function (o) { o.destroy(); }); this.classUi = null; }
+  _closeOverlay: function () {
+    if (this._overlayKeys) { this.input.keyboard.off('keydown', this._overlayKeys); this._overlayKeys = null; }
+    if (this._overlayUi) { this._overlayUi.forEach(function (o) { try { o.destroy(); } catch (e) {} }); this._overlayUi = null; }
     this.classPicking = false;
   },
 
-  // Commit a class choice → create the save and enter the slot.
-  pickClass: function (slot, cls) {
-    if (!this.classPicking) return;
-    this.closeClassPick();
-    this.createNewGame(slot, cls, true);                 // v5: real new game → play the intro cutscenes
+  // Kick off a fresh game. STORY fades into the intro cutscenes (which hand off to
+  // the dream-body select); ARCADE goes straight to the dream-body select.
+  startNewGame: function (slot, mode) {
+    if (this.starting) return;
+    this.starting = true;
+    AUDIO.play('ui');
+    var self = this;
+    this.cameras.main.fadeOut(320);
+    this.time.delayedCall(340, function () {
+      if (mode === 'arcade') {
+        self.scene.start('BodySelect', { slot: slot, mode: 'arcade' });
+      } else {
+        // CS0 preamble -> CS1 cold boot -> SELECT YOUR DREAM BODY (BodySelect).
+        // cls here is a harmless default: cs0/cs1 draw a PLAIN person, not a class.
+        self.scene.start('Cutscene', { id: 'cs0', cls: 'ranger', next:
+          { scene: 'Cutscene', data: { id: 'cs1', cls: 'ranger', next:
+            { scene: 'BodySelect', data: { slot: slot, mode: 'story' } } } } });
+      }
+    });
   },
 
   // Create a fresh account in `slot` with the chosen class, then enter it.
   // (Also the headless-test entry point for a new game of a given class.)
-  createNewGame: function (slot, cls, withIntro) {
+  // v6 (Red): `mode` — 'story' (default) plays the campaign from scratch;
+  // 'arcade' seeds a POST-CAMPAIGN save (beaten + all story cutscenes marked
+  // seen) so the nexus opens straight on the corruption portal's free selector.
+  // Arcade grants NO legendary set — you still earn gear (or buy it with 30
+  // cross-character tokens at the vault). Arcade skips the intro cutscenes.
+  createNewGame: function (slot, cls, withIntro, mode) {
     var data = SAVE.blank(cls);
+    if (mode === 'arcade') {
+      data.account.beaten = true;
+      if (data.account.cutscenesSeen) {
+        for (var csk in data.account.cutscenesSeen) data.account.cutscenesSeen[csk] = true;
+      }
+      withIntro = false;                                 // no story intro for an arcade character
+    }
     SAVE.save(slot, data);
     // v5: the intro cutscenes (CS0→CS1) fire only from the real title button
     // (withIntro). Headless suites call createNewGame(slot,cls) and land straight
@@ -448,6 +445,109 @@ var TitleScene = new Phaser.Class({
           { scene: 'Cutscene', data: { id: 'cs1', cls: cls, next: { scene: 'Nexus', data: { entry: 'login' } } } } });
       } else {
         self.scene.start('Nexus', { entry: 'login' });   // M3.8: records screen types itself out
+      }
+    });
+  }
+});
+
+// ------------------------------------------------------- DREAM BODY SELECT --
+// v7 (2026-07-19, Red): "SELECT YOUR DREAM BODY" — the class picker, lifted out
+// of the title overlay into its own scene so it can appear AFTER the intro
+// cutscenes (STORY) or immediately (ARCADE). Picking a body creates the save and
+// — for STORY — plays CS-REVEAL ("caretaker online") showing THAT body, then the
+// Chamber. ARCADE seeds a post-campaign save (beaten + cutscenes seen) and drops
+// straight into the nexus. One card per class (data-driven from DATA.classes;
+// the ninja card only shows once it is unlocked device-wide).
+var BodySelectScene = new Phaser.Class({
+  Extends: Phaser.Scene,
+  initialize: function () { Phaser.Scene.call(this, { key: 'BodySelect' }); },
+
+  init: function (data) {
+    this.slot = (data && data.slot) || 1;
+    this.mode = (data && data.mode) || 'story';
+    this.picking = false;
+  },
+
+  create: function () {
+    var self = this, W = this.scale.width, H = this.scale.height, cx = W / 2, cy = H / 2;
+    this.cameras.main.setBackgroundColor('#05060c');
+    this.cameras.main.fadeIn(300);
+    this.add.text(cx, cy - 150, 'SELECT YOUR DREAM BODY', { fontFamily: 'monospace', fontSize: 30, color: '#ffcd75', fontStyle: 'bold' }).setOrigin(0.5).setDepth(81);
+    this.add.text(cx, cy - 116, 'the machine will render you the shape you choose · this slot keeps it through permadeath', { fontFamily: 'monospace', fontSize: 12, color: '#94b0c2' }).setOrigin(0.5).setDepth(81);
+
+    var ninjaUnlocked = false; try { ninjaUnlocked = !!SAVE.settings().ninjaUnlocked; } catch (e) {}
+    var keys = Object.keys(DATA.classes).filter(function (k) { return !DATA.classes[k].locked || ninjaUnlocked; }), n = keys.length;
+    var gap = 24, cardW = Math.min(300, Math.floor((W - 40 - (n - 1) * gap) / n));
+    var totalW = n * cardW + (n - 1) * gap, x0 = cx - totalW / 2 + cardW / 2;
+    keys.forEach(function (key, i) {
+      var cls = DATA.classes[key], ccx = x0 + i * (cardW + gap), ccy = cy + 20;
+      var accent = cls.accent || 0x38b764;
+      var card = self.add.rectangle(ccx, ccy, cardW, 200, 0x1a1c2c, 0.96).setStrokeStyle(2, accent).setDepth(81).setInteractive({ useHandCursor: true });
+      // HI-FI card preview — the class's animated model (same as the old title card).
+      var rd = (typeof TEX !== 'undefined' && TEX.playerModel) ? TEX.playerModel(key) : null;
+      if (rd && self.textures.exists(rd.key)) {
+        var rsp = self.add.sprite(ccx, ccy - 58, rd.key, 'idle0').setScale(54 / rd.size).setDepth(82);
+        try { rsp.play(rd.idle); } catch (e) {}
+      } else {
+        self.add.sprite(ccx, ccy - 58, cls.texture || 'ranger').setScale(3.4).setDepth(82);
+      }
+      if (cls.weapon && DATA.weapons[cls.weapon] && DATA.weapons[cls.weapon].heldTexture) {
+        var hw = DATA.weapons[cls.weapon];
+        if (rd && rd.bowKey && self.textures.exists(rd.bowKey)) {
+          var cd = 54, sc = cd / rd.size;
+          var shX = ccx + (rd.shoulder.x - 0.5) * cd, shY = (ccy - 58) + (rd.shoulder.y - 0.5) * cd;
+          if (self.textures.exists(rd.armKey))
+            self.add.sprite(shX, shY, rd.armKey).setScale(sc).setOrigin(rd.armPivotX, 0.5).setDepth(83);
+          self.add.sprite(shX + rd.armLenTex * sc, shY, rd.bowKey).setScale(sc).setOrigin(rd.bowGrip.x, rd.bowGrip.y).setDepth(84);
+        } else if (rd && rd.heldKey && self.textures.exists(rd.heldKey)) {
+          var wsc = (54 / rd.size) * (rd.heldScale || 1) * 1.2;
+          self.add.sprite(ccx + 26, ccy - 58, rd.heldKey).setScale(wsc).setDepth(84).setRotation(hw.upright ? -Math.PI / 2 : -Math.PI / 5);
+        } else {
+          self.add.sprite(ccx + 26, ccy - 58, hw.heldTexture).setScale(2.2).setDepth(82).setRotation(hw.upright ? -Math.PI / 2 : 0);
+        }
+      }
+      self.add.text(ccx, ccy + 8, (i + 1) + '.  ' + cls.name.toUpperCase(), { fontFamily: 'monospace', fontSize: 18, color: '#f4f4f4', fontStyle: 'bold' }).setOrigin(0.5).setDepth(82);
+      self.add.text(ccx, ccy + 46, cls.blurb || '', { fontFamily: 'monospace', fontSize: 11, color: '#94b0c2', align: 'center', wordWrap: { width: cardW - 30 } }).setOrigin(0.5).setDepth(82);
+      self.add.text(ccx, ccy + 86, 'INHABIT ▶', { fontFamily: 'monospace', fontSize: 13, color: '#38b764' }).setOrigin(0.5).setDepth(82);
+      card.on('pointerover', function () { card.setFillStyle(0x29366f, 0.96); });
+      card.on('pointerout', function () { card.setFillStyle(0x1a1c2c, 0.96); });
+      card.on('pointerdown', function () { self.pick(key); });
+    });
+    var numHint = keys.map(function (_, i) { return i + 1; }).join(' / ');
+    this.add.text(cx, cy + 150, 'press ' + numHint + ' to choose your body', { fontFamily: 'monospace', fontSize: 12, color: '#566c86' }).setOrigin(0.5).setDepth(81);
+    this._keyH = function (e) {
+      var idx = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3 }[e.code];
+      if (idx != null && keys[idx]) self.pick(keys[idx]);
+    };
+    this.input.keyboard.on('keydown', this._keyH);
+  },
+
+  // Commit the chosen body: create + persist + bind the save, then STORY plays
+  // CS-REVEAL (caretaker online, YOUR body) before the nexus; ARCADE goes direct.
+  pick: function (cls) {
+    if (this.picking) return;
+    this.picking = true;
+    if (this._keyH) { this.input.keyboard.off('keydown', this._keyH); this._keyH = null; }
+    try { AUDIO.play('ui'); } catch (e) {}
+    var data = SAVE.blank(cls);
+    if (this.mode === 'arcade') {
+      // ARCADE: a post-campaign character — beaten + every cutscene already seen
+      // (mirrors the old createNewGame(mode:'arcade') seeding; no legendary set).
+      data.account.beaten = true;
+      if (data.account.cutscenesSeen) for (var k in data.account.cutscenesSeen) data.account.cutscenesSeen[k] = true;
+    } else {
+      // STORY: the intro just played — don't replay it on future loads of this slot.
+      if (data.account.cutscenesSeen) { data.account.cutscenesSeen.cs0 = true; data.account.cutscenesSeen.cs1 = true; }
+    }
+    SAVE.save(this.slot, data);
+    bindSave(this.slot, data);
+    var self = this, mode = this.mode;
+    this.cameras.main.fadeOut(320);
+    this.time.delayedCall(340, function () {
+      if (mode === 'arcade') {
+        self.scene.start('Nexus', { entry: 'login' });
+      } else {
+        self.scene.start('Cutscene', { id: 'csReveal', cls: cls, next: { scene: 'Nexus', data: { entry: 'login' } } });
       }
     });
   }
@@ -1185,7 +1285,14 @@ var NexusScene = new Phaser.Class({
     this._corrPanel = { cx: cx, cy: cy, w: PW, h: PH };
     var mapX0 = cx - PW / 2 + 16, mapY0 = cy - PH / 2 + 74, mapW = PW - 32, mapH = 338;
     this._corrMap = { x0: mapX0, y0: mapY0, w: mapW, h: mapH, cx: mapX0 + mapW / 2, cy: mapY0 + mapH / 2 };
-    var key = Math.round(mapW) + 'x' + Math.round(mapH);
+    // KEY MUST include the panel's screen ORIGIN, not just its size: the Nexus
+    // scene is restarted in place on resize/fullscreen (Scale.RESIZE), reusing
+    // this instance, so _corrNodes/_corrLayoutKey persist. mapW/mapH are
+    // constants (688x338), so a size-only key never invalidated — the box moved
+    // (cx=W/2 grows) but the cached absolute node coords didn't, leaving dots
+    // stranded OUTSIDE the repositioned panel. Origin in the key = recompute
+    // (and re-clamp) whenever the panel moves.
+    var key = Math.round(mapX0) + ',' + Math.round(mapY0) + ',' + Math.round(mapW) + 'x' + Math.round(mapH);
     if (this._corrLayoutKey === key && this._corrNodes) return;
     this._corrLayoutKey = key;
     var maps = this.campaignMaps(), mcx = this._corrMap.cx, mcy = this._corrMap.cy;
@@ -1306,8 +1413,8 @@ var NexusScene = new Phaser.Class({
   corruptionReroll: function () {
     var active = this.activeCorruption();
     if (!active || this._corrPhase === 'hunt' || this._corrPhase === 'fly') return;
-    if ((ACCOUNT.mapTokens || 0) <= 0) return;
-    ACCOUNT.mapTokens--;
+    if (SAVE.tokens() <= 0) return;                 // v6: cross-character device pool
+    SAVE.spendTokens(1);
     var modes = (DATA.console.modes || ['clear']);
     var others = modes.filter(function (m) { return m !== ACCOUNT.corrMode; });
     if (others.length) ACCOUNT.corrMode = others[Math.floor(Math.random() * others.length)];
@@ -1428,13 +1535,13 @@ var NexusScene = new Phaser.Class({
       // buttons below the card text
       var bY = by + 118;
       btn(cx - 132, bY, 248, 'STEP THROUGH  ▸', 0x38b764, function () { self.corruptionStepThrough(); });
-      var hasTok = (ACCOUNT.mapTokens || 0) > 0;
+      var hasTok = SAVE.tokens() > 0;
       var rb = this.add.rectangle(cx + 132, bY, 248, 40, hasTok ? 0x243a24 : 0x1a1c2c, 1).setDepth(82).setStrokeStyle(2, hasTok ? 0x3a6b3a : 0x333c57).setInteractive({ useHandCursor: true });
       rb.on('pointerdown', function () { self.corruptionReroll(); }); ui.push(rb);
-      ui.push(this.add.text(cx + 132, bY, '↻ REROLL  (' + (ACCOUNT.mapTokens || 0) + ' TOKENS)',
+      ui.push(this.add.text(cx + 132, bY, '↻ REROLL  (' + SAVE.tokens() + ' TOKENS)',
         { fontFamily: 'monospace', fontSize: 13, color: hasTok ? '#96eb8c' : '#66799e', fontStyle: 'bold' }).setOrigin(0.5).setDepth(83));
     } else { // idle — can scan
-      ui.push(this.add.text(cx, by + 18, 'MAP TOKENS: ' + (ACCOUNT.mapTokens || 0),
+      ui.push(this.add.text(cx, by + 18, 'MAP TOKENS: ' + SAVE.tokens(),
         { fontFamily: 'monospace', fontSize: 12, color: '#96eb8c' }).setOrigin(0.5).setDepth(83));
       btn(cx, by + 60, 360, '◈ FIND THE CORRUPTION ◈', 0xffcd75, function () { self.corruptionScan(); });
     }
@@ -1926,6 +2033,44 @@ var NexusScene = new Phaser.Class({
     if (moreAbove) ui.push(this.add.text(rx, top - 6, '▲', { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }).setOrigin(0.5).setDepth(83));
     if (moreBelow) ui.push(this.add.text(rx, top + PER_PAGE * vRowH - 16, '▼ more', { fontFamily: 'monospace', fontSize: 11, color: '#ffcd75' }).setOrigin(0.5).setDepth(83));
 
+    // v6 (2026-07-19, Red): cross-character MAP TOKENS readout + the LEGENDARY
+    // UNLOCK exchange. Once the shared pool holds ≥ COST tokens (and this class's
+    // T5 set isn't already owned), a button spends them to drop the full
+    // legendary set into the VAULT — no auto-equip (your rule); equip it here.
+    var COST = (DATA.console && DATA.console.legendaryCost) || 30;
+    var tokY = cy + 206, tok = SAVE.tokens();
+    ui.push(this.add.text(lx, tokY, 'MAP TOKENS: ' + tok, { fontFamily: 'monospace', fontSize: 12, color: '#96eb8c' }).setOrigin(0.5).setDepth(82));
+    var gset = (DATA.classGear && DATA.classGear[CURRENT.cls]);
+    var setKeys = gset ? [gset.weapon[5], gset.ability[5], 'ar5', 'r5'] : [];
+    var ownsSet = setKeys.length > 0 && setKeys.every(function (k) {
+      return GAME_SAVE.vault.indexOf(k) >= 0 ||
+             (CURRENT.equipment && DATA.equipSlots.some(function (s) { return CURRENT.equipment[s] === k; })) ||
+             (Array.isArray(ACCOUNT.collected) && ACCOUNT.collected.indexOf(k) >= 0);
+    });
+    if (setKeys.length && !ownsSet && tok >= COST) {
+      var lgb = this.add.rectangle(cx + 130, tokY, 320, 30, 0x2a2340, 1).setDepth(81)
+        .setStrokeStyle(2, 0xffcd75).setInteractive({ useHandCursor: true });
+      ui.push(lgb);
+      ui.push(this.add.text(cx + 130, tokY, '★ LEGENDARY UNLOCK — ' + COST + ' TOKENS',
+        { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75', fontStyle: 'bold' }).setOrigin(0.5).setDepth(82));
+      lgb.on('pointerover', function () { lgb.setFillStyle(0x3a3055, 1); });
+      lgb.on('pointerout',  function () { lgb.setFillStyle(0x2a2340, 1); });
+      lgb.on('pointerdown', function () {
+        if (SAVE.tokens() < COST) return;
+        if (!SAVE.spendTokens(COST)) return;
+        grantLegendarySet(CURRENT.cls);                  // → vault + collection (no auto-equip)
+        persist();
+        try { AUDIO.play('ui'); } catch (e) {}
+        self.buildVaultUi();                             // rebuild: button hides, set now in the vault list
+      });
+    } else if (setKeys.length && ownsSet) {
+      ui.push(this.add.text(cx + 130, tokY, 'legendary set unlocked ✓',
+        { fontFamily: 'monospace', fontSize: 11, color: '#a7f070' }).setOrigin(0.5).setDepth(82));
+    } else if (setKeys.length) {
+      ui.push(this.add.text(cx + 130, tokY, 'legendary unlock: ' + COST + ' tokens (' + tok + '/' + COST + ')',
+        { fontFamily: 'monospace', fontSize: 11, color: '#66799e' }).setOrigin(0.5).setDepth(82));
+    }
+
     ui.push(this.add.text(cx, cy + 228, '[ V or ESC to close ]', { fontFamily: 'monospace', fontSize: 12, color: '#ffcd75' }).setOrigin(0.5).setDepth(81));
     this.vaultUi = ui;
   },
@@ -2332,7 +2477,18 @@ var NexusScene = new Phaser.Class({
       // portal AND no run — the whole config was lost. Now a cancelled entry
       // simply leaves the portal standing to walk into again.
       self.registry.remove('pendingPortal');
-      self.scene.start('Realm', { mode: entry.mode, map: entry.map, affixes: entry.affixes || [] });   // M5.0: map rides in
+      var _rd = { mode: entry.mode, map: entry.map, affixes: entry.affixes || [] };   // M5.0: map rides in
+      // BELLY TWO-ACT (2026-07-19): the boat opener plays EVERY time before you
+      // spawn inside the whale — csBoat → Realm (the guts). Red wants all the
+      // finale cutscenes to fire on every run, not just the first (2026-07-19),
+      // so there's no cutscenesSeen gate here anymore; still skippable in-scene.
+      if (entry.map === 'belly' && typeof CutsceneScene !== 'undefined') {
+        try { if (typeof ACCOUNT !== 'undefined' && ACCOUNT && ACCOUNT.cutscenesSeen) { ACCOUNT.cutscenesSeen.csBoat = true; persist(); } } catch (e) {}
+        self.scene.start('Cutscene', { id: 'csBoat', cls: (typeof CURRENT !== 'undefined' && CURRENT && CURRENT.cls) || 'ranger',
+          next: { scene: 'Realm', data: _rd } });
+      } else {
+        self.scene.start('Realm', _rd);
+      }
     });
   },
 
@@ -2398,6 +2554,22 @@ var RealmScene = new Phaser.Class({
                     { name: DATA.realm.name, biome: DATA.realm.biome, boss: DATA.realm.boss, kind: 'yard', music: 'battle' };
     this.realmBiome = this.realmDef.biome;
     this.realmBoss = this.realmDef.boss;
+    // BELLY TWO-ACT (2026-07-19): data.arena re-enters straight into ACT 2 (the
+    // sand map). These flags gate the whale+horde finale.
+    this._bellyArena = !!(data && data.arena);
+    this._bellyBossDead = false; this._bellyFinaleFired = false;
+    // 2026-07-18 (Red): PROGRESSION DEPTH = how many regions you've already
+    // cleared (ACCOUNT.cleared.length). Drives mob/boss difficulty + loot tier
+    // via SIM.depthMult / SIM.depthLootShift. Exclude THIS realm if it's already
+    // cleared (a replay), so replaying region N feels like region N, not N+1.
+    // Fresh save → cleared=[] → depth 0 → identical to the pre-2026-07-18 game.
+    (function (self) {
+      var cl = (typeof ACCOUNT !== 'undefined' && ACCOUNT && Array.isArray(ACCOUNT.cleared)) ? ACCOUNT.cleared : [];
+      var d = cl.length;
+      if (self.realmId && cl.indexOf(self.realmId) >= 0) d = Math.max(0, d - 1);
+      var maxD = (DATA.progression && DATA.progression.maxDepth != null) ? DATA.progression.maxDepth : 99;
+      self.progressDepth = Math.max(0, Math.min(d, maxD));
+    })(this);
     // SCENE REUSE (bug #1 family): the yard's train state must not leak into
     // a grove run (and vice versa) — reset both worlds' handles before setup.
     this.train = null; this.trainLanes = null; this.arrivalTrain = null;
@@ -2515,6 +2687,7 @@ var RealmScene = new Phaser.Class({
     // (the Wizard's storm-orb pool retired 2026-07-13 — the ARCANE BARRAGE
     //  machine gun fires plain playerShots; see Entities.channelBarrage)
     this.whirlFx = null;                                        // M4: Knight whirlwind ring VFX
+    this.shadowClones = [];                                     // 2026-07-19: Ninja SHADOW CLONE JUTSU squad
 
     this.physics.add.collider(this.mobs, this.mobs);
     if (this._trunkColliderPending) this.wireGroveColliders();   // M5.0: fallen-trunk walls
@@ -2609,7 +2782,7 @@ var RealmScene = new Phaser.Class({
     // M4.5: BATTLE MUSIC — "Swarmfront" (original) drives the whole realm; it
     // cuts out the moment the fight is decided (boss down / horn / death), so
     // the silence itself is the release. playMusic is idempotent (resize-safe).
-    AUDIO.playMusic((this.realmDef && this.realmDef.music) || 'battle');   // M5.0: per-realm theme
+    AUDIO.playMusic(this._bellyArena ? 'sandArena' : ((this.realmDef && this.realmDef.music) || 'battle'));   // M5.0: per-realm theme; belly ACT 2 = the last-stand trance
     this.cameras.main.fadeIn(300);
   },
 
@@ -3422,7 +3595,86 @@ var RealmScene = new Phaser.Class({
   // The boss now DROPS A CHEST (V10) instead of auto-awarding. SPACE opens it
   // (Q6 contextual interact); a PoE2-style selection overlay lists the loot.
   // Rewards are banked + persisted at OPEN time — before any screen (TM-4 rule).
+  // ---------------------------------- BELLY TWO-ACT FINALE (2026-07-19) -----
+  // The whale dying is only HALF the win — the sand must also be cleared (the
+  // 1000-kill horde). Bespoke so we don't stop the last-stand music while the
+  // swarm's still up. When BOTH are done → the screen SHATTERS → cs2/cs3/cs4.
+  bellyBossDown: function (boss) {
+    var def = boss.boss.def, bx = boss.x, by = boss.y;
+    this.burst(bx, by, 40, def.deathTint);
+    var MBC = (typeof MAPS !== 'undefined' && MAPS.forScene) ? MAPS.forScene(this) : null;
+    if (MBC && MBC.scene && MBC.scene.bossCleanup) { try { MBC.scene.bossCleanup(this, boss); } catch (e) {} }
+    boss.destroy(); this.boss = null;
+    if (this.bossBar) { this.bossBar.destroy(); this.bossBarBg.destroy(); this.bossName.destroy(); this.bossBar = null; }
+    try { AUDIO.play('victory'); } catch (e) {}
+    this._bellyBossDead = true;
+    var C = this._belly, goal = (C && C.horde && C.horde.goal) || 1000;
+    if (C && C.horde && C.horde.kills >= goal) this.triggerBellyFinale();
+    else this.banner('THE WHALE LIES DEAD\nbut the swarm still comes — DEVOUR THEM ALL', '#ff9ab0');
+  },
+  triggerBellyFinale: function () {
+    if (this._bellyFinaleFired) return;
+    this._bellyFinaleFired = true;
+    var self = this, cls = (typeof CURRENT !== 'undefined' && CURRENT && CURRENT.cls) || 'ranger';
+    this.closing = true;                                   // halts the director + the spawn-queue drain
+    try { AUDIO.stopMusic(); } catch (e) {}
+    this.mobs.children.iterate(function (m) { if (m && m.active) { try { Entities.clearNameTag(m); } catch (e) {} self.mobs.killAndHide(m); if (m.body) m.body.enable = false; } });
+    if (this.player && this.player.body) this.player.body.setVelocity(0, 0);
+    var C = this._belly; if (C && C.hordeText && C.hordeText.active) C.hordeText.setText('DEVOURED  ' + ((C.horde && C.horde.goal) || 1000) + ' / ' + ((C.horde && C.horde.goal) || 1000));
+    this._bellyShatter(function () {
+      // The end cutscenes fire EVERY time the whale dies (Red, 2026-07-19), but
+      // beatTheGame grants the legendary + flips ACCOUNT.beaten — do that only
+      // the FIRST clear so replays don't re-award. CS2/CS3 still play every kill.
+      // CS4 THE UNVEILING is the exception: it is the ninja-UNLOCK reveal, so it
+      // only plays the very FIRST beat (when this clear is what actually unlocks
+      // the ninja). Capture that BEFORE beatTheGame flips the device flag (v7, Red).
+      var ninjaWasUnlocked = false; try { ninjaWasUnlocked = !!(SAVE.settings().ninjaUnlocked); } catch (e) {}
+      try { if (typeof ACCOUNT === 'undefined' || !ACCOUNT.beaten) beatTheGame(cls); } catch (e) {}
+      var toHome = { scene: 'Nexus', data: { entry: 'realm' } };
+      var afterCs3 = ninjaWasUnlocked
+        ? toHome                                                       // ninja already unlocked → skip the unveiling
+        : { scene: 'Cutscene', data: { id: 'cs4', cls: cls, next: toHome } };  // first beat → play it once
+      self.scene.start('Cutscene', { id: 'cs2', cls: cls, next:
+        { scene: 'Cutscene', data: { id: 'cs3', cls: cls, next: afterCs3 } } });
+    });
+  },
+  // THE SCREEN SHATTERS — glass shards crack across the frozen frame, hold a
+  // beat, then fall away into black → the finale cutscenes.
+  _bellyShatter: function (cb) {
+    var self = this, W = this.scale.width, H = this.scale.height;
+    this.cameras.main.shake(360, 0.02);
+    try { AUDIO.play('flipperslam'); } catch (e) {}
+    var flash = this.add.rectangle(W / 2, H / 2, W, H, 0xffffff, 0).setScrollFactor(0).setDepth(120);
+    this.tweens.add({ targets: flash, alpha: 0.9, duration: 80, yoyo: true, onComplete: function () { try { flash.destroy(); } catch (e) {} } });
+    var cols = 7, rows = 5, cw = W / cols, ch = H / rows, shards = [];
+    for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) {
+      var x0 = c * cw, y0 = r * ch, jx = (SIM.rng() - 0.5) * cw * 0.5, jy = (SIM.rng() - 0.5) * ch * 0.5, mx = x0 + cw * 0.5 + jx, my = y0 + ch * 0.5 + jy;
+      var g = this.add.graphics().setScrollFactor(0).setDepth(121);
+      var quads = [[[x0, y0], [x0 + cw, y0]], [[x0 + cw, y0], [x0 + cw, y0 + ch]], [[x0 + cw, y0 + ch], [x0, y0 + ch]], [[x0, y0 + ch], [x0, y0]]];
+      for (var q = 0; q < 4; q++) {
+        g.fillStyle(q % 2 ? 0x0a0c12 : 0x12161e, 0.5); g.lineStyle(1, 0xbfe9ff, 0.8);
+        g.beginPath(); g.moveTo(quads[q][0][0], quads[q][0][1]); g.lineTo(quads[q][1][0], quads[q][1][1]); g.lineTo(mx, my); g.closePath(); g.fillPath(); g.strokePath();
+      }
+      shards.push({ g: g, cx: mx });
+    }
+    this.time.delayedCall(280, function () {
+      shards.forEach(function (s) {
+        var dir = (s.cx < W / 2) ? -1 : 1;
+        self.tweens.add({ targets: s.g, y: '+=' + (H * 0.9 + SIM.rng() * H * 0.5), x: '+=' + (dir * (18 + SIM.rng() * 80)),
+          alpha: 0, duration: 620 + SIM.rng() * 260, ease: 'Quad.easeIn', onComplete: function () { try { s.g.destroy(); } catch (e) {} } });
+      });
+      self.time.delayedCall(720, function () { if (typeof cb === 'function') cb(); });
+    });
+  },
+
   onBossDown: function (boss) {
+    // BELLY TWO-ACT: route the whale's death through the finale gate (see above).
+    if (this.realmDef && this.realmDef.finale && !this._bellyFinaleFired && typeof CutsceneScene !== 'undefined') {
+      // finale:true realms (the PINNACLE) ALWAYS go straight into the shatter →
+      // end cutscenes on the whale kill — never a chest/portal, even on replays
+      // (2026-07-19 Red). The legendary grant still only happens the first time.
+      return this.bellyBossDown(boss);
+    }
     var def = boss.boss.def;
     var bx = boss.x, by = boss.y;
     this.burst(bx, by, 40, def.deathTint);
@@ -3458,13 +3710,19 @@ var RealmScene = new Phaser.Class({
     // M4.6: every rolled key passes through SIM.resolveDrop — a wizard/knight
     // receives their OWN class line (no off-class drops; same RNG stream).
     var rolled = [];
+    // 2026-07-18 (Red): DEPTH-SHIFTED loot — deeper corruptions skew richer.
+    // SIM.depthLootShift is identity at depth 0 (fresh save), so the RNG stream
+    // and outcomes are unchanged on the first region / in suites.
+    var _depth = this.progressDepth || 0;
     var table = def.lootTable && DATA.dropTables[def.lootTable];
-    if (table) for (var i = 0; i < table.rolls; i++) rolled.push(SIM.resolveDrop(SIM.rollDrop(table.entries), CURRENT.cls));
+    if (table) { var _te = SIM.depthLootShift(table.entries, _depth);
+      for (var i = 0; i < table.rolls; i++) rolled.push(SIM.resolveDrop(SIM.rollDrop(_te), CURRENT.cls)); }
     // E9 v2 — CHAMPION BOUNTY: every champion killed this realm adds a roll
     // (capped) — affixed mobs drop better, paid out where loot lives: the chest.
     var B = DATA.affixes.championBounty;
     var bounty = Math.min(B.cap, this.championKills * B.perKill);
-    for (var j = 0; j < bounty; j++) rolled.push(SIM.resolveDrop(SIM.rollDrop(DATA.dropTables[B.table].entries), CURRENT.cls));
+    var _be = SIM.depthLootShift(DATA.dropTables[B.table].entries, _depth);
+    for (var j = 0; j < bounty; j++) rolled.push(SIM.resolveDrop(SIM.rollDrop(_be), CURRENT.cls));
     // M5.5: already-owned rolls become bonus XP; only NEW items drop
     var res = resolveLootRolls(rolled);
     this.pendingLoot = {
@@ -3512,7 +3770,7 @@ var RealmScene = new Phaser.Class({
       if (!mid || !ACCOUNT || !Array.isArray(ACCOUNT.cleared)) return;
       if (ACCOUNT.cleared.indexOf(mid) < 0) {
         ACCOUNT.cleared.push(mid);
-        ACCOUNT.mapTokens = (ACCOUNT.mapTokens || 0) + 1;    // +1 token per NEW clear
+        SAVE.addTokens(1);                                    // v6: +1 to the cross-character device pool per NEW clear
         if (mid === 'belly') ACCOUNT.beaten = true;           // patient zero purged
       }
     })(this.realmId);
@@ -3701,7 +3959,8 @@ var RealmScene = new Phaser.Class({
       ? DATA.potions.stats[Math.floor(SIM.rng() * DATA.potions.stats.length)] : null;
     var rolled = [];                                      // M3: trial gear (pocket change)
     var table = this.modeDef.lootTable && DATA.dropTables[this.modeDef.lootTable];
-    if (table) for (var i = 0; i < table.rolls; i++) rolled.push(SIM.resolveDrop(SIM.rollDrop(table.entries), CURRENT.cls));   // M4.6: class-locked drops
+    if (table) { var _te = SIM.depthLootShift(table.entries, this.progressDepth || 0);   // 2026-07-18: depth-shifted
+      for (var i = 0; i < table.rolls; i++) rolled.push(SIM.resolveDrop(SIM.rollDrop(_te), CURRENT.cls)); }   // M4.6: class-locked drops
     var res = resolveLootRolls(rolled);                  // M5.5: dupes → bonus XP
     this.pendingLoot = { kind: 'survival', stat: stat, xp: this.modeDef.xpBonus + res.dupeXp,
                          items: res.items, dupes: res.dupes,
@@ -3727,7 +3986,10 @@ var RealmScene = new Phaser.Class({
   directorSpend: function () {
     if (!this.player.state.alive) return;
     var tSec = (this.time.now - this.startedAt) / 1000;
-    var budget = DATA.waves.budget(tSec);
+    // Per-realm ramp multiplier: the belly guts (Act 1) run hotter than a normal
+    // realm — DATA.realms.belly.spawnMult scales the director budget (Red asked
+    // for a higher ramp rate inside the whale, 2026-07-19). Defaults to 1×.
+    var budget = DATA.waves.budget(tSec) * ((this.realmDef && this.realmDef.spawnMult) || 1);
     // E7: the spawn pool comes from the realm's BIOME roster, never the global
     // mob table — attaching a mob to a biome IS adding it to this list.
     var roster = DATA.biomes[this.realmBiome || DATA.realm.biome].mobs;
@@ -4408,6 +4670,103 @@ var RealmScene = new Phaser.Class({
     }
   },
 
+  // ---- 2026-07-19: NINJA SHADOW CLONE JUTSU (Red) ---------------------------
+  // Entities.castShadowClone spends the CHI and calls this to spawn the squad.
+  // Each clone is a translucent red echo of the ninja that ORBITS him and
+  // auto-fires HOMING, BLEEDING shuriken at the nearest enemy on its own cadence
+  // (all into playerShots, so the existing overlaps do the damage/bleed). The
+  // clones live out `ab.durationMs` on their own clock in updateShadowClones.
+  // `dmg`/`burnTick` are snapshotted at cast (scaled by ATT then) — same rule as
+  // the volley. A small SMOKE-POOF marks each arrival. Presentation + pooled
+  // shots only; no new physics groups (seam-safe).
+  summonShadowClones: function (p, st, ab, count, wDmg, time) {
+    var n = Math.max(1, count || 1);
+    var dmg = SIM.damage(wDmg * (ab.dmgMult || 1), st.stats.att, 0);
+    var burnTick = ab.burn ? SIM.damage(ab.burn.dmg, st.stats.att, 0) : 0;
+    var texKey = (p.texture && p.texture.key) || DATA.classes.ninja.texture || 'ninja';
+    var scl = (p.scale || 1);
+    for (var i = 0; i < n; i++) {
+      var base = Math.PI * 2 * i / n;
+      var cx = p.x + Math.cos(base) * (ab.orbit || 46);
+      var cy = p.y + Math.sin(base) * (ab.orbit || 46);
+      var fx = this.add.sprite(cx, cy, texKey).setDepth(9.4)
+        .setScale(scl * 0.92).setAlpha(0.55).setTint(ab.tint || 0xe84545)
+        .setBlendMode(Phaser.BlendModes.NORMAL);
+      this.shadowClones.push({ fx: fx, base: base, spin: 1.6 + i * 0.15,
+        dieAt: time + (ab.durationMs || 5000), lastFireAt: time - 9999,
+        dmg: dmg, burnTick: burnTick, ab: ab });
+      this.shadowClonePoof(cx, cy, ab.tint || 0xe84545);
+    }
+    try { AUDIO.play(ab.sound || 'volley'); } catch (e) {}
+  },
+
+  // a quick red smoke-poof — a clone appearing / vanishing. Cosmetic only.
+  shadowClonePoof: function (x, y, tint) {
+    if (!this.textures.exists('softglow')) return;
+    var s = this.add.sprite(x, y, 'softglow').setDepth(9.5)
+      .setBlendMode(Phaser.BlendModes.ADD).setTint(tint).setScale(0.5).setAlpha(0.85);
+    this.tweens.add({ targets: s, scale: 1.5, alpha: 0, duration: 320,
+      onComplete: function () { s.destroy(); } });
+  },
+
+  // per-frame: fly the clones around the ninja, fire their homing bleed-stars at
+  // the nearest live enemy, and retire any whose timer is up (or all of them the
+  // instant the ninja dies). Called from update() only when clones exist.
+  updateShadowClones: function (time) {
+    var clones = this.shadowClones;
+    if (!clones || !clones.length) return;
+    var p = this.player, alive = p && p.state && p.state.alive;
+    for (var i = clones.length - 1; i >= 0; i--) {
+      var c = clones[i];
+      if (!alive || time >= c.dieAt) {
+        this.shadowClonePoof(c.fx.x, c.fx.y, (c.ab.tint || 0xe84545));
+        try { c.fx.destroy(); } catch (e) {}
+        clones.splice(i, 1);
+        continue;
+      }
+      // orbit the ninja + spin the star in-hand; breathe the alpha so they read
+      // as after-images, not solid bodies.
+      var ang = c.base + time / 1000 * c.spin;
+      var ox = p.x + Math.cos(ang) * (c.ab.orbit || 46);
+      var oy = p.y + Math.sin(ang) * (c.ab.orbit || 46);
+      c.fx.setPosition(ox, oy)
+        .setRotation(c.fx.rotation + 0.25)
+        .setAlpha(0.4 + 0.2 * Math.sin(time / 160 + c.base));
+      // fire on cadence at the nearest enemy in seek range (homing does the rest)
+      if (time - c.lastFireAt < (c.ab.fireEveryMs || 220)) continue;
+      var tgt = this.nearestEnemyTo(ox, oy, 520);
+      if (!tgt) continue;
+      c.lastFireAt = time;
+      var a = Math.atan2(tgt.y - oy, tgt.x - ox);
+      var shot = Entities.fireProjectile(this, this.playerShots, ox, oy, a,
+        c.ab.projSpeed || 680, c.dmg, c.ab.lifeMs || 900, 'shurikenProj', false, 'clone');
+      if (shot) {
+        shot.setTint(c.ab.tint || 0xe84545);
+        if (c.ab.homing) shot.proj.homing = { turn: c.ab.homing.turn || 6 };
+        if (c.burnTick && c.ab.burn) shot.proj.burn = { tick: c.burnTick,
+          everyMs: c.ab.burn.everyMs, ms: c.ab.burn.ms };
+        shot.body.setSize(6, 6).setOffset(0.5, 0.5);
+      }
+    }
+  },
+
+  // nearest active mob OR the boss to (x,y) within `range` px — the clones' aim
+  // helper. Returns the Phaser object (has .x/.y) or null.
+  nearestEnemyTo: function (x, y, range) {
+    var best = range * range, pick = null;
+    this.mobs.children.iterate(function (m) {
+      if (!m || !m.active) return;
+      if (m.mob && m.mob.concealed) return;                 // can't lock a fogged mob
+      var d2 = (m.x - x) * (m.x - x) + (m.y - y) * (m.y - y);
+      if (d2 < best) { best = d2; pick = m; }
+    });
+    if (this.boss && this.boss.active) {
+      var bd2 = (this.boss.x - x) * (this.boss.x - x) + (this.boss.y - y) * (this.boss.y - y);
+      if (bd2 < best) { best = bd2; pick = this.boss; }
+    }
+    return pick;
+  },
+
   // M4.8: RANGER DODGE-REGEN cue — a soft green aura on the player + slow
   // rising '+' motes while st.regenning (set in Entities.updatePlayer). The
   // orb already shows HP climbing; this makes it felt in the world. Cosmetic
@@ -4646,6 +5005,7 @@ var RealmScene = new Phaser.Class({
     Entities.updateProjectiles(this, this.enemyShots, time);
     this.updateTornadoes(time);                            // M4: Knight whirlwind tornadoes
     this.updateWhirlwind(time);                            // M4: Knight whirlwind ring VFX
+    this.updateShadowClones(time);                         // 2026-07-19: Ninja shadow-clone squad
     this.updateRegenGlow(time);                            // M4.8: Ranger dodge-regen aura
     this.updateSlime(time);                                // M4.9: conductor-zombie slime hazard
     this.updateFog(time);                                  // M4.9: smog-serpent concealment fog
@@ -4656,6 +5016,7 @@ var RealmScene = new Phaser.Class({
     // M4.7: a rolling GHOST EXPRESS finishes its pass even if the player just
     // died (same rule as the ambush train); frozen during hitstop the same way.
     if (!this.hitstopActive) this.updateGhostTrain(time, delta);
+    this.wrapTrainYard();                                  // toroidal map — off one edge, on the other (self-guards to the yard)
     this.updateGrove(time, delta);                         // M5.0: grove hazard/queues/revive
     this.updateGraveyard(time, delta);                     // M5.6: witching cycle + gate/fences
     this.updateFactory(time, delta);                       // M5.7: conveyors + alive props + engineer
@@ -6073,6 +6434,7 @@ var RealmScene = new Phaser.Class({
   updateGrove: function (time, delta) {
     this.drainSpawnQueue();
     if (!this.realmDef || this.realmDef.kind !== 'grove') return;
+    this.wrapGrove();                                       // toroidal map — off one edge, on the other
     // phase-two channel completion
     if (this._reviveState && time >= this._reviveState.until) this.finishRevive();
     // ambient falling trees (quiet while the boss owns the clearing)
@@ -6245,6 +6607,35 @@ var RealmScene = new Phaser.Class({
   // graveyard). The Grand Engineer / mech is a separate this.boss object and is
   // NOT in this.mobs, so it never wraps — it stays hunting on the field.
   wrapFactory: function () {
+    var WW = this.worldW, HH = this.worldH;
+    var wrap = function (o) {
+      if (!o) return;
+      var nx = o.x, ny = o.y, moved = false;
+      if (o.x < 0) { nx = o.x + WW; moved = true; } else if (o.x >= WW) { nx = o.x - WW; moved = true; }
+      if (o.y < 0) { ny = o.y + HH; moved = true; } else if (o.y >= HH) { ny = o.y - HH; moved = true; }
+      if (!moved) return;
+      if (o.body && o.body.reset) { var vx = o.body.velocity.x, vy = o.body.velocity.y; o.body.reset(nx, ny); o.body.velocity.x = vx; o.body.velocity.y = vy; }
+      else { o.x = nx; o.y = ny; }
+    };
+    wrap(this.player);
+    this.mobs.children.iterate(function (m) { if (m && m.active && m.mob && !m.mob.bossWave) wrap(m); });
+  },
+  // SCREEN WRAP (fix 2026-07-18): the TRAIN YARD and THE GROVE are open-field
+  // realms just like the graveyard/factory but were built just BEFORE the
+  // toroidal decision (Red 2026-07-15) and never got it — the player walked off
+  // an edge and stuck to the wall. Both now wrap identically: player + the
+  // swarm reappear on the opposite side; bosses (separate this.boss objects,
+  // not in this.mobs) and boss-wave adds never wrap. The trains ride their own
+  // track logic and are not sprites in this.mobs, so they're untouched.
+  wrapTrainYard: function () {
+    if (!this.realmDef || this.realmDef.kind !== 'yard') return;
+    this._wrapField();
+  },
+  wrapGrove: function () {
+    this._wrapField();
+  },
+  // shared toroidal wrap (identical body to wrapFactory / wrapGraveyard).
+  _wrapField: function () {
     var WW = this.worldW, HH = this.worldH;
     var wrap = function (o) {
       if (!o) return;

@@ -776,15 +776,15 @@
       ctx.spr('neonLifterHi', MS, MS, drawLifter);
       ctx.spr('neonViperHi', MS, MS, drawViper);
       ctx.spr('neonLoaderHi', MS, MS, drawLoader);
-      ctx.MOB_HI.streetPunk = 'neonPunkHi';       ctx.MOB_DISPLAY.streetPunk = 48;
-      ctx.MOB_HI.spyDrone = 'neonDroneHi';         ctx.MOB_DISPLAY.spyDrone = 42;
-      ctx.MOB_HI.riotEnforcer = 'neonEnforcerHi';  ctx.MOB_DISPLAY.riotEnforcer = 54;
-      ctx.MOB_HI.netrunner = 'neonNetrunnerHi';    ctx.MOB_DISPLAY.netrunner = 48;
-      ctx.MOB_HI.turretPod = 'neonTurretHi';       ctx.MOB_DISPLAY.turretPod = 46;
-      ctx.MOB_HI.cyberRats = 'neonRatsHi';         ctx.MOB_DISPLAY.cyberRats = 32;
-      ctx.MOB_HI.cargoLifter = 'neonLifterHi';     ctx.MOB_DISPLAY.cargoLifter = 60;
-      ctx.MOB_HI.neonViper = 'neonViperHi';        ctx.MOB_DISPLAY.neonViper = 50;
-      ctx.MOB_HI.exoLoader = 'neonLoaderHi';       ctx.MOB_DISPLAY.exoLoader = 62;
+      ctx.MOB_HI.streetPunk = 'neonPunkHi';       ctx.MOB_DISPLAY.streetPunk = 101;
+      ctx.MOB_HI.spyDrone = 'neonDroneHi';         ctx.MOB_DISPLAY.spyDrone = 88;
+      ctx.MOB_HI.riotEnforcer = 'neonEnforcerHi';  ctx.MOB_DISPLAY.riotEnforcer = 113;
+      ctx.MOB_HI.netrunner = 'neonNetrunnerHi';    ctx.MOB_DISPLAY.netrunner = 101;
+      ctx.MOB_HI.turretPod = 'neonTurretHi';       ctx.MOB_DISPLAY.turretPod = 97;
+      ctx.MOB_HI.cyberRats = 'neonRatsHi';         ctx.MOB_DISPLAY.cyberRats = 67;
+      ctx.MOB_HI.cargoLifter = 'neonLifterHi';     ctx.MOB_DISPLAY.cargoLifter = 126;
+      ctx.MOB_HI.neonViper = 'neonViperHi';        ctx.MOB_DISPLAY.neonViper = 105;
+      ctx.MOB_HI.exoLoader = 'neonLoaderHi';       ctx.MOB_DISPLAY.exoLoader = 130;
       // ---- boss: SOCIAL ENGINEER (128 canvas, small display — kid-sized) ----
       ctx.spr('neonBossHi', 128, 128, drawBoss);
       ctx.spr('neonBossVentHi', 128, 128, drawBossVent);

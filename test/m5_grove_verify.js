@@ -538,29 +538,33 @@ function check(name, ok, detail) {
   // are gone; devOn() is hard-false. The old 2-check dev-mode block was deleted.
   // The 24-slot vault + legendary/tier data are still covered by other suites.
 
-  // -- M5.4 LEVEL IS COSMETIC + MOBS SCALE WITH LEVEL ------------------------------
+  // -- M5.4 LEVEL IS COSMETIC + 2026-07-18 (Red) MOBS SCALE WITH CAMPAIGN DEPTH ----
+  // (level-scaling retired: mobLevelScale 0.03→0; the world-threat axis moved to
+  //  DATA.progression / SIM.depthMult, keyed on regions cleared.)
   const flat = await page.evaluate(`(function(){
     var cls = DATA.classes.ranger;
     var s1 = SIM.statsFor(cls, 1, null, null), s60 = SIM.statsFor(cls, 60, null, null);
     return { same: JSON.stringify(s1) === JSON.stringify(s60), levelPower: DATA.xp.levelPower,
-             m1: SIM.mobLevelMult(1), m60: +SIM.mobLevelMult(60).toFixed(3) };})()`);
+             d0: SIM.depthMult(0).mobHp, dMax: +SIM.depthMult(DATA.progression.maxDepth).mobHp.toFixed(3) };})()`);
   check('LEVEL IS COSMETIC: player base stats identical at L1 and L60 (power = gear + potions)',
     flat.same && flat.levelPower === false);
-  check('mob level mult: 1.0 at L1, higher at L60', flat.m1 === 1 && flat.m60 > 1, `L60 ×${flat.m60}`);
+  check('DEPTH mult: 1.0 at depth 0, higher at max depth (world scales with progress)',
+    flat.d0 === 1 && flat.dMax > 1, `depth-max ×${flat.dMax}`);
   const scaled = await page.evaluate(`(function(){var r=${scene('Realm')};
     var p = r.player;
     r.mobs.children.iterate(function(m){ if (m && m.active) { m.body.enable=false; r.mobs.killAndHide(m); } });
-    p.state.level = 1;
+    var _d0 = r.progressDepth;
+    r.progressDepth = 0;
     var a = Entities.spawnMob(r, 'moonmoth', p.x + 300, p.y); a.mob.affix = null;
     var hp1 = a.mob.hp, dm1 = a.mob.dmgMult, xp1 = a.mob.xp;
-    p.state.level = 60;
+    r.progressDepth = DATA.progression.maxDepth;
     var b = Entities.spawnMob(r, 'moonmoth', p.x + 330, p.y); b.mob.affix = null;
-    var hp60 = b.mob.hp, dm60 = b.mob.dmgMult, xp60 = b.mob.xp;
-    p.state.level = 1;
-    return { hp1: hp1, hp60: hp60, dmgBigger: dm60 > dm1, xpBigger: xp60 > xp1,
-             hpBigger: hp60 > hp1 };})()`);
-  check('a mob spawned at L60 has more HP · damage · XP than at L1 (mobs scale with you)',
-    scaled.hpBigger && scaled.dmgBigger && scaled.xpBigger, `hp ${scaled.hp1}→${scaled.hp60}`);
+    var hpD = b.mob.hp, dmD = b.mob.dmgMult, xpD = b.mob.xp;
+    r.progressDepth = _d0;
+    return { hp1: hp1, hpD: hpD, dmgBigger: dmD > dm1, xpBigger: xpD > xp1,
+             hpBigger: hpD > hp1 };})()`);
+  check('a mob spawned at MAX DEPTH has more HP · damage · XP than at depth 0 (world scales with progress)',
+    scaled.hpBigger && scaled.dmgBigger && scaled.xpBigger, `hp ${scaled.hp1}→${scaled.hpD}`);
 
   // -- M5.5 COLLECTION: dupes → bonus XP · gear auto-upgrades + remains ------------
   const coll = await page.evaluate(`(function(){var r=${scene('Realm')};

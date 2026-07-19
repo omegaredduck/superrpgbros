@@ -803,13 +803,27 @@
     // helper: kill player shots that hit the frontal shield arc (block).
     _frontalBlock: function (scene, m, arcRad, range) {
       var shots = scene.playerShots; if (!shots) return;
+      // SHIELD WINDOW (fix 2026-07-18): this block used to run at 100% uptime
+      // with the cone re-aimed at the player EVERY frame, so aimed shots were
+      // always dead-centre in the arc and NEVER connected — Gladiators / Shield
+      // Legionaries read as unkillable to a ranged player, and the advertised
+      // "flanks/back open" counter was impossible against aimed fire. Fix,
+      // mirroring every other shield mob in the game (Sugar Mint Guardian,
+      // Neon Riot Enforcer): the shield DROPS on a cycle for a guaranteed
+      // damage window, and the blocking arc is tightened so genuinely off-angle
+      // shots slip past. m.mob is rebuilt each spawn, so this state is fresh.
+      var t = scene.time.now, mo = m.mob;
+      if (!mo._shieldCycle) mo._shieldCycle = t + 2400 + SIM.rng() * 1400;  // first drop, staggered
+      if (mo._shieldDownUntil && t < mo._shieldDownUntil) return;           // shield DOWN — fully vulnerable
+      if (t >= mo._shieldCycle) { mo._shieldDownUntil = t + 1100; mo._shieldCycle = t + 3300 + SIM.rng() * 1000; return; }
+      var arc = Math.min(arcRad, 0.6);                                      // tighter cone (~±34°) than the data's 0.9
       var face = Math.atan2(scene.player.y - m.y, scene.player.x - m.x);
       shots.children.iterate(function (s) {
         if (!s || !s.active || s.proj && s.proj._colBlocked) return;
         var d = Math.hypot(s.x - m.x, s.y - m.y); if (d > range) return;
         var sa = Math.atan2(s.y - m.y, s.x - m.x);
         var diff = Math.atan2(Math.sin(sa - face), Math.cos(sa - face));
-        if (Math.abs(diff) < arcRad) {
+        if (Math.abs(diff) < arc) {
           if (s.proj) s.proj._colBlocked = true;
           scene.burst(s.x, s.y, 4, 0xa8aeb8);
           Entities.killProjectile(shots, s);

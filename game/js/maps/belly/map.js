@@ -109,6 +109,82 @@
     };
   })();
 
+  // ---- "THE LAST TIDE" — the belly's TRANCE mix (2026-07-19, Red: "crazy,
+  // frantic, euphoric... a full 10-min mix"). Plays BOTH acts (guts + sand
+  // arena). 144 BPM, 4-on-floor kick, rolling offbeat bass, gated 16th arps,
+  // lush pads, a soaring chord-tone anthem lead, kickless breakdowns, risers,
+  // key-changes and fast solo runs across a ~10-minute journey (loops clean —
+  // every track advances 4 beats/bar in lockstep). Procedural = no giant literal.
+  var LAST_TIDE = (function () {
+    var NM = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    function m2n(m){ return m == null ? null : NM[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); }
+    var Am=[57,60,64], F=[53,57,60], C=[48,52,55], G=[55,59,62], Dm=[50,53,57], Bb=[58,62,65], E=[52,56,59];
+    var P0=[Am,F,C,G], P1=[Dm,Bb,F,C], P2=[Am,G,F,E], P3=[C,G,Am,F];
+    var kick=[], bass=[], arp=[], arp2=[], padA=[], padB=[], lead=[];
+    function push(a, arr){ for (var i=0;i<arr.length;i++) a.push(arr[i]); }
+    function fix(cell){ var s=0,i; for(i=0;i<cell.length;i++) s+=cell[i][1];
+      if (Math.abs(s-4)>1e-6){ if (s<4) cell.push([null,4-s]); else cell[cell.length-1][1]=Math.max(0.0625,cell[cell.length-1][1]-(s-4)); } return cell; }
+    function kickBar(){ var o=[],i; for(i=0;i<4;i++){ o.push([m2n(33),0.2]); o.push([null,0.8]); } return o; }
+    function bassBar(root){ var r=root-12,o=[],b; for(b=0;b<4;b++){ o.push([null,0.25]); o.push([m2n(r),0.25]); o.push([m2n(r),0.25]); o.push([m2n(r),0.25]); } return o; }
+    function arpBar(ch,oct){ var s=[ch[0],ch[1],ch[2],ch[0]+12,ch[1]+12,ch[2]+12,ch[1]+12,ch[0]+12,ch[2],ch[1]+12,ch[0]+12,ch[2]+12,ch[1]+12,ch[0]+12,ch[2],ch[1]+12],o=[],i;
+      for(i=0;i<16;i++) o.push([m2n(s[i]+12*(oct||0)),0.25]); return o; }
+    function anthem(ch,oct){ var r=(oct||0)*12; return [[m2n(ch[2]+12+r),1],[m2n(ch[0]+24+r),1],[m2n(ch[1]+12+r),2]]; }
+    function anthemB(ch,oct){ var r=(oct||0)*12; return [[m2n(ch[0]+24+r),1],[m2n(ch[2]+12+r),1],[m2n(ch[1]+24+r),0.5],[m2n(ch[2]+12+r),0.5],[m2n(ch[0]+24+r),1]]; }
+    function brk(ch){ return [[m2n(ch[0]+12),2],[m2n(ch[2]+12),2]]; }
+    function brk2(ch){ return [[m2n(ch[2]+12),2],[m2n(ch[1]+24),2]]; }
+    function riser(i){ var d=[69,71,72,74,76,77,79,81][i%8]; return [[m2n(d),0.5],[m2n(d),0.5],[m2n(d),0.5],[m2n(d),0.5],[m2n(d),0.25],[m2n(d),0.25],[m2n(d),0.25],[m2n(d),0.25],[m2n(d),0.5]]; }
+    function solo(ch,i){ var sc=[ch[0]+12,ch[1]+12,ch[2]+12,ch[0]+24,ch[1]+24,ch[2]+24,ch[1]+24,ch[0]+24,ch[2]+12,ch[1]+24,ch[0]+24,ch[2]+24,ch[1]+24,ch[0]+24,ch[2]+12,ch[1]+12],o=[],k;
+      for(k=0;k<16;k++) o.push([m2n(sc[(i*3+k)%16]),0.25]); return o; }
+    function sect(bars, prog, o){ o=o||{};
+      for (var i=0;i<bars;i++){ var ch=prog[i%prog.length];
+        if (o.kick===false){ kick.push([null,4]); bass.push([m2n(ch[0]-12),4]); }
+        else { push(kick,kickBar()); push(bass,bassBar(ch[0])); }
+        if (o.arp===false) arp.push([null,4]); else push(arp,arpBar(ch,o.arpoct||0));
+        if (o.arp2) push(arp2,arpBar(ch,(o.arpoct||0)+1)); else arp2.push([null,4]);
+        if (o.pad===false){ padA.push([null,4]); padB.push([null,4]); }
+        else { padA.push([m2n(ch[0]),4]); padB.push([m2n(ch[1]),2]); padB.push([m2n(ch[2]),2]); }
+        var lt=o.lead||'rest', cell;
+        if (lt==='anthem') cell=anthem(ch,o.leadoct||0); else if (lt==='anthemB') cell=anthemB(ch,o.leadoct||0);
+        else if (lt==='break') cell=brk(ch); else if (lt==='break2') cell=brk2(ch);
+        else if (lt==='riser') cell=riser(i); else if (lt==='solo') cell=solo(ch,i); else cell=[[null,4]];
+        var cc=[],j; for(j=0;j<cell.length;j++) cc.push([cell[j][0],cell[j][1]]);
+        push(lead, fix(cc));
+      }
+    }
+    // ===== the ~10-minute journey (360 bars @144 BPM = 600.0s) =====
+    sect(16,P0,{lead:'rest',pad:false});                         // intro pulse
+    sect(8, P0,{lead:'rest'});                                   // pads bloom
+    sect(16,P0,{arpoct:1,lead:'anthem'});                        // DROP 1
+    sect(8, P0,{arpoct:1,lead:'rest'});                          // groove
+    sect(16,P0,{kick:false,arp:false,lead:'break'});             // BREAKDOWN 1
+    sect(8, P0,{arpoct:1,lead:'riser'});                         // riser
+    sect(24,P0,{arpoct:1,arp2:true,lead:'anthem',leadoct:1});    // DROP 2 (big)
+    sect(8, P0,{arpoct:1,lead:'rest'});
+    sect(16,P1,{arpoct:1,lead:'anthem'});                        // key lift → P1
+    sect(16,P1,{arpoct:1,arp2:true,lead:'anthemB',leadoct:1});   // DROP 3
+    sect(24,P2,{kick:false,arp:false,lead:'break2'});            // BIG BREAKDOWN 2 (dark)
+    sect(8, P2,{arpoct:1,lead:'riser'});
+    sect(16,P2,{arpoct:1,arp2:true,lead:'solo'});                // SOLO run section
+    sect(24,P0,{arpoct:1,arp2:true,lead:'anthem',leadoct:1});    // MEGA DROP
+    sect(8, P0,{arpoct:1,lead:'rest'});
+    sect(16,P3,{arpoct:1,lead:'anthem'});                        // P3 uplift
+    sect(24,P1,{arpoct:1,arp2:true,lead:'anthemB',leadoct:1});   // DROP 4
+    sect(16,P0,{kick:false,arp:false,lead:'break'});             // BREAKDOWN 3
+    sect(8, P0,{arpoct:1,lead:'riser'});
+    sect(32,P0,{arpoct:1,arp2:true,lead:'anthemB',leadoct:1});   // FINAL DROP (climax)
+    sect(16,P3,{arpoct:1,arp2:true,lead:'solo'});                // outro solo
+    sect(16,P0,{arpoct:0,lead:'rest'});                          // outro → loop
+    return { bpm:144, tracks:[
+      { type:'triangle', vol:0.30, notes:kick },   // 4-on-floor kick
+      { type:'sawtooth', vol:0.16, notes:bass },   // rolling offbeat bass
+      { type:'square',   vol:0.055, notes:arp },   // gated hypnotic arp
+      { type:'square',   vol:0.045, notes:arp2 },  // octave counter-arp (drops)
+      { type:'sawtooth', vol:0.05, notes:padA },   // pad root
+      { type:'sawtooth', vol:0.045, notes:padB },  // pad 3rd/5th
+      { type:'square',   vol:0.17, notes:lead }    // soaring anthem / solos
+    ]};
+  })();
+
   MAPS.register({
     id: 'belly',
 
@@ -120,8 +196,8 @@
                'acidSlug', 'bileJelly', 'lamprey', 'gutWorm', 'krillCloud', 'fleshPolyp']
       };
       DATA.realms.belly = {
-        name: 'Belly of the Beast', biome: 'belly', boss: 'titanWhale',
-        kind: 'belly', music: 'belly',
+        name: 'The Pinnacle of Corruption', biome: 'belly', boss: 'titanWhale',   // 2026-07-19 Red rename (was "Belly of the Beast")
+        kind: 'belly', music: 'sandArena',   // 2026-07-19 (Red): the trance mix drives BOTH acts
         // "???" NAME REVEAL — realm select shows hidden name until first clear
         nameReveal: { hidden: '???', revealOnFirstClear: true },
         // INTRO/OUTRO cinematics (beats verbatim; skippable on repeat)
@@ -139,7 +215,16 @@
         // THE UVULA — the exit trigger (attackable set piece)
         uvulaCfg: { hp: 260, triggersOutro: true },
         // ARENA — the beached-whale boss stage (bounded, no wrap)
-        arenaCfg: { stage: 'beach', bounded: true, rx: 520, ry: 300 }
+        arenaCfg: { stage: 'beach', bounded: true, rx: 520, ry: 300 },
+        // TWO-ACT (2026-07-19): ACT 1 clears the guts (kills → beaching cutscene);
+        // ACT 2 = the BIG sand map — a 1000-kill any-realm horde + the 1.5x whale.
+        gutsCfg: { goal: 55 },
+        // HIGHER RAMP RATE inside the whale (Red, 2026-07-19): the director budget
+        // is scaled by this in directorSpend — the guts should feel much hotter
+        // than a normal realm from the outset. (Red trimmed this 25% off the
+        // original 2.5 on 2026-07-19 — the guts were a touch too hot.)
+        spawnMult: 1.875,
+        hordeCfg: { goal: 1000, intervalMs: 640, burst: 5, maxCap: 52, rampMs: 6000 }
       };
 
       // ---- the 16 mobs (Red: "use the rest" — all but 13/14/15/20) ----
@@ -242,7 +327,7 @@
                       chompMs: 500, chompR: 130, chompDmg: 30 },
           flipper:  { warnMs: 1000, ringMs: 1100, maxR: 340, dmg: 22, gaps: 3, gapHalf: 0.5 },
           cough:    { everyMs: 15000, count: 3, cap: 10 },
-          waterGun: { chargeMs: 1400, sweepMs: 1600, corridorHalf: 60, dmg: 34,
+          waterGun: { chargeMs: 1400, sweepMs: 1600, corridorHalf: 60, dmg: 9999, oneShot: true, everyVerbs: 1,   // 2026-07-19 Red: TRUE one-shot snipe, 3x frequency (every verb)
                       ventMs: 3400, ventDmgMult: 1.5 },
           p2:       { hpPct: 0.5 }
         },
@@ -317,7 +402,8 @@
                                           noise: { vol: 0.12, hp: 400 } };
       DATA.audio.sounds.beachslide = { type: 'sawtooth', freq: 140, freqEnd: 60, len: 1.0, vol: 0.13, limitMs: 1100,
                                        noise: { vol: 0.1, hp: 300 } };
-      DATA.audio.music.belly = HEAVE_HO;
+      DATA.audio.music.belly = HEAVE_HO;             // the sea shanty (kept; belly now runs the trance)
+      DATA.audio.music.sandArena = LAST_TIDE;        // THE LAST TIDE — belly's trance mix (BOTH acts)
 
       // M7k AUDIT fix: the "???" reveal was dead code — the console row was
       // registered with the FIXED name '???' and BE.realmName() was never

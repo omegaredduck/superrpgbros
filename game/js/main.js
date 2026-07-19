@@ -12,6 +12,26 @@
   } catch (e) {}
 })();
 
+// v6 (2026-07-19, Red): MAP TOKENS ARE CROSS-CHARACTER now — the pool moved off
+// each per-slot account and into device settings. One-time seed so nobody loses
+// tokens in the move: take the highest balance any existing character held and
+// carry it into the shared device pool. Flag-guarded (runs once).
+(function () {
+  try {
+    if (typeof SAVE === 'undefined' || !SAVE.storageOk || !SAVE.storageOk()) return;
+    if (localStorage.getItem('srb_tokens_v6')) return;
+    var best = 0;
+    for (var s = 1; s <= SAVE.SLOTS; s++) {
+      var r = SAVE.load(s);
+      if (r.ok && r.data && r.data.account && typeof r.data.account.mapTokens === 'number')
+        best = Math.max(best, r.data.account.mapTokens);
+    }
+    var st = SAVE.settings();
+    if (best > (st.mapTokens || 0)) { st.mapTokens = best; SAVE.saveSettings(); }
+    localStorage.setItem('srb_tokens_v6', '1');
+  } catch (e) {}
+})();
+
 var game = new Phaser.Game({
   type: Phaser.AUTO,
   backgroundColor: '#0f0f1b',
@@ -30,7 +50,7 @@ var game = new Phaser.Game({
     height: 640
   },
   physics: { default: 'arcade', arcade: { debug: false } },
-  scene: [BootScene, TitleScene, NexusScene, RealmScene, BuilderScene, CutsceneScene]   // M3: map builder · v5: story cutscenes
+  scene: [BootScene, TitleScene, BodySelectScene, NexusScene, RealmScene, BuilderScene, CutsceneScene]   // M3: map builder · v5: story cutscenes · v7: dream-body select
 });
 
 // ESC-in-fullscreen fix (2026-07-12): by default the browser eats the Escape

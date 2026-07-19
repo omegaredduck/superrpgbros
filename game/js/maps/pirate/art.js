@@ -901,18 +901,18 @@
       ctx.spr('harpoonerHi', MS, MS, drawHarpooner);
       ctx.spr('inkpotOctoHi', MS, MS, drawInkpotOcto);
       ctx.spr('deckKegHi', MS, MS, drawDeckKeg);              // M7k AUDIT fix: 48px keg
-      ctx.MOB_HI.deckhand = 'deckhandHi';             ctx.MOB_DISPLAY.deckhand = 50;
-      ctx.MOB_HI.cutlassCorsair = 'cutlassCorsairHi'; ctx.MOB_DISPLAY.cutlassCorsair = 54;
-      ctx.MOB_HI.powderMonkey = 'powderMonkeyHi';     ctx.MOB_DISPLAY.powderMonkey = 44;
-      ctx.MOB_HI.saltyGull = 'saltyGullHi';           ctx.MOB_DISPLAY.saltyGull = 44;
-      ctx.MOB_HI.sirenWake = 'sirenWakeHi';           ctx.MOB_DISPLAY.sirenWake = 54;
-      ctx.MOB_HI.krakenArm = 'krakenArmHi';           ctx.MOB_DISPLAY.krakenArm = 60;
-      ctx.MOB_HI.makoLeaper = 'makoLeaperHi';         ctx.MOB_DISPLAY.makoLeaper = 56;
-      ctx.MOB_HI.drunkenSwab = 'drunkenSwabHi';       ctx.MOB_DISPLAY.drunkenSwab = 52;
-      ctx.MOB_HI.harpooner = 'harpoonerHi';           ctx.MOB_DISPLAY.harpooner = 54;
-      ctx.MOB_HI.inkpotOcto = 'inkpotOctoHi';         ctx.MOB_DISPLAY.inkpotOcto = 52;
+      ctx.MOB_HI.deckhand = 'deckhandHi';             ctx.MOB_DISPLAY.deckhand = 105;
+      ctx.MOB_HI.cutlassCorsair = 'cutlassCorsairHi'; ctx.MOB_DISPLAY.cutlassCorsair = 113;
+      ctx.MOB_HI.powderMonkey = 'powderMonkeyHi';     ctx.MOB_DISPLAY.powderMonkey = 92;
+      ctx.MOB_HI.saltyGull = 'saltyGullHi';           ctx.MOB_DISPLAY.saltyGull = 92;
+      ctx.MOB_HI.sirenWake = 'sirenWakeHi';           ctx.MOB_DISPLAY.sirenWake = 113;
+      ctx.MOB_HI.krakenArm = 'krakenArmHi';           ctx.MOB_DISPLAY.krakenArm = 126;
+      ctx.MOB_HI.makoLeaper = 'makoLeaperHi';         ctx.MOB_DISPLAY.makoLeaper = 118;
+      ctx.MOB_HI.drunkenSwab = 'drunkenSwabHi';       ctx.MOB_DISPLAY.drunkenSwab = 109;
+      ctx.MOB_HI.harpooner = 'harpoonerHi';           ctx.MOB_DISPLAY.harpooner = 113;
+      ctx.MOB_HI.inkpotOcto = 'inkpotOctoHi';         ctx.MOB_DISPLAY.inkpotOcto = 109;
       // M7k AUDIT fix: pxRum is a 64px decor canvas — mobModel assumes 48px
-      ctx.MOB_HI.deckKeg = 'deckKegHi';               ctx.MOB_DISPLAY.deckKeg = 42;
+      ctx.MOB_HI.deckKeg = 'deckKegHi';               ctx.MOB_DISPLAY.deckKeg = 88;
       // ---- boss + his FX sprites (ghost teal EXCLUSIVE here) ----
       ctx.spr('captainkrakenHi', 96, 96, drawCaptainKraken);
       ctx.BOSS_HI.captainkraken = { key: 'captainkrakenHi', size: 96, display: 120, bodyW: 42, bodyH: 46 };

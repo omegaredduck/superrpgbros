@@ -14,52 +14,78 @@
 (function (root) {
   'use strict';
 
-  // ---------- planned layout (fractions of the world; plan PNG canon) ------
-  var CHAMBERS = [
-    { x: 0.16, y: 0.78, rx: 0.13, ry: 0.11, tex: 'ksand' },    // ENTRY SHELF (spawn)
-    { x: 0.45, y: 0.5,  rx: 0.17, ry: 0.14, tex: 'kcrystal' }, // THE GREAT HALL
-    { x: 0.32, y: 0.18, rx: 0.14, ry: 0.11, tex: 'kmoss' },    // CRYSTAL GARDEN
-    { x: 0.72, y: 0.78, rx: 0.15, ry: 0.12, tex: 'kwater' },   // UNDERGROUND LAKE
-    { x: 0.14, y: 0.42, rx: 0.11, ry: 0.1,  tex: 'kgeode' },   // GEODE HOLLOW
-    { x: 0.76, y: 0.22, rx: 0.16, ry: 0.14, tex: 'kobsidian' } // THE DEEP FISSURE (BOSS)
+  // ---------- SPIRAL REDESIGN (M9e — Red-approved plan) --------------------
+  // The whole map is walkable crystal-cavern floor (approved tiles, no dead
+  // rock, no narrow paths). An AMETHYST road fills everything; a CRYSTALLIZED
+  // spiral winds from the centre out to a 90° "stove-eye" tail that exits the
+  // LEFT edge (= spawn). The five other tiles sit as circles in the corners.
+  // A destructible BIG CRYSTAL (#20 grand-rainbow) sits at the centre; small
+  // crystals ride the spiral. See CRY._bigBlast / _damageCrystal for the mechanic.
+  var BIOME_CIRCLES = [
+    { x: 0.18, y: 0.16, r: 0.20, tex: 'kmoss' },      // GLOW MOSS — garden (moths/resonators)
+    { x: 0.82, y: 0.18, r: 0.24, tex: 'kobsidian' },  // OBSIDIAN — boss arena side (horror)
+    { x: 0.13, y: 0.55, r: 0.16, tex: 'kgeode' },     // GEODE CRUST — den (lurkers)
+    { x: 0.24, y: 0.86, r: 0.20, tex: 'ksand' },      // GLITTER SAND
+    { x: 0.83, y: 0.82, r: 0.20, tex: 'kwater' }      // CAVE WATER — cosmetic, walkable
   ];
-  // tunnels: [x1,y1,x2,y2, halfwidth, gateIdx|-1]
-  var TUNNELS = [
-    [0.16, 0.78, 0.38, 0.58, 0.035, -1],   // entry -> hall
-    [0.45, 0.5, 0.34, 0.26, 0.033, 0],     // hall -> garden (GATE A)
-    [0.45, 0.5, 0.66, 0.72, 0.035, -1],    // hall -> lake
-    [0.45, 0.5, 0.2, 0.44, 0.03, 1],       // hall -> geode hollow (GATE B)
-    [0.45, 0.5, 0.68, 0.3, 0.038, -1],     // hall -> fissure (boss approach)
-    [0.32, 0.18, 0.62, 0.16, 0.03, 2],     // garden -> fissure (GATE C)
-    [0.72, 0.78, 0.78, 0.4, 0.03, 3],      // lake -> fissure (GATE D)
-    [0.14, 0.42, 0.2, 0.66, 0.028, -1],    // geode -> entry (loop)
-    [0.6, 0.84, 0.84, 0.72, 0.014, -1],    // the crystal BRIDGE over the lake
-    // wrap loops (toroidal): edge tunnels
-    [0.16, 0.78, 0.16, 1.01, 0.03, -1],    // entry -> south edge
-    [0.16, -0.01, 0.32, 0.18, 0.03, -1],   // north edge -> garden
-    [0.72, 0.78, 1.01, 0.78, 0.03, -1],    // lake -> east edge
-    [-0.01, 0.78, 0.16, 0.78, 0.03, -1]    // west edge -> entry
+  // extra SMALL exploding crystals scattered THROUGHOUT the map (+ the 6 on the
+  // spiral). Kept clear of the centre so they never overlap the big crystal.
+  var SCATTER = [
+    [0.30, 0.10], [0.10, 0.30], [0.24, 0.24],
+    [0.82, 0.12], [0.92, 0.30], [0.70, 0.22],
+    [0.09, 0.55], [0.20, 0.64], [0.16, 0.44],
+    [0.18, 0.88], [0.34, 0.92], [0.10, 0.78],
+    [0.84, 0.82], [0.92, 0.66], [0.72, 0.90], [0.62, 0.62]
   ];
+  // [tex, x, y, scale, destructible?] — the crystalline decor (true) is a
+  // DESTRUCTIBLE crystal bomb (shatters + AoE + respawns); the rest is scenery.
   var DECOR = [
-    // entry shelf
-    ['kdCart', 0.11, 0.8, 1.6], ['kdLantern', 0.2, 0.72, 1.4], ['kdRubble', 0.13, 0.86, 1.3],
-    ['kdLantern', 0.3, 0.66, 1.3],
-    // great hall
-    ['kdCluster', 0.45, 0.44, 2.0], ['kdPillar', 0.38, 0.55, 1.7], ['kdPillar', 0.52, 0.56, 1.7],
-    ['kdArch', 0.45, 0.62, 1.7], ['kdVein', 0.55, 0.42, 1.4],
-    // garden
-    ['kdFlowers', 0.27, 0.14, 1.5], ['kdShrooms', 0.36, 0.21, 1.5], ['kdSinging', 0.3, 0.24, 1.4],
-    ['kdShrooms', 0.38, 0.13, 1.3], ['kdShaft', 0.26, 0.2, 1.4],
-    // lake
-    ['kdFossil', 0.67, 0.83, 1.5], ['kdPool', 0.79, 0.72, 1.5], ['kdBridge', 0.72, 0.78, 1.6],
-    // geode hollow
-    ['kdGeode', 0.1, 0.4, 1.6], ['kdRubble', 0.17, 0.47, 1.4], ['kdPedestal', 0.12, 0.35, 1.4],
-    ['kdGeode', 0.17, 0.38, 1.3],
-    // deep fissure (boss)
-    ['kdFissure', 0.76, 0.16, 1.7], ['kdFissure', 0.84, 0.26, 1.5], ['kdStalag', 0.68, 0.28, 1.4]
+    ['kdCluster', 0.18, 0.14, 1.7, true], ['kdShrooms', 0.24, 0.2, 1.4], ['kdFlowers', 0.12, 0.18, 1.3, true],
+    ['kdFissure', 0.82, 0.14, 1.6], ['kdStalag', 0.9, 0.22, 1.3],
+    ['kdGeode', 0.11, 0.55, 1.5, true], ['kdPedestal', 0.17, 0.6, 1.3],
+    ['kdCart', 0.2, 0.9, 1.4], ['kdLantern', 0.3, 0.82, 1.3],
+    ['kdFossil', 0.86, 0.86, 1.4], ['kdPool', 0.78, 0.78, 1.4],
+    ['kdPillar', 0.72, 0.5, 1.5, true], ['kdVein', 0.28, 0.5, 1.3, true],
+    ['kdCluster', 0.62, 0.72, 1.5, true], ['kdSinging', 0.4, 0.3, 1.4, true]
   ];
-  var CHANDELIERS = [[0.7, 0.13], [0.76, 0.1], [0.83, 0.14]];  // over the arena
-  var STAL_WARNS = [[0.71, 0.2], [0.8, 0.17], [0.76, 0.27]];   // entrance dust marks
+  var CHANDELIERS = [[0.44, 0.42], [0.5, 0.4], [0.56, 0.42]];  // over the central arena
+  var STAL_WARNS = [[0.45, 0.46], [0.55, 0.46], [0.5, 0.55]];  // entrance dust marks
+
+  // Archimedean spiral: centre -> outward -> 90° tail off the LEFT edge.
+  // Returns world-space centreline, the ribbon polygon (for the tile mask),
+  // small-crystal seats, and the spawn point at the road mouth. PURE — testable.
+  function buildSpiral(WW, HH) {
+    var cx = WW / 2, cy = HH / 2;
+    var k = 0.0162 * WW, r0 = 0.01 * WW;
+    var thEnd = 4 * Math.PI * 2 + Math.PI;                 // outer coil ends pointing LEFT
+    var center = [], hw = [], nSpiral = 0, th;
+    for (th = 0.3; th <= thEnd + 1e-6; th += 0.06) {
+      var r = r0 + k * th;
+      center.push({ x: cx + r * Math.cos(th), y: cy + r * Math.sin(th) });
+      hw.push(Math.max(0.02 * WW, r * 0.045));
+    }
+    nSpiral = center.length;
+    var tip = center[nSpiral - 1], tipHw = hw[nSpiral - 1];
+    for (var tx = tip.x - 4; tx >= -0.06 * WW; tx -= 0.02 * WW) { center.push({ x: tx, y: tip.y }); hw.push(tipHw); }
+    // ribbon outline (right edge out, then left edge back)
+    var right = [], left = [];
+    for (var i = 0; i < center.length; i++) {
+      var a = center[Math.max(0, i - 1)], b = center[Math.min(center.length - 1, i + 1)];
+      var tX = b.x - a.x, tY = b.y - a.y, tl = Math.hypot(tX, tY) || 1;
+      var nX = -tY / tl, nY = tX / tl;
+      right.push({ x: center[i].x + nX * hw[i], y: center[i].y + nY * hw[i] });
+      left.push({ x: center[i].x - nX * hw[i], y: center[i].y - nY * hw[i] });
+    }
+    var poly = right.concat(left.reverse());
+    // small crystals seat on the coils (outer -> inner), off the tail + centre
+    var smalls = [], N = 6;
+    for (var s = 0; s < N; s++) {
+      var idx = Math.floor((0.18 + 0.74 * s / (N - 1)) * (nSpiral - 1));
+      smalls.push({ x: center[idx].x, y: center[idx].y });
+    }
+    return { cx: cx, cy: cy, center: center, poly: poly, smalls: smalls,
+             spawn: { x: 0.03 * WW, y: tip.y } };
+  }
 
   function dist2seg(px, py, x0, y0, x1, y1) {
     var dx = x1 - x0, dy = y1 - y0, L2 = dx * dx + dy * dy;
@@ -71,89 +97,66 @@
 
     // ======================================================== SETUP ========
     setup: function (scene, WW, HH) {
+      var cx = WW / 2, cy = HH / 2, PAD = 0.11 * WW;
       var C = scene._cry = {
-        gates: [], grow: { nextAt: 0 }, minOpen: 2,
+        gates: [], grow: { nextAt: Infinity }, minOpen: 2,
         rings: [], dust: [], zones: [], lanes: [],
         slowUntil: 0, overload: null, bossWalls: [],
-        coreGlow: null,
-        chambers: [], tunnels: [], chandeliers: [],
-        arena: { x: CHAMBERS[5].x * WW, y: CHAMBERS[5].y * HH,
-                 rx: CHAMBERS[5].rx * WW, ry: CHAMBERS[5].ry * HH }
+        coreGlow: null, circles: [], crystals: [], bigGlow: null, chandeliers: [],
+        arena: { x: cx, y: cy, rx: 0.14 * WW, ry: 0.14 * HH }
       };
       scene._zoneWarns = scene._zoneWarns || [];
 
-      // ---- solid rock base + carved tunnels + chambers ----
-      scene.add.tileSprite(WW / 2, HH / 2, WW, HH, 'krock').setDepth(-23).setTint(0x8a84a0);
-      TUNNELS.forEach(function (T) {
-        var x0 = T[0] * WW, y0 = T[1] * HH, x1 = T[2] * WW, y1 = T[3] * HH;
-        var len = Math.hypot(x1 - x0, y1 - y0) + 30, wdt = T[4] * WW * 2;
-        var spr = scene.add.tileSprite((x0 + x1) / 2, (y0 + y1) / 2, len, wdt, 'kamethyst').setDepth(-22);
-        spr.setRotation(Math.atan2(y1 - y0, x1 - x0));
-        C.tunnels.push({ x0: x0, y0: y0, x1: x1, y1: y1, hw: T[4] * WW, gate: T[5] });
-      });
-      CHAMBERS.forEach(function (Ch) {
-        var cx = Ch.x * WW, cy = Ch.y * HH, rx = Ch.rx * WW, ry = Ch.ry * HH;
-        var spr = scene.add.tileSprite(cx, cy, rx * 2 + 8, ry * 2 + 8, Ch.tex).setDepth(-21);
+      // ---- FULL-BLEED FLOOR: amethyst road fills the whole map (no dead rock) ----
+      scene.add.tileSprite(WW / 2, HH / 2, WW, HH, 'kamethyst').setDepth(-24);
+      // the five other tiles as CIRCLES in the corners (all walkable)
+      BIOME_CIRCLES.forEach(function (B) {
+        var bx = B.x * WW, by = B.y * HH, br = B.r * WW;
+        var spr = scene.add.tileSprite(bx, by, br * 2 + 8, br * 2 + 8, B.tex).setDepth(-23);
         var mg = scene.make.graphics({ add: false });
-        mg.fillStyle(0xffffff, 1); mg.fillEllipse(cx, cy, rx * 2, ry * 2);
+        mg.fillStyle(0xffffff, 1); mg.fillCircle(bx, by, br);
         spr.setMask(mg.createGeometryMask());
-        C.chambers.push({ x: cx, y: cy, rx: rx, ry: ry, tex: Ch.tex });
+        C.circles.push({ x: bx, y: by, r: br, tex: B.tex });
       });
-      // lake sand rim (walkable shore)
-      var LK = C.chambers[3];
-      var rim = scene.add.tileSprite(LK.x, LK.y, LK.rx * 2 + 8, LK.ry * 2 + 8, 'ksand').setDepth(-21.5);
-      var rmg = scene.make.graphics({ add: false });
-      rmg.fillStyle(0xffffff, 1); rmg.fillEllipse(LK.x, LK.y, LK.rx * 2, LK.ry * 2);
-      rim.setMask(rmg.createGeometryMask());
-      // (water tile sits above the rim in the inner 72%)
-      var inner = scene.add.tileSprite(LK.x, LK.y, LK.rx * 2, LK.ry * 2, 'kwater').setDepth(-21);
-      var img = scene.make.graphics({ add: false });
-      img.fillStyle(0xffffff, 1); img.fillEllipse(LK.x, LK.y, LK.rx * 2 * 0.85, LK.ry * 2 * 0.85);
-      inner.setMask(img.createGeometryMask());
-
-      // mine rails decal: entry -> hall
+      // centre teal pad (crystal floor) under the big crystal
+      var pad = scene.add.tileSprite(cx, cy, PAD * 2 + 8, PAD * 2 + 8, 'kcrystal').setDepth(-22);
+      var pmg = scene.make.graphics({ add: false });
+      pmg.fillStyle(0xffffff, 1); pmg.fillCircle(cx, cy, PAD);
+      pad.setMask(pmg.createGeometryMask());
+      // ---- the SPIRAL ROAD (crystallized tile), centre -> left-edge tail ----
+      var SP = buildSpiral(WW, HH);
+      C.spiral = SP;
+      var road = scene.add.tileSprite(WW / 2, HH / 2, WW, HH, 'kgrown').setDepth(-21);
+      var smg = scene.make.graphics({ add: false });
+      smg.fillStyle(0xffffff, 1); smg.fillPoints(SP.poly, true);
+      road.setMask(smg.createGeometryMask());
+      // bright sheen along the spiral centreline
       var rg = scene.add.graphics().setDepth(-20);
-      rg.lineStyle(3, 0x6a5140, 0.8);
-      rg.lineBetween(0.1 * WW, 0.82 * HH, 0.41 * WW, 0.55 * HH);
-      rg.lineBetween(0.11 * WW, 0.84 * HH, 0.42 * WW, 0.57 * HH);
+      rg.lineStyle(2, 0xffc0e0, 0.5);
+      rg.beginPath(); rg.moveTo(SP.center[0].x, SP.center[0].y);
+      for (var ci = 1; ci < SP.center.length; ci++) rg.lineTo(SP.center[ci].x, SP.center[ci].y);
+      rg.strokePath();
 
-      // ---- decor per the PLAN + chandeliers over the arena ----
-      DECOR.forEach(function (D) {
-        scene.add.sprite(D[1] * WW, D[2] * HH, D[0]).setScale(D[3]).setDepth(2);
-      });
+      // chandeliers (ceiling props over the arena — not destructible)
       CHANDELIERS.forEach(function (Q) {
         var spr = scene.add.sprite(Q[0] * WW, Q[1] * HH, 'kdChand').setScale(1.6).setDepth(3);
         C.chandeliers.push(spr);
       });
 
-      // ---- GATES A–D: one shared static wall group (colliders attach in
-      // afterCreate — the player doesn't exist yet during setup) ----
+      // wallGroup kept for the boss's GROWING WALLS (built in setup, wired later)
       C.wallGroup = scene.physics.add.staticGroup();
-      C.tunnels.forEach(function (T) {
-        if (T.gate < 0) return;
-        var mx = (T.x0 + T.x1) / 2, my = (T.y0 + T.y1) / 2;
-        var dx = T.x1 - T.x0, dy = T.y1 - T.y0, L = Math.hypot(dx, dy);
-        var nx = -dy / L, ny = dx / L;                        // perpendicular
-        var span = T.hw * 2.2;
-        var blocks = [];
-        for (var i = -2; i <= 2; i++) {
-          var bx = mx + nx * span * i / 2, by = my + ny * span * i / 2;
-          var r2 = scene.add.rectangle(bx, by, 26, 26, 0xff7ab8, 0.75).setDepth(3).setVisible(false);
-          C.wallGroup.add(r2);
-          r2.body.enable = false;
-          blocks.push(r2);
-        }
-        var shardSpr = scene.add.sprite(mx, my, 'kdWall').setScale(1.8).setDepth(3.2).setVisible(false);
-        shardSpr.setRotation(Math.atan2(ny, nx) + Math.PI / 2);
-        var stain = scene.add.tileSprite(mx, my, span * 2 + 40, 60, 'kgrown').setDepth(-19).setVisible(false);
-        stain.setRotation(Math.atan2(ny, nx));
-        C.gates[T.gate] = { id: 'ABCD'[T.gate], mx: mx, my: my, nx: nx, ny: ny, span: span,
-          state: 'open', warnUntil: 0, crackAt: 0, shatterAt: 0,
-          blocks: blocks, shard: shardSpr, stain: stain, warnG: null };
-      });
 
-      // ---- spawn on the entry shelf ----
-      scene._realmStart = { x: 0.16 * WW, y: 0.78 * HH };
+      // ---- CRYSTAL BOMB: big centre crystal + many small crystals (all respawn) ----
+      C.crystalGroup = scene.physics.add.staticGroup();
+      C.smallActive = true; C.bigActive = true;
+      CRY._spawnBig(scene, cx, cy);                          // big crystal + pulsating glow
+      SP.smalls.forEach(function (pos) { CRY._spawnSmall(scene, pos.x, pos.y); });  // on the spiral
+      SCATTER.forEach(function (q) { CRY._spawnSmall(scene, q[0] * WW, q[1] * HH); });  // throughout
+      // EVERY decoration on this map is a destructible exploding crystal too
+      DECOR.forEach(function (D) { CRY._spawnDecorCrystal(scene, D[1] * WW, D[2] * HH, D[0], D[3]); });
+
+      // ---- spawn at the road mouth (just inside the left edge) ----
+      scene._realmStart = { x: SP.spawn.x, y: SP.spawn.y };
 
       // mob-verb helpers (fresh closures)
       scene._cryLurker = function (m, player, time) { return CRY._lurker(scene, m, player, time); };
@@ -170,28 +173,16 @@
       var C = scene._cry; if (!C) return;
       C.wallColliderP = scene.physics.add.collider(scene.player, C.wallGroup);
       C.wallColliderM = scene.physics.add.collider(scene.mobs, C.wallGroup);
+      // CRYSTAL BOMB: crystals are solid cover; player shots chip them.
+      C.crystalColliderP = scene.physics.add.collider(scene.player, C.crystalGroup);
+      C.crystalColliderM = scene.physics.add.collider(scene.mobs, C.crystalGroup);
+      if (scene.playerShots) scene.physics.add.overlap(scene.playerShots, C.crystalGroup,
+        function (shot, spr) { CRY._hitCrystal(scene, shot, spr); }, null, scene);
     },
 
-    _inCave: function (C, x, y) {
-      for (var i = 0; i < C.chambers.length; i++) {
-        var Ch = C.chambers[i];
-        var d = ((x - Ch.x) / Ch.rx) * ((x - Ch.x) / Ch.rx) + ((y - Ch.y) / Ch.ry) * ((y - Ch.y) / Ch.ry);
-        if (d < 1) return true;
-      }
-      for (var j = 0; j < C.tunnels.length; j++) {
-        var T = C.tunnels[j];
-        if (dist2seg(x, y, T.x0, T.y0, T.x1, T.y1) < T.hw) return true;
-      }
-      return false;
-    },
-    _inWater: function (C, x, y) {
-      var LK = C.chambers[3];
-      var d = ((x - LK.x) / LK.rx) * ((x - LK.x) / LK.rx) + ((y - LK.y) / LK.ry) * ((y - LK.y) / LK.ry);
-      if (d >= 0.72) return false;
-      var B = C.tunnels[8];                                   // the bridge
-      if (dist2seg(x, y, B.x0, B.y0, B.x1, B.y1) < B.hw + 6) return false;
-      return true;
-    },
+    // whole map is walkable crystal-cavern floor now — no crush-slow, no water hazard
+    _inCave: function () { return true; },
+    _inWater: function () { return false; },
 
     // ========================================================= UPDATE ======
     update: function (scene, time, delta) {
@@ -207,43 +198,22 @@
         if (C.coreGlow) { try { C.coreGlow.destroy(); } catch (e) {} C.coreGlow = null; }
       }
 
-      // ---- GROWING CRYSTAL gate cycle ----
-      var G = C.grow;
-      if (!G.nextAt) G.nextAt = time + cfg.periodMs * 0.5;
-      if (G.nextAt !== Infinity && time >= G.nextAt && !scene.scanning) {
-        G.nextAt = time + cfg.periodMs * (0.8 + SIM.rng() * 0.4);
-        var closed = C.gates.filter(function (g2) { return g2.state !== 'open'; }).length;
-        if (C.gates.length - closed - 1 >= C.minOpen) {       // NEVER ALL SHUT
-          var open = C.gates.filter(function (g2) { return g2.state === 'open'; });
-          if (open.length) {
-            var gate = open[Math.floor(SIM.rng() * open.length)];
-            CRY._gateWarn(scene, C, gate, time, cfg);
+      // ---- CRYSTAL BOMB: pulsating rainbow glow hue-cycles; melee-smash on touch ----
+      if (C.bigGlow && C.bigGlow.active)
+        C.bigGlow.fillColor = [0xff7ab8, 0x5ae8e0, 0xa06bf0, 0xffb84a, 0x6ae87a][Math.floor(time / 380) % 5];
+      if (alive && !scene.scanning) {
+        var bcfg = scene.realmDef.bomb || {};
+        for (var qi = 0; qi < C.crystals.length; qi++) {
+          var rec = C.crystals[qi];
+          if (rec.dead || !rec.spr.active) continue;
+          var reach = rec.spr.displayWidth * 0.42 + 15;       // a bump/punch chips it
+          if (Math.hypot(p.x - rec.spr.x, p.y - rec.spr.y) < reach &&
+              time - rec.lastSmashAt > (bcfg.smashMs || 320)) {
+            rec.lastSmashAt = time;
+            CRY._damageCrystal(scene, rec, bcfg.smashDmg || 5, time);
           }
         }
       }
-      C.gates.forEach(function (gate) {
-        if (gate.state === 'warn' && time >= gate.warnUntil) {
-          // NEVER closes on an occupied tile — defer while someone stands in it
-          var occupied = alive && dist2seg(p.x, p.y, gate.mx - gate.nx * gate.span, gate.my - gate.ny * gate.span,
-            gate.mx + gate.nx * gate.span, gate.my + gate.ny * gate.span) < 40;
-          if (!occupied) {
-            scene.mobs.children.iterate(function (m) {
-              if (m && m.active && dist2seg(m.x, m.y, gate.mx - gate.nx * gate.span, gate.my - gate.ny * gate.span,
-                gate.mx + gate.nx * gate.span, gate.my + gate.ny * gate.span) < 30) occupied = true;
-            });
-          }
-          if (occupied) { gate.warnUntil = time + 900; return; }
-          CRY._gateClose(scene, C, gate, time, cfg);
-        }
-        if (gate.state === 'closed') {
-          if (time >= gate.crackAt && !gate.cracked) {
-            gate.cracked = true;
-            gate.shard.setTint(0xffffff);
-            try { AUDIO.play('shatterburst'); } catch (e) {}
-          }
-          if (time >= gate.shatterAt) CRY._gateShatter(scene, C, gate, time, cfg);
-        }
-      });
 
       // ---- boss GROWING WALLS auto-shatter ----
       for (var wi = C.bossWalls.length - 1; wi >= 0; wi--) {
@@ -447,6 +417,7 @@
     bossArrival: function (scene, def, bx, by) {
       var C = scene._cry, self = scene;
       var ax = C.arena.x, ay = C.arena.y;
+      CRY._bossCrackBig(scene);                              // the Shardlord CRACKS the heart open (animated → map blast)
       scene.player.setPosition(ax, ay + C.arena.ry - 40);
       scene.cameras.main.centerOn(ax, ay);
       // stalactite warn circles + dust
@@ -662,6 +633,216 @@
       CRY._clearBossWalls(scene, C);
       if (C.coreGlow) { try { C.coreGlow.destroy(); } catch (e) {} C.coreGlow = null; }
       C.bossArmed = false;
+    },
+
+    // ================================================ CRYSTAL BOMB =========
+    // Destructible crystals (fence lineage): a player shot / bump chips HP,
+    // the sprite steps through shattered frames, then it BLOWS. The big centre
+    // crystal WIPES every mob (NO kill credit — direct removal, not damage) +
+    // map-wide blasts + hard shake; small crystals do a local AoE.
+    _hitCrystal: function (scene, shot, spr) {
+      if (!shot.active || !spr.active || !shot.proj || shot.proj._hitCrystal) return;
+      shot.proj._hitCrystal = true; shot.proj.dieAt = 0;      // the shot dies on the crystal
+      var C = scene._cry, rec = null;
+      for (var i = 0; i < C.crystals.length; i++) if (C.crystals[i].spr === spr) { rec = C.crystals[i]; break; }
+      if (rec) CRY._damageCrystal(scene, rec, shot.proj.dmg || 8, scene.time.now);
+    },
+    _damageCrystal: function (scene, rec, dmg, time) {
+      if (rec.dead || !rec.spr.active) return;
+      rec.hp -= dmg;
+      scene.burst(rec.spr.x, rec.spr.y - rec.spr.displayHeight * 0.2, 4, rec.big ? 0xff7ab8 : 0x5ae8e0);
+      rec.spr.setTintFill(0xffffff);                         // per-hit flash
+      (function (s) { scene.time.delayedCall(55, function () { if (s && s.active) s.clearTint(); }); })(rec.spr);
+      try { AUDIO.play('shatterburst'); } catch (e) {}
+      if (rec.hp <= 0) { CRY._breakCrystal(scene, rec, time); return; }
+      var frac = rec.hp / rec.maxHp, fam = rec.frames, idx;      // step damage frames (single-frame decor: no swap)
+      if (fam.length === 4) idx = frac > 0.66 ? 0 : frac > 0.4 ? 1 : frac > 0.15 ? 2 : 3;
+      else if (fam.length === 3) idx = frac > 0.6 ? 0 : frac > 0.3 ? 1 : 2;
+      else idx = 0;
+      if (fam[idx] && scene.textures.exists(fam[idx]) && rec.spr.texture.key !== fam[idx]) rec.spr.setTexture(fam[idx]);
+    },
+    // generic SHATTER animation — squash-fade of the sprite + shard bits flung
+    // outward. Works for any texture, so decor with no damage-frame art still
+    // breaks apart with an animation.
+    _shatterAnim: function (scene, x, y, tex, scale, tint) {
+      if (scene.textures.exists(tex)) {
+        var s = scene.add.sprite(x, y, tex).setScale(scale).setDepth(8).setTintFill(0xffffff);
+        scene.tweens.add({ targets: s, scaleX: scale * 1.5, scaleY: scale * 0.55, angle: 30, alpha: 0,
+          duration: 230, ease: 'Quad.easeOut', onComplete: function () { try { s.destroy(); } catch (e) {} } });
+      }
+      for (var i = 0; i < 6; i++) {
+        (function (n) {
+          var a = (n / 6) * Math.PI * 2 + SIM.rng();
+          var sh = scene.add.rectangle(x, y, 6, 6, tint, 0.9).setDepth(8).setAngle(SIM.rng() * 360);
+          scene.tweens.add({ targets: sh, x: x + Math.cos(a) * (28 + SIM.rng() * 34), y: y + Math.sin(a) * (28 + SIM.rng() * 34),
+            alpha: 0, angle: sh.angle + 200, duration: 320, ease: 'Quad.easeOut',
+            onComplete: function () { try { sh.destroy(); } catch (e) {} } });
+        })(i);
+      }
+    },
+    _breakCrystal: function (scene, rec, time) {
+      rec.dead = true;
+      var x = rec.spr.x, y = rec.spr.y, C = scene._cry, bomb = scene.realmDef.bomb || {};
+      try { rec.spr.body.enable = false; } catch (e) {}
+      try { rec.spr.destroy(); } catch (e) {}
+      if (rec.big) {
+        if (C.bigGlow) { try { C.bigGlow.destroy(); } catch (e) {} C.bigGlow = null; }
+        CRY._bigBlast(scene, x, y, time);
+        if (C.bigActive) scene.time.delayedCall(bomb.bigRespawnMs || 18000, function () {
+          if (scene.closing || !scene._cry || !scene._cry.bigActive || !rec.dead) return;
+          var b = scene._cry.crystalGroup.create(rec.homeX, rec.homeY, rec.tex).setDepth(3).setScale(rec.scale);
+          b.refreshBody();
+          rec.spr = b; rec.hp = rec.maxHp; rec.dead = false; rec.lastSmashAt = 0;
+          CRY._makeBigGlow(scene, rec.homeX, rec.homeY);
+          scene.burst(rec.homeX, rec.homeY, 16, 0xff7ab8);
+          try { AUDIO.play('crystalgrow'); } catch (e) {}
+        });
+      } else {
+        CRY._shatterAnim(scene, x, y, rec.tex, rec.scale, rec.decor ? 0xd8bcff : 0x5ae8e0);  // break animation
+        CRY._boom(scene, x, y, bomb.boomSize || 3.0, 0x5ae8e0);   // TRIPLE-size explosion
+        var R = bomb.aoeR || 450, D = bomb.aoeDmg || 55;          // TRIPLE radius
+        scene.mobs.children.iterate(function (m) {
+          if (m && m.active && m.mob && Math.hypot(m.x - x, m.y - y) < R) Entities.hurtMob(scene, m, D, time);
+        });
+        scene.cameras.main.shake(300, 0.012);
+        // blown up BESIDE the boss → STUN him for stunMs
+        var bo = scene.boss, sR = bomb.stunR || 200;
+        if (bo && bo.active && bo.boss && Math.hypot(bo.x - x, bo.y - y) < sR) {
+          var st = bomb.stunMs || 1000;
+          bo.boss.rootUntil = Math.max(bo.boss.rootUntil || 0, time + st);
+          bo.boss.busyUntil = Math.max(bo.boss.busyUntil || 0, time + st);
+          var fx = scene.add.circle(bo.x, bo.y, 42, 0xffffff, 0.5).setDepth(10).setBlendMode(Phaser.BlendModes.ADD);
+          scene.tweens.add({ targets: fx, alpha: 0, scale: 1.7, duration: st,
+            onComplete: function () { try { fx.destroy(); } catch (e) {} } });
+          try { scene.damageNumber(bo.x, bo.y - 44, 'STUNNED', '#ffd0e8'); } catch (e) {}
+          scene.burst(bo.x, bo.y, 16, 0x5ae8e0);
+        }
+        if (C.smallActive) scene.time.delayedCall(bomb.respawnMs || 9000, function () {
+          if (scene.closing || !scene._cry || !scene._cry.smallActive || !rec.dead) return;
+          var sm = scene._cry.crystalGroup.create(rec.homeX, rec.homeY, rec.tex).setDepth(rec.decor ? 2 : 3).setScale(rec.scale);
+          sm.refreshBody();
+          rec.spr = sm; rec.hp = rec.maxHp; rec.dead = false; rec.lastSmashAt = 0;
+          scene.burst(rec.homeX, rec.homeY, 8, 0x5ae8e0);
+          try { AUDIO.play('crystalgrow'); } catch (e) {}
+        });
+      }
+    },
+    // ---- spawners (initial place + respawn share these) ----
+    _makeBigGlow: function (scene, x, y) {
+      var C = scene._cry;
+      C.bigGlow = scene.add.circle(x, y - 6, 0.05 * scene.worldW, 0xff7ab8, 0.5).setDepth(2)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      scene.tweens.add({ targets: C.bigGlow, scale: { from: 0.75, to: 1.4 }, alpha: { from: 0.32, to: 0.6 },
+        duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    },
+    _spawnBig: function (scene, x, y) {
+      var C = scene._cry, bomb = scene.realmDef.bomb || {};
+      var b = C.crystalGroup.create(x, y, 'kCrystalBig0').setDepth(3).setScale(1.5); b.refreshBody();
+      C.crystals.push({ spr: b, hp: bomb.bigHp || 300, maxHp: bomb.bigHp || 300, big: true, lastSmashAt: 0,
+        homeX: x, homeY: y, tex: 'kCrystalBig0', scale: 1.5,
+        frames: ['kCrystalBig0', 'kCrystalBig1', 'kCrystalBig2', 'kCrystalBig3'], dead: false });
+      CRY._makeBigGlow(scene, x, y);
+    },
+    _spawnSmall: function (scene, x, y) {
+      var C = scene._cry, bomb = scene.realmDef.bomb || {};
+      var sm = C.crystalGroup.create(x, y, 'kCrystalSm0').setDepth(3).setScale(1.15); sm.refreshBody();
+      C.crystals.push({ spr: sm, hp: bomb.smallHp || 40, maxHp: bomb.smallHp || 40, big: false, lastSmashAt: 0,
+        homeX: x, homeY: y, tex: 'kCrystalSm0', scale: 1.15,
+        frames: ['kCrystalSm0', 'kCrystalSm1', 'kCrystalSm2'], dead: false });
+    },
+    // every DECOR piece on this map is a destructible bomb (shatter anim + AoE)
+    _spawnDecorCrystal: function (scene, x, y, tex, scale) {
+      var C = scene._cry, bomb = scene.realmDef.bomb || {}, hp = bomb.smallHp || 40;
+      var sp = C.crystalGroup.create(x, y, tex).setDepth(2).setScale(scale); sp.refreshBody();
+      C.crystals.push({ spr: sp, hp: hp, maxHp: hp, big: false, decor: true, lastSmashAt: 0,
+        homeX: x, homeY: y, tex: tex, scale: scale, frames: [tex], dead: false });
+    },
+    // ---- THE BOSS CRACKS THE HEART: his entrance shatters the big crystal ----
+    // (animated frame-by-frame crack + shakes → the map-wide blast + mob wipe).
+    // Small + decor crystals KEEP respawning through the fight (smallActive stays on).
+    _bossCrackBig: function (scene) {
+      var C = scene._cry; if (!C) return;
+      C.bigActive = false;                                   // the big crystal won't respawn
+      var big = null;
+      for (var i = 0; i < C.crystals.length; i++) if (C.crystals[i].big && !C.crystals[i].dead) { big = C.crystals[i]; break; }
+      if (big && big.spr && big.spr.active) {
+        var spr = big.spr, TIN = [0xff7ab8, 0x5ae8e0, 0xa06bf0, 0xffb84a];
+        for (var k = 0; k < 4; k++) {
+          (function (kk) {
+            scene.time.delayedCall(kk * 230, function () {
+              if (!spr.active) return;
+              if (scene.textures.exists(big.frames[kk])) spr.setTexture(big.frames[kk]);
+              scene.burst(spr.x, spr.y - spr.displayHeight * 0.2, 9, TIN[kk]);
+              scene.cameras.main.shake(200, 0.008 + kk * 0.003);
+              try { AUDIO.play('shatterburst'); } catch (e) {}
+            });
+          })(k);
+        }
+        scene.time.delayedCall(4 * 230 + 60, function () {
+          if (!big.dead && big.spr && big.spr.active) CRY._damageCrystal(scene, big, big.maxHp + 9999, scene.time.now);
+        });
+      } else {
+        CRY._crystalWipe(scene);                             // already gone — still clear the field
+      }
+    },
+    clearCrystals: function (scene) {
+      var C = scene._cry; if (!C || !C.crystals) return;
+      C.smallActive = false; C.bigActive = false;
+      C.crystals.forEach(function (rec) {
+        if (rec.dead) return;
+        rec.dead = true;
+        try { rec.spr.body.enable = false; rec.spr.destroy(); } catch (e) {}
+      });
+      if (C.bigGlow) { try { C.bigGlow.destroy(); } catch (e) {} C.bigGlow = null; }
+    },
+    _boom: function (scene, x, y, size, tint) {
+      var flash = scene.add.circle(x, y, 10 * size, 0xffffff, 0.9).setDepth(9).setBlendMode(Phaser.BlendModes.ADD);
+      scene.tweens.add({ targets: flash, scale: 6 * size, alpha: 0, duration: 360,
+        onComplete: function () { try { flash.destroy(); } catch (e) {} } });
+      var ring = scene.add.circle(x, y, 8 * size, tint, 0.5).setDepth(9);
+      scene.tweens.add({ targets: ring, scale: 9 * size, alpha: 0, duration: 430,
+        onComplete: function () { try { ring.destroy(); } catch (e) {} } });
+      scene.burst(x, y, Math.floor(16 * size), tint);
+      scene.burst(x, y, Math.floor(10 * size), 0xffd0e8);
+      try { AUDIO.play('shatterburst'); } catch (e) {}
+    },
+    _bigBlast: function (scene, x, y, time) {
+      var WW = scene.worldW, HH = scene.worldH;
+      scene.cameras.main.shake(1000, 0.02);
+      scene.banner('THE HEART SHATTERS\nthe cavern erupts', '#ff7ab8');
+      CRY._boom(scene, x, y, 3.2, 0xff7ab8);                  // central mega-boom
+      var TINTS = [0xff7ab8, 0x5ae8e0, 0xa06bf0, 0xffb84a, 0x6ae87a];
+      for (var i = 0; i < 22; i++) {                          // map-wide chain over ~1.3s
+        (function (n) {
+          scene.time.delayedCall(80 + n * 55, function () {
+            if (scene.closing) return;
+            var bx = 40 + SIM.rng() * (WW - 80), by = 40 + SIM.rng() * (HH - 80);
+            CRY._boom(scene, bx, by, 0.9 + SIM.rng() * 0.9, TINTS[n % 5]);
+            scene.cameras.main.shake(130, 0.012);
+          });
+        })(i);
+      }
+      CRY._crystalWipe(scene);                                // WIPE all mobs — NO kill credit
+    },
+    _crystalWipe: function (scene) {
+      scene.mobs.children.iterate(function (m) {
+        if (!m || !m.active || !m.mob) return;
+        scene.burst(m.x, m.y, 10, (m.mob.def && m.mob.def.deathTint) || 0xffd0e8);
+        try { Entities.clearNameTag(m); } catch (e) {}
+        if (m.mob.auraSpr) { try { m.mob.auraSpr.destroy(); } catch (e) {} m.mob.auraSpr = null; }
+        if (m.mob.flameRing) { try { m.mob.flameRing.destroy(); } catch (e) {} m.mob.flameRing = null; }
+        try { m.body.enable = false; } catch (e) {}
+        scene.mobs.killAndHide(m);
+      });
+    },
+    clearCrystals: function (scene) {
+      var C = scene._cry; if (!C || !C.crystals) return;
+      C.crystals.forEach(function (rec) {
+        if (rec.dead) return;
+        rec.dead = true;
+        try { rec.spr.body.enable = false; rec.spr.destroy(); } catch (e) {}
+      });
+      if (C.bigGlow) { try { C.bigGlow.destroy(); } catch (e) {} C.bigGlow = null; }
     },
 
     // =============================================== MOB VERBS (map-new) ===

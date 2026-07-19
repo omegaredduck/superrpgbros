@@ -624,6 +624,51 @@
     return b;
   });
 
+  // ======================= CRYSTAL BOMB (destructible props) ================
+  // Big centre crystal + small road crystals, each with damage-stage frames
+  // (fence lineage: swap to a more-shattered frame as HP drops, then it blows).
+  function crackOverlay(put, S, n, seed) {
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + h2(i, seed, 7) * 1.3;
+      const x0 = S * 0.5, y0 = S * 0.56;
+      const len = S * (0.2 + h2(i, seed, 8) * 0.22);
+      const mx = x0 + Math.cos(a) * len * 0.5 + (h2(i, seed, 9) - 0.5) * S * 0.08;
+      const my = y0 + Math.sin(a) * len * 0.5 + (h2(i, seed, 10) - 0.5) * S * 0.08;
+      const x1 = x0 + Math.cos(a) * len, y1 = y0 + Math.sin(a) * len;
+      stroke(put, x0, y0, mx, my, 2, () => K.oil);
+      stroke(put, mx, my, x1, y1, 2, () => K.oil);
+    }
+  }
+  function bigCrystal(stage) {
+    return function (put, S) {
+      const dmg = stage / 3, grow = 1 - dmg * 0.32;
+      shadow(put, S, S * 0.5, S * 0.34);
+      rockBase(put, S * 0.5, S * 0.86, S * 0.36, S * 0.1);
+      shard(put, S * 0.5,  S * 0.9,  S * 0.13, S * 0.76 * grow, 0.0,   GEMS[0]);
+      shard(put, S * 0.3,  S * 0.9,  S * 0.09, S * 0.5  * grow, -0.14, GEMS[2]);
+      shard(put, S * 0.7,  S * 0.9,  S * 0.09, S * 0.54 * grow, 0.12,  GEMS[1]);
+      shard(put, S * 0.18, S * 0.92, S * 0.06, S * 0.3  * grow, -0.32, GEMS[4]);
+      shard(put, S * 0.82, S * 0.92, S * 0.06, S * 0.32 * grow, 0.3,   GEMS[3]);
+      shard(put, S * 0.42, S * 0.92, S * 0.07, S * 0.42 * grow, -0.04, GEMS[1]);  // #20 GRAND RAINBOW —
+      shard(put, S * 0.58, S * 0.92, S * 0.07, S * 0.44 * grow, 0.04,  GEMS[3]);  // full multi-gem cluster
+      if (stage >= 1) crackOverlay(put, S, 4 + stage * 2, stage);
+      if (stage < 2) { sparkle(put, S * 0.4, S * 0.3, K.pinkLt); sparkle(put, S * 0.64, S * 0.42, K.cyanLt); sparkle(put, S * 0.3, S * 0.5, K.amberLt); sparkle(put, S * 0.7, S * 0.56, K.greenLt); }
+      else sparkle(put, S * 0.5, S * 0.5, K.white);   // it flares before it blows
+    };
+  }
+  function smallCrystal(stage) {
+    return function (put, S) {
+      const dmg = stage / 2, grow = 1 - dmg * 0.42;
+      shadow(put, S, S * 0.5, S * 0.2);
+      rockBase(put, S * 0.5, S * 0.84, S * 0.22, S * 0.07);
+      shard(put, S * 0.5,  S * 0.86, S * 0.1,  S * 0.5  * grow, 0.0,  GEMS[1]);
+      shard(put, S * 0.36, S * 0.86, S * 0.06, S * 0.3  * grow, -0.2, GEMS[0]);
+      shard(put, S * 0.64, S * 0.86, S * 0.06, S * 0.32 * grow, 0.2,  GEMS[2]);
+      if (stage >= 1) crackOverlay(put, S, 3 + stage, 5 + stage);
+      else sparkle(put, S * 0.46, S * 0.4, K.cyanLt);
+    };
+  }
+
   // ======================= REGISTRY buildArt hook ===========================
   var CRY_ART = {
     K: K, GEMS: GEMS,
@@ -639,15 +684,15 @@
       ctx.spr('gemwingMothHi', MS, MS, drawGemwingMoth);
       ctx.spr('deepCrawlerHi', MS, MS, drawDeepCrawler);
       ctx.spr('voidgemHorrorHi', MS, MS, drawVoidgemHorror);
-      ctx.MOB_HI.shardling = 'shardlingHi';           ctx.MOB_DISPLAY.shardling = 42;
-      ctx.MOB_HI.amethystLurker = 'amethystLurkerHi'; ctx.MOB_DISPLAY.amethystLurker = 52;
-      ctx.MOB_HI.geodeGolem = 'geodeGolemHi';         ctx.MOB_DISPLAY.geodeGolem = 60;
-      ctx.MOB_HI.shatterbat = 'shatterbatHi';         ctx.MOB_DISPLAY.shatterbat = 48;
-      ctx.MOB_HI.quartzRam = 'quartzRamHi';           ctx.MOB_DISPLAY.quartzRam = 54;
-      ctx.MOB_HI.resonator = 'resonatorHi';           ctx.MOB_DISPLAY.resonator = 50;
-      ctx.MOB_HI.gemwingMoth = 'gemwingMothHi';       ctx.MOB_DISPLAY.gemwingMoth = 48;
-      ctx.MOB_HI.deepCrawler = 'deepCrawlerHi';       ctx.MOB_DISPLAY.deepCrawler = 54;
-      ctx.MOB_HI.voidgemHorror = 'voidgemHorrorHi';   ctx.MOB_DISPLAY.voidgemHorror = 58;
+      ctx.MOB_HI.shardling = 'shardlingHi';           ctx.MOB_DISPLAY.shardling = 88;
+      ctx.MOB_HI.amethystLurker = 'amethystLurkerHi'; ctx.MOB_DISPLAY.amethystLurker = 109;
+      ctx.MOB_HI.geodeGolem = 'geodeGolemHi';         ctx.MOB_DISPLAY.geodeGolem = 126;
+      ctx.MOB_HI.shatterbat = 'shatterbatHi';         ctx.MOB_DISPLAY.shatterbat = 101;
+      ctx.MOB_HI.quartzRam = 'quartzRamHi';           ctx.MOB_DISPLAY.quartzRam = 113;
+      ctx.MOB_HI.resonator = 'resonatorHi';           ctx.MOB_DISPLAY.resonator = 105;
+      ctx.MOB_HI.gemwingMoth = 'gemwingMothHi';       ctx.MOB_DISPLAY.gemwingMoth = 101;
+      ctx.MOB_HI.deepCrawler = 'deepCrawlerHi';       ctx.MOB_DISPLAY.deepCrawler = 113;
+      ctx.MOB_HI.voidgemHorror = 'voidgemHorrorHi';   ctx.MOB_DISPLAY.voidgemHorror = 122;
       // ---- boss: THE SHARDLORD (COLOSSUS, 128px canvas) ----
       ctx.spr('shardlordHi', 128, 128, drawShardlord);
       ctx.BOSS_HI.shardlord = { key: 'shardlordHi', size: 128, display: 165, bodyW: 62, bodyH: 84 };
@@ -672,6 +717,14 @@
       ctx.spr('kdBridge', 64, 64, drawBridge);
       ctx.spr('kdFissure', 64, 64, drawFissureProp);
       ctx.spr('kdWall', 64, 64, drawWallShards);
+      // ---- CRYSTAL BOMB props (damage-stage frames) ----
+      ctx.spr('kCrystalBig0', 96, 96, bigCrystal(0));
+      ctx.spr('kCrystalBig1', 96, 96, bigCrystal(1));
+      ctx.spr('kCrystalBig2', 96, 96, bigCrystal(2));
+      ctx.spr('kCrystalBig3', 96, 96, bigCrystal(3));
+      ctx.spr('kCrystalSm0', 48, 48, smallCrystal(0));
+      ctx.spr('kCrystalSm1', 48, 48, smallCrystal(1));
+      ctx.spr('kCrystalSm2', 48, 48, smallCrystal(2));
       // ---- tiles ----
       ctx.tex('krock', 48, 48, tRock);
       ctx.tex('kcrystal', 48, 48, tCrystal);

@@ -764,14 +764,14 @@
       ctx.spr('jackalRunnerHi', MS, MS, drawJackalRunner);
       ctx.spr('apepSpawnHi', MS, MS, drawApepSpawn);
       ctx.spr('tombWeaverHi', MS, MS, drawTombWeaver);
-      ctx.MOB_HI.scarab = 'scarabHi';               ctx.MOB_DISPLAY.scarab = 32;
-      ctx.MOB_HI.khopeshGuard = 'khopeshGuardHi';   ctx.MOB_DISPLAY.khopeshGuard = 54;
-      ctx.MOB_HI.broodmother = 'broodmotherHi';     ctx.MOB_DISPLAY.broodmother = 60;
-      ctx.MOB_HI.ankhPriest = 'ankhPriestHi';       ctx.MOB_DISPLAY.ankhPriest = 50;
-      ctx.MOB_HI.sandstoneGolem = 'sandstoneGolemHi'; ctx.MOB_DISPLAY.sandstoneGolem = 60;
-      ctx.MOB_HI.jackalRunner = 'jackalRunnerHi';   ctx.MOB_DISPLAY.jackalRunner = 52;
-      ctx.MOB_HI.apepSpawn = 'apepSpawnHi';         ctx.MOB_DISPLAY.apepSpawn = 58;
-      ctx.MOB_HI.tombWeaver = 'tombWeaverHi';       ctx.MOB_DISPLAY.tombWeaver = 54;
+      ctx.MOB_HI.scarab = 'scarabHi';               ctx.MOB_DISPLAY.scarab = 67;
+      ctx.MOB_HI.khopeshGuard = 'khopeshGuardHi';   ctx.MOB_DISPLAY.khopeshGuard = 113;
+      ctx.MOB_HI.broodmother = 'broodmotherHi';     ctx.MOB_DISPLAY.broodmother = 126;
+      ctx.MOB_HI.ankhPriest = 'ankhPriestHi';       ctx.MOB_DISPLAY.ankhPriest = 105;
+      ctx.MOB_HI.sandstoneGolem = 'sandstoneGolemHi'; ctx.MOB_DISPLAY.sandstoneGolem = 126;
+      ctx.MOB_HI.jackalRunner = 'jackalRunnerHi';   ctx.MOB_DISPLAY.jackalRunner = 109;
+      ctx.MOB_HI.apepSpawn = 'apepSpawnHi';         ctx.MOB_DISPLAY.apepSpawn = 122;
+      ctx.MOB_HI.tombWeaver = 'tombWeaverHi';       ctx.MOB_DISPLAY.tombWeaver = 113;
       // ---- boss: BOTH forms (child ~120 display, executioner ~160) ----
       ctx.spr('neferukaHi', 96, 96, drawChildKing);
       ctx.spr('executionerHi', 96, 96, drawExecutioner);

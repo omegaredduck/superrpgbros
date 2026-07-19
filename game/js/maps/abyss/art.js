@@ -816,17 +816,17 @@
       ctx.spr('abyssSnakeHi', MS, MS, drawSeaSnake);
       ctx.spr('abyssSnailHi', MS, MS, drawSnail);
       ctx.spr('abyssKrakenHi', MS, MS, drawKraken);
-      ctx.MOB_HI.ghostJelly = 'abyssJellyHi';           ctx.MOB_DISPLAY.ghostJelly = 48;
-      ctx.MOB_HI.swordfish = 'abyssSwordHi';            ctx.MOB_DISPLAY.swordfish = 54;
-      ctx.MOB_HI.voltEel = 'abyssVoltHi';               ctx.MOB_DISPLAY.voltEel = 50;
-      ctx.MOB_HI.vampireSquid = 'abyssSquidHi';         ctx.MOB_DISPLAY.vampireSquid = 52;
-      ctx.MOB_HI.crimsonStarfish = 'abyssStarfishHi';   ctx.MOB_DISPLAY.crimsonStarfish = 42;
-      ctx.MOB_HI.drownedDiver = 'abyssDiverHi';         ctx.MOB_DISPLAY.drownedDiver = 54;
-      ctx.MOB_HI.ghostFisherman = 'abyssFishermanHi';   ctx.MOB_DISPLAY.ghostFisherman = 54;
-      ctx.MOB_HI.trenchLobster = 'abyssLobsterHi';      ctx.MOB_DISPLAY.trenchLobster = 52;
-      ctx.MOB_HI.bandedSeaSnake = 'abyssSnakeHi';       ctx.MOB_DISPLAY.bandedSeaSnake = 50;
-      ctx.MOB_HI.lanternSnail = 'abyssSnailHi';         ctx.MOB_DISPLAY.lanternSnail = 40;
-      ctx.MOB_HI.krakenSpawn = 'abyssKrakenHi';         ctx.MOB_DISPLAY.krakenSpawn = 62;
+      ctx.MOB_HI.ghostJelly = 'abyssJellyHi';           ctx.MOB_DISPLAY.ghostJelly = 101;
+      ctx.MOB_HI.swordfish = 'abyssSwordHi';            ctx.MOB_DISPLAY.swordfish = 113;
+      ctx.MOB_HI.voltEel = 'abyssVoltHi';               ctx.MOB_DISPLAY.voltEel = 105;
+      ctx.MOB_HI.vampireSquid = 'abyssSquidHi';         ctx.MOB_DISPLAY.vampireSquid = 109;
+      ctx.MOB_HI.crimsonStarfish = 'abyssStarfishHi';   ctx.MOB_DISPLAY.crimsonStarfish = 88;
+      ctx.MOB_HI.drownedDiver = 'abyssDiverHi';         ctx.MOB_DISPLAY.drownedDiver = 113;
+      ctx.MOB_HI.ghostFisherman = 'abyssFishermanHi';   ctx.MOB_DISPLAY.ghostFisherman = 113;
+      ctx.MOB_HI.trenchLobster = 'abyssLobsterHi';      ctx.MOB_DISPLAY.trenchLobster = 109;
+      ctx.MOB_HI.bandedSeaSnake = 'abyssSnakeHi';       ctx.MOB_DISPLAY.bandedSeaSnake = 105;
+      ctx.MOB_HI.lanternSnail = 'abyssSnailHi';         ctx.MOB_DISPLAY.lanternSnail = 84;
+      ctx.MOB_HI.krakenSpawn = 'abyssKrakenHi';         ctx.MOB_DISPLAY.krakenSpawn = 130;
       // ---- boss: THE VOLT WYRM (head is the boss model; body/tail are segments) ----
       ctx.spr('abyssWyrmHead', 128, 128, drawWyrmHead);
       ctx.BOSS_HI.voltWyrm = { key: 'abyssWyrmHead', size: 128, display: 150, bodyW: 52, bodyH: 46 };

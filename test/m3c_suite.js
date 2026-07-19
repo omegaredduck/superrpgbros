@@ -320,6 +320,9 @@ function check(name, ok, extra) {
 
   // -- 4. EVOLVING: one-time mid-fight evolution on surviving a hit ------------------
   const evo = await page.evaluate(`(function(){var r=${scene('Realm')};
+    r.progressDepth = 0;  // 2026-07-18: this suite set cleared=all (for field notes),
+    // which would depth-scale mob HP; the evolve-HP math is checked against BASE
+    // slime.hp, so isolate this block at depth 0.
     var m = Entities.spawnMob(r, 'slime', r.player.x + 300, r.player.y + 300, 'evolving');
     var hpAtSpawn = m.mob.hp, scale0 = m.scaleX, xp0 = m.mob.xp;
     var hits = 0;

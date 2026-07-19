@@ -114,7 +114,7 @@ var DATA = {
       hpRegen: { delayMs: 2500, pctPerSec: 0.03 },   // dodge class (like Ranger, no dmgTaken)
       resource: { name: 'CHI', color: 0x5fe8c2, glow: 0x9ffce8 },
       weapon: 'shuriken',
-      ability: 'shurikenStorm',
+      ability: 'shadowClone',            // Red 2026-07-19: was 'shurikenStorm' (lame) → SHADOW CLONE JUTSU
       locked: true
     }
   },
@@ -148,11 +148,16 @@ var DATA = {
     sword: { melee: true, dmg: 30, range: 94, arcDeg: 115, swingMs: 160,
              baseRate: 1.25, dexRate: 0.05, sound: 'slash', rageGain: 8,
              heldTexture: 'sword', holdOffset: 16 },
-    // NINJA basic — SHURIKEN: fast thrown stars on a quick CHI cadence. Each
-    // ricochets once to a nearby enemy (proj.ricochet; the shot→mob overlap
-    // bounces it). shots/sec = 1.9 + dex*0.06 (the fastest cadence in the game).
-    shuriken: { dmg: 12, projSpeed: 600, lifeMs: 720, texture: 'shurikenProj',
-                baseRate: 1.9, dexRate: 0.06, sound: 'shoot', spin: true, ricochet: 1,
+    // NINJA basic — SHURIKEN: fast thrown stars on a quick CHI cadence.
+    // RAPID-FIRE REWORK (Red 2026-07-19): the ninja felt weak, so the throw is
+    // now a genuine STORM of stars — the fastest cadence in the game by a mile —
+    // that also flies FARTHER. shots/sec = 2.7 + dex*0.085 (was 1.9 + dex*0.06;
+    // at the dex cap that's ~7.9/s vs the old ~5.6/s). RANGE (projSpeed*lifeMs)
+    // went 600×0.72=432px → 700×1.05=735px, so he peppers from safety like the
+    // dodge-class he is. (`ricochet` stays declared but is a dead flag — nothing
+    // in the overlap reads it; homing lives on the new SHADOW CLONE ult instead.)
+    shuriken: { dmg: 12, projSpeed: 700, lifeMs: 1050, texture: 'shurikenProj',
+                baseRate: 2.7, dexRate: 0.085, sound: 'shoot', spin: true, ricochet: 1,
                 heldTexture: 'shuriken64', holdOffset: 15 }
   },
 
@@ -206,14 +211,31 @@ var DATA = {
                  dmg: 15, radius: 94, knockback: 30, sound: 'whirl', hpPerHit: 2,
                  tornado: { chance: 0.18, speed: 205, lifeMs: 1500, radius: 40,
                             dmg: 18, reHitMs: 260, sound: 'whirl' } },
-    // NINJA special — SHURIKEN STORM: a full 360° RING of stars flung outward
-    // (spreadDeg 360 over the volley path), each carrying a BLEED (reuses the
-    // burn-rider plumbing). Pierces the swarm. CHI-fueled. (v5 MVP; the return
-    // boomerang is a follow-up polish pass.)
+    // NINJA special — SHURIKEN STORM (RETIRED 2026-07-19): the old ult, a 360°
+    // ring of bleeding stars. Kept defined for reference / possible reuse, but
+    // the ninja now points at SHADOW CLONE below. Nothing reads this unless a
+    // class re-points to it.
     shurikenStorm: { type: 'volley', mpCost: 24, count: 8, spreadDeg: 360, dmgMult: 1.0,
                      projSpeed: 560, lifeMs: 700, pierce: true, cooldownMs: 700,
                      sound: 'volley', tint: 0xe84545,
-                     burn: { dmg: 4, everyMs: 500, ms: 2500 } }
+                     burn: { dmg: 4, everyMs: 500, ms: 2500 } },
+    // NINJA ult — SHADOW CLONE JUTSU (Red 2026-07-19): the old star-ring was
+    // lame, so SPACE now spends CHI to POOF a squad of shadow clones into the
+    // fight for `durationMs`. Each clone trails the ninja at an orbit offset,
+    // auto-locks the nearest enemy, and rapid-fires HOMING, BLEEDING shuriken on
+    // its own `fireEveryMs` cadence — a whole ninja squad blanketing the screen.
+    // `count` = number of clones (ability CHARMS add clones — na3 +2 … na5 +6,
+    // so the Oni Charm fields ~9). Clone shots go into playerShots, so the
+    // existing shot→mob / shot→boss overlaps hit + bleed everything for free.
+    // This is a one-shot cast (cost + cooldown) — the clones are scene-owned and
+    // live out their own timer (RealmScene.summonShadowClones / .updateShadowClones).
+    // Realm-only in practice (the nexus has no summonShadowClones, and forces
+    // intent.ability false). `homing.turn` = rad/s the clone stars steer at.
+    // TUNE ME (Red): count / durationMs / fireEveryMs / dmgMult by playtest.
+    shadowClone: { type: 'shadowClone', mpCost: 30, count: 3, durationMs: 5200,
+                   fireEveryMs: 210, dmgMult: 0.8, projSpeed: 700, lifeMs: 1050,
+                   cooldownMs: 6500, orbit: 46, sound: 'volley', tint: 0xe84545,
+                   homing: { turn: 6 }, burn: { dmg: 4, everyMs: 500, ms: 2500 } }
   },
 
   // --- XP curve (Fusion Law F4): xp needed to go from level L to L+1 --------
@@ -238,7 +260,51 @@ var DATA = {
     iframesMs: 500,          // no double-hits inside this window (TM-2)
     contactTickMs: 350,      // how often a touching chaser re-applies contact damage
     knockback: 160,          // M1: 140→160 — hits should visibly move the swarm
-    minDamage: 1
+    minDamage: 1,
+    // 2026-07-18 (Red): NO single hit kills a healthy player — death comes from
+    // STACKED mistakes, not a spike. Any one hit is clamped to this fraction of
+    // the victim's MAX HP (Entities.hurtPlayer, AFTER class dmgTaken + boss-depth
+    // scaling + flat DEF). Even signature "instakills" (the ghost express) become
+    // huge-but-survivable. At 0.6 two clean hits still drop a full-HP hero. Set
+    // to 1.0 to disable the cap. DEV tuning constant.
+    maxSingleHitPct: 0.6
+  },
+
+  // --- PROGRESSION SCALING (2026-07-18, Red) — the campaign's difficulty +
+  // loot curve. AXIS = campaign DEPTH: how many regions you've already cleared
+  // (ACCOUNT.cleared.length, stamped on scene.progressDepth at realm create,
+  // 0..maxDepth). Deeper corruptions HIT HARDER and DROP BETTER in lockstep, so
+  // the run stays hard the whole way — until the guaranteed full LEGENDARY SET
+  // (whale kill) shatters the curve and the power fantasy pays off. depth 0 is
+  // exactly the pre-2026-07-18 flat game (every term below is 1.0 at depth 0),
+  // so fresh-save test suites are untouched. DEVELOPER TUNING CONSTANTS — there
+  // is NO in-game UI for these; edit here to retune the whole campaign at once.
+  progression: {
+    maxDepth: 19,             // 20 regions total → depth clamps to 0..19 (whale = 19)
+    // DIFFICULTY — linear per-depth adders. HP climbs faster than damage on
+    // purpose: fights get longer/attritional, not spikier (fits "no one-shots").
+    mobHpPerDepth:  0.058,    // mob HP     ×1.00 → ×2.10 across depth 0→19
+    mobDmgPerDepth: 0.032,    // mob damage ×1.00 → ×1.61
+    mobXpPerDepth:  0.045,    // mob XP     ×1.00 → ×1.86 (leveling doesn't stall as HP grows)
+    bossHpPerDepth: 0.053,    // boss HP    ×1.00 → ×2.01
+    bossDmgPerDepth:0.028,    // boss damage×1.00 → ×1.53 (applied in hurtPlayer on fromBoss hits)
+    // LOOT — per-TIER geometric factor applied to every boss drop-table weight
+    // (SIM.depthLootShift), keyed by item tier. <1 fades low tiers as you go
+    // deeper, >1 grows high tiers. ALL are 1.0 at depth 0 by construction
+    // (factor^0). Validated (Monte-Carlo, 2026-07-18): end-of-campaign kit lands
+    // blue/purple; natural full-T5 set before the whale ≈ 0.3% (the chase lives).
+    lootShift: { 0: 1, 1: 0.93, 2: 0.985, 3: 1.055, 4: 1.10, 5: 1.105 }
+  },
+
+  // --- DEV TUNING KNOBS (2026-07-18, Red) — global balance levers with NO
+  // gameplay change at their defaults. Edit here instead of hunting per-mob /
+  // per-boss / per-weapon cadences. NOT exposed in-game.
+  tuning: {
+    // Projectile FREQUENCY multipliers. >1 = fire more often, <1 = less. Covers
+    // the shared cadence sites: player auto-fire (SIM.fireRate), generic mob
+    // `shoot` cooldowns, and the core-boss radial/stream filler. Per-map
+    // telegraphed boss verbs keep their own hand-tuned cadence (boss contract).
+    projFreq: { mob: 1.0, boss: 1.0, player: 1.0 }
   },
 
   // --- Mobs. Every mob composes the two verbs: chase / shoot (Fusion Law F9).
@@ -485,13 +551,13 @@ var DATA = {
     budget: function (tSec) { return 2 + Math.floor(tSec / 18); }, // points per spend
     maxAlive: 150,                        // hard cap; pooling recycles (TM-3, TM-5)
     spawnRing: { min: 480, max: 640 },    // distance from player, off-screen (V11)
-    // M5.4 (user): MOBS SCALE WITH YOUR LEVEL. Each mob's HP · contact/shoot
-    // damage · XP is multiplied by 1 + (playerLevel-1)*mobLevelScale at spawn
-    // (Entities.spawnMob). Since level no longer grows YOUR power (xp.levelPower
-    // false), this is what makes the climb mean something — the world gets
-    // tougher, and GEAR is how you keep pace. level-60 ≈ ×2.77 by default.
-    // TUNE ME by playtest.
-    mobLevelScale: 0.03
+    // M5.4 (user): mobs used to scale with YOUR LEVEL here. 2026-07-18 (Red)
+    // moved the world-threat axis to campaign DEPTH (regions cleared) via
+    // DATA.progression / SIM.depthMult — a cleaner "as you progress" signal that
+    // doesn't depend on the fuzzy XP curve. This level scaler is now RETIRED
+    // (0 = off) but kept as a knob; SIM.mobLevelMult still composes with the
+    // depth mult in spawnMob, so a nonzero value here would stack on top.
+    mobLevelScale: 0
   },
 
   realm:  {
@@ -671,6 +737,7 @@ var DATA = {
     ],
     // v5 (2026-07-17): FIRST-PLAYTHROUGH loop config.
     startTokens: 3,              // reroll tokens the campaign begins with
+    legendaryCost: 30,           // v6 (2026-07-19, Red): map tokens to buy a LEGENDARY UNLOCK at the vault
     // Per-region SPECIAL MECHANICS — shown on the discovery card when a corruption
     // is found, and on hover in the scanner (item 9). One or two short lines each.
     mech: {
@@ -1160,21 +1227,22 @@ var DATA = {
     nw5: { name: "Oni's Fang",       slot: 'weapon', tier: 5, texture: 'shuriken64', cls: 'ninja',
            mod: { dmg: 18, freeEnergy: true }, bonus: { dex: 6 },
            desc: '+18 weapon damage · +6 DEX · UNLIMITED chi' },
-    // NINJA ability items (charms) — cut SHURIKEN STORM cost + add stars (mp = CHI)
+    // NINJA ability items (charms) — cut SHADOW CLONE cost + add CLONES (mp = CHI).
+    // (2026-07-19: the `count` mod now adds shadow clones, not storm stars.)
     na0: { name: 'Frayed Charm',     slot: 'ability', tier: 0, texture: 'shuriken64', cls: 'ninja',
-           mod: { mpCost: -2 },            desc: 'shuriken storm costs 2 less chi' },
+           mod: { mpCost: -2 },            desc: 'shadow clone costs 2 less chi' },
     na1: { name: 'Worn Charm',       slot: 'ability', tier: 1, texture: 'shuriken64', cls: 'ninja',
-           mod: { mpCost: -3 },            desc: 'shuriken storm costs 3 less chi' },
+           mod: { mpCost: -3 },            desc: 'shadow clone costs 3 less chi' },
     na2: { name: 'Jade Charm',       slot: 'ability', tier: 2, texture: 'shuriken64', cls: 'ninja',
-           mod: { mpCost: -4 },            desc: 'shuriken storm costs 4 less chi' },
+           mod: { mpCost: -4 },            desc: 'shadow clone costs 4 less chi' },
     na3: { name: 'Serpent Charm',    slot: 'ability', tier: 3, texture: 'shuriken64', cls: 'ninja',
-           mod: { mpCost: -4, count: 2 },  desc: '+2 storm stars · costs 4 less chi' },
+           mod: { mpCost: -4, count: 2 },  desc: '+2 shadow clones · costs 4 less chi' },
     na4: { name: 'Storm Charm',      slot: 'ability', tier: 4, texture: 'shuriken64', cls: 'ninja',
            mod: { mpCost: -6, count: 4 },  bonus: { mp: 20 },
-           desc: '+4 storm stars · costs 6 less chi · +20 CHI' },
+           desc: '+4 shadow clones · costs 6 less chi · +20 CHI' },
     na5: { name: 'Oni Charm',        slot: 'ability', tier: 5, texture: 'shuriken64', cls: 'ninja',
            mod: { mpCost: -8, count: 6 },  bonus: { mp: 40 },
-           desc: '+6 storm stars · costs 8 less chi · +40 CHI' }
+           desc: '+6 shadow clones · costs 8 less chi · +40 CHI' }
   },
 
   // --- M4.6: CLASS GEAR LINES — slot → [T0..T3] item keys per class. This is

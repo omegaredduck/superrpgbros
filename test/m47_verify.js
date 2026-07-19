@@ -189,13 +189,16 @@ function check(name, ok, detail) {
     var before = st.hp;
     r.updateGhostTrain(r.time.now, 16);
     var took = before - st.hp;
-    // expected: 200 raw × 1.6 (knight vs boss) − DEF... which EXCEEDS a fresh
-    // hero's whole pool — hp floors at 0, so "took" clamps to before and the
-    // hero DIES (exactly the user's spec: insta-kill with no gear on).
-    var want = Math.min(before, Math.max(1, Math.round(200 * DATA.classes.knight.dmgTaken.boss) - Math.floor(st.stats.def)));
-    return { took: took, want: want, dead: !st.alive };})()`);
-  check('the ghost express one-shots an ungeared hero (extreme boss-scaled damage)',
-    ghostHit.took === ghostHit.want && ghostHit.dead, `took ${ghostHit.took} (dead ${ghostHit.dead})`);
+    // 2026-07-18 (Red): NO true one-shots. The ghost express is a MASSIVE but
+    // CAPPED hit — clamped to maxSingleHitPct of MAX HP (Entities.hurtPlayer).
+    // A healthy hero SURVIVES one pass; a second hit finishes them (death from
+    // stacked mistakes). The raw 200×boss×depth far exceeds the cap, so the cap
+    // is what binds.
+    var want = Math.max(1, Math.floor(st.stats.hp * DATA.combat.maxSingleHitPct));
+    return { took: took, want: want, dead: !st.alive, hpLeft: st.hp };})()`);
+  check('the ghost express is a MASSIVE but CAPPED hit — no one-shot; a healthy hero survives one pass',
+    ghostHit.took === ghostHit.want && !ghostHit.dead && ghostHit.hpLeft > 0,
+    `took ${ghostHit.took}/${ghostHit.want} (hpLeft ${ghostHit.hpLeft})`);
 
   // -- 6. RAILROAD TIES: markers + lobbed ties land ---------------------------------
   const ties = await page.evaluate(`(function(){var r=${scene('Realm')};

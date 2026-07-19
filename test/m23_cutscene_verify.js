@@ -23,9 +23,11 @@ function check(name, ok, extra) { step++; console.log(`${ok ? 'PASS' : 'FAIL'}  
 
   // 1. rig present
   check('CutsceneScene registered', await page.evaluate(`!!game.scene.getScene('Cutscene')`));
-  check('CUT.SCENES has cs0..cs3', await page.evaluate(`!!(CUT&&CUT.SCENES&&CUT.SCENES.cs0&&CUT.SCENES.cs1&&CUT.SCENES.cs2&&CUT.SCENES.cs3)`));
-  const counts = await page.evaluate(`({cs0:CUT.SCENES.cs0.length,cs1:CUT.SCENES.cs1.length,cs2:CUT.SCENES.cs2.length,cs3:CUT.SCENES.cs3.length})`);
-  check('shot counts (cs0:5 cs1:5 cs2:5 cs3:6)', counts.cs0 === 5 && counts.cs1 === 5 && counts.cs2 === 5 && counts.cs3 === 6, JSON.stringify(counts));
+  check('CUT.SCENES has cs0..cs3 + csReveal', await page.evaluate(`!!(CUT&&CUT.SCENES&&CUT.SCENES.cs0&&CUT.SCENES.cs1&&CUT.SCENES.cs2&&CUT.SCENES.cs3&&CUT.SCENES.csReveal)`));
+  const counts = await page.evaluate(`({cs0:CUT.SCENES.cs0.length,cs1:CUT.SCENES.cs1.length,cs2:CUT.SCENES.cs2.length,cs3:CUT.SCENES.cs3.length,csReveal:CUT.SCENES.csReveal.length})`);
+  // v7 (2026-07-19, Red): cs1 lost its final "caretaker online" shot to the new
+  // csReveal scene (played AFTER the dream-body select, so it shows YOUR body).
+  check('shot counts (cs0:5 cs1:4 cs2:5 cs3:6 csReveal:1)', counts.cs0 === 5 && counts.cs1 === 4 && counts.cs2 === 5 && counts.cs3 === 6 && counts.csReveal === 1, JSON.stringify(counts));
 
   // 2. schema: fresh save carries cutscenesSeen
   check('SAVE.blank has cutscenesSeen {cs0..cs3}=false', await page.evaluate(`(function(){var a=SAVE.blank('ranger').account.cutscenesSeen;return a&&a.cs0===false&&a.cs3===false;})()`));

@@ -123,50 +123,58 @@
       DATA.realms.crystal = {
         name: 'Crystal Caverns', biome: 'crystal', boss: 'shardlord',
         kind: 'crystal', music: 'crystal',
-        // GROWING CRYSTAL knobs (PLAN §2) — ALL TUNE ME
-        grow: { periodMs: 14000, warnMs: 1300, wallMs: 9000, shatterDmg: 14, minOpenGates: 2 }
+        grow: { shatterDmg: 14 },                            // boss GROWING WALLS shard-ring dmg
+        // CRYSTAL BOMB knobs (M9e spiral map) — ALL TUNE ME. bigHp = heavy
+        // commitment (~28 arrow hits); big crystal WIPES all mobs (no credit).
+        // Smalls: TRIPLED blast radius + 3x boom; all crystals RESPAWN (smalls
+        // keep respawning through the boss fight). A small blown up BESIDE the
+        // boss (within stunR) STUNS him for stunMs. Crystal-like DECOR is
+        // destructible too (same small behaviour).
+        bomb: { bigHp: 300, smallHp: 40, aoeR: 450, aoeDmg: 55, boomSize: 3.0,
+                smashDmg: 5, smashMs: 320, respawnMs: 9000, bigRespawnMs: 18000,
+                stunR: 200, stunMs: 1000 }
       };
       // ---- the 9 mobs (Red picks #1 4 5 6 10 12 13 15 20) ----
-      DATA.mobs.shardling = { name: 'Shardling', texture: 'shardlingHi', hp: 18, spd: 115, xp: 4, cost: 1,
+      DATA.mobs.shardling = { name: 'Shardling', texture: 'shardlingHi', hp: 14, spd: 115, xp: 4, cost: 1,
         deathTint: 0xffd0e8, chase: { contactDmg: 6 } };
-      DATA.mobs.amethystLurker = { name: 'Amethyst Lurker', texture: 'amethystLurkerHi', hp: 85, spd: 85, xp: 24, cost: 3,
+      DATA.mobs.amethystLurker = { name: 'Amethyst Lurker', texture: 'amethystLurkerHi', hp: 58, spd: 85, xp: 24, cost: 3,
         deathTint: 0xa06bf0, chase: { contactDmg: 12 },
         lunge: { range: 220, windupMs: 600, dashMs: 240, dashSpeed: 400, cooldownMs: 3400 },
         mapVerb: 'lurkerWake',                                // disguised until you're close
         lurk: { wakeRange: 170, warnMs: 700 },
         unlockAt: 30 };
-      DATA.mobs.geodeGolem = { name: 'Geode Golem', texture: 'geodeGolemHi', hp: 220, spd: 40, xp: 32, cost: 4,
+      DATA.mobs.geodeGolem = { name: 'Geode Golem', texture: 'geodeGolemHi', hp: 120, spd: 40, xp: 32, cost: 4,
         deathTint: 0x6e6484, chase: { contactDmg: 16 },
         mapVerb: 'golemSlam',                                 // warned slam; CORE takes rear bonus
         pound: { range: 200, everyMs: 4800, warnMs: 1000, radius: 92, dmg: 22 },
         maxConcurrent: 2, unlockAt: 55 };
-      DATA.mobs.shatterbat = { name: 'Shatterbat', texture: 'shatterbatHi', hp: 36, spd: 110, xp: 14, cost: 2,
+      DATA.mobs.shatterbat = { name: 'Shatterbat', texture: 'shatterbatHi', hp: 28, spd: 110, xp: 14, cost: 2,
         deathTint: 0x5ae8e0, float: true, chase: { contactDmg: 8 },
         lunge: { range: 300, windupMs: 500, dashMs: 260, dashSpeed: 420, cooldownMs: 3000 },
         mapVerb: 'batScreech',                                // telegraphed slow-cone
         screech: { everyMs: 5600, range: 240, warnMs: 850, halfRad: 0.5, dmg: 10, slowMs: 1400 },
         unlockAt: 20 };
-      DATA.mobs.quartzRam = { name: 'Quartz Ram', texture: 'quartzRamHi', hp: 90, spd: 60, xp: 22, cost: 3,
+      DATA.mobs.quartzRam = { name: 'Quartz Ram', texture: 'quartzRamHi', hp: 62, spd: 60, xp: 22, cost: 3,
         deathTint: 0xff7ab8, chase: { contactDmg: 14 },
         mapVerb: 'ramCharge',                                 // warned lane, then CHARGE (wraps!)
         charge: { everyMs: 5400, range: 460, warnMs: 900, len: 700, half: 24, chargeMs: 1100, speed: 430 },
         unlockAt: 40 };
-      DATA.mobs.resonator = { name: 'Resonator', texture: 'resonatorHi', hp: 70, spd: 5, xp: 20, cost: 3,
+      DATA.mobs.resonator = { name: 'Resonator', texture: 'resonatorHi', hp: 48, spd: 5, xp: 20, cost: 3,
         deathTint: 0xa06bf0, chase: { contactDmg: 6 },
         mapVerb: 'resonate',                                  // plants; expanding rings
         pulse: { everyMs: 3800, range: 420, growMs: 1700, maxR: 240, dmg: 14 },
         maxConcurrent: 3, unlockAt: 35 };
-      DATA.mobs.gemwingMoth = { name: 'Gemwing Moth', texture: 'gemwingMothHi', hp: 40, spd: 48, xp: 16, cost: 2,
+      DATA.mobs.gemwingMoth = { name: 'Gemwing Moth', texture: 'gemwingMothHi', hp: 30, spd: 48, xp: 16, cost: 2,
         deathTint: 0xffd0e8, float: true, chase: { contactDmg: 7 },
         mapVerb: 'mothDust',                                  // sheds glitter-dust slow patches
         dust: { everyMs: 2600, radius: 60, lifeMs: 5200 },
         unlockAt: 25 };
-      DATA.mobs.deepCrawler = { name: 'Deep Crawler', texture: 'deepCrawlerHi', hp: 75, spd: 95, xp: 22, cost: 3,
+      DATA.mobs.deepCrawler = { name: 'Deep Crawler', texture: 'deepCrawlerHi', hp: 52, spd: 95, xp: 22, cost: 3,
         deathTint: 0x38286e, chase: { contactDmg: 13 },
         mapVerb: 'crawlerSnip',                               // double-pincer snip cone
         snip: { everyMs: 4400, range: 150, warnMs: 700, halfRad: 0.7, dmg: 18 },
         unlockAt: 45 };
-      DATA.mobs.voidgemHorror = { name: 'Voidgem Horror', texture: 'voidgemHorrorHi', hp: 240, spd: 42, xp: 46, cost: 5,
+      DATA.mobs.voidgemHorror = { name: 'Voidgem Horror', texture: 'voidgemHorrorHi', hp: 130, spd: 42, xp: 46, cost: 5,
         deathTint: 0x38286e, float: true, chase: { contactDmg: 16 },
         mapVerb: 'voidBeam',                                  // short warned beam sweeps
         beam: { everyMs: 6200, range: 380, warnMs: 950, gapMs: 300, stepRad: 0.5, len: 360, half: 20, dmg: 20 },

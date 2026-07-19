@@ -44,7 +44,7 @@
 
     // ---- "???" reveal (persisted on first clear) ----
     realmName: function () {
-      try { if (typeof localStorage !== 'undefined' && localStorage.getItem('srb_belly_cleared') === '1') return 'Belly of the Beast'; } catch (e) {}
+      try { if (typeof localStorage !== 'undefined' && localStorage.getItem('srb_belly_cleared') === '1') return 'The Pinnacle of Corruption'; } catch (e) {}
       return '???';
     },
     markCleared: function () {
@@ -54,7 +54,7 @@
       try {
         if (typeof DATA !== 'undefined' && DATA.console && DATA.console.maps) {
           for (var i = 0; i < DATA.console.maps.length; i++) {
-            if (DATA.console.maps[i].id === 'belly') DATA.console.maps[i].name = 'Belly of the Beast';
+            if (DATA.console.maps[i].id === 'belly') DATA.console.maps[i].name = 'The Pinnacle of Corruption';
           }
         }
       } catch (e) {}
@@ -90,17 +90,25 @@
 
     // ======================================================== SETUP ========
     setup: function (scene, WW, HH) {
+      // 2026-07-19 (Red): TWO-ACT finale. ACT 1 = the guts (clear ALL the mobs →
+      // beaching cutscene). ACT 2 = a fresh Realm re-entry with data.arena: the
+      // BIG SAND MAP — beached 1.5x whale + a ramping any-realm horde to a
+      // 1000-kill counter + one quicksand pit → glass-shatter → cs2/cs3/cs4.
+      var isArena = !!scene._bellyArena;
       var C = scene._belly = {
-        stage: 'guts',
+        stage: isArena ? 'arena' : 'guts',
         zones: [], mLanes: [], rings: [], patches: [], mobWarns: [],
         latch: null, dispUntil: 0, bossArmed: false,
         tide: { nextAt: 0, phase: 'idle', gurgleUntil: 0, riseUntil: 0, recedeUntil: 0, zones: [], flexG: null },
-        uvula: null, uvulaGagged: false, cinematic: null, acidTiles: [], acidFrame: 0, acidNextAt: 0,
+        uvula: null, uvulaGagged: true, cinematic: null, acidTiles: [], acidFrame: 0, acidNextAt: 0,
         tracked: {}, popsThisFrame: 0,
-        arena: { x: 0.5 * WW, y: 0.62 * HH, rx: scene.realmDef.arenaCfg.rx, ry: scene.realmDef.arenaCfg.ry },
+        horde: null, guts: null, quicksand: null, hordeText: null,
+        arena: { x: 0.5 * WW, y: 0.5 * HH, rx: 0.42 * WW, ry: 0.42 * HH },   // ACT 2 fills the world
         wreck: { x: Z_WRECK[0] * WW, y: Z_WRECK[1] * HH, rx: 0.17 * WW, ry: 0.13 * HH }
       };
       scene._zoneWarns = scene._zoneWarns || [];
+      BE._wireMobVerbs(scene);                                    // belly mob verbs (both acts)
+      if (isArena) { BE._setupArena(scene, C, WW, HH); return; }  // ACT 2 owns its own build
 
       // ---- base flesh floor + zone accents (masked ellipses) ----
       scene.add.tileSprite(WW / 2, HH / 2, WW, HH, 'bellylining').setDepth(-24);
@@ -128,22 +136,18 @@
       DECOR.forEach(function (D) { scene.add.sprite(D[1] * WW, D[2] * HH, D[0]).setScale(D[3]).setDepth(2); });
       scene.add.sprite(C.wreck.x, C.wreck.y + 20, 'bellyHull').setScale(3.2).setDepth(1.5);
 
-      // ---- THE UVULA (gullet end) — shootable set piece w/ hp bar glow ----
-      var ux = UVULA[0] * WW, uy = UVULA[1] * HH;
-      var uspr = scene.add.sprite(ux, uy, 'bellyUvula').setScale(1.8).setDepth(3);
-      var uglow = scene.add.circle(ux, uy + 12, 40, PINK, 0.14).setDepth(1.4);
-      scene.tweens.add({ targets: uglow, alpha: { from: 0.1, to: 0.32 }, duration: 900, yoyo: true, repeat: -1 });
-      C.uvula = { spr: uspr, glow: uglow, x: ux, y: uy + 12, hp: scene.realmDef.uvulaCfg.hp, maxHp: scene.realmDef.uvulaCfg.hp };
-
-      // ---- spawn ON the wrecked deck ----
+      // ---- spawn ON the wrecked deck (you woke here after being swallowed) ----
       scene._realmStart = { x: C.wreck.x, y: C.wreck.y + 8 };
 
-      // ---- INTRO CINEMATIC state (first-time full; skip on repeat) ----
-      var seen = false;
-      try { if (typeof localStorage !== 'undefined') seen = localStorage.getItem('srb_belly_intro') === '1'; } catch (e) {}
-      C.introSeen = seen;
+      // The intro is now the csBoat NES cutscene (fired on realm entry), so the
+      // in-scene banner intro is retired. ACT 1 ends by CLEARING ALL THE MOBS.
+      C.introSeen = true;
+      C.guts = { closing: false, goal: (scene.realmDef.gutsCfg && scene.realmDef.gutsCfg.goal) || 55, cleared: false };
+    },
 
-      // mob-verb helpers (fresh closures)
+    // Mob-verb closures — used in the guts AND when belly mobs surface in the
+    // ACT 2 horde (foreign-realm mobs have no belly verb → they just chase).
+    _wireMobVerbs: function (scene) {
       scene._bFisherman = function (m, p, t) { return BE._fisherman(scene, m, p, t); };
       scene._bLobster = function (m, p, t) { return BE._lobster(scene, m, p, t); };
       scene._bSnake = function (m, p, t) { return BE._snake(scene, m, p, t); };
@@ -160,9 +164,97 @@
       scene._bPolyp = function (m, p, t) { return BE._polyp(scene, m, p, t); };
     },
 
+    // ---------------------------------------------- ACT 2 — THE SAND ARENA ---
+    _setupArena: function (scene, C, WW, HH) {
+      var A = C.arena, r = function (n) { return typeof SIM !== 'undefined' ? SIM.rng() : Math.random(); };
+      scene.add.rectangle(WW / 2, HH / 2, WW, HH, 0xc4a868).setDepth(-24);        // sand floor
+      var ring = scene.add.graphics().setDepth(-23);
+      ring.fillStyle(0xb89a5a, 1); ring.fillEllipse(A.x, A.y, A.rx * 2 + 60, A.ry * 2 + 60);
+      ring.fillStyle(0xcbae72, 1); ring.fillEllipse(A.x, A.y, A.rx * 2, A.ry * 2);
+      for (var i = 0; i < 46; i++) { var an = r() * 6.283, rr = r(); scene.add.circle(A.x + Math.cos(an) * rr * A.rx * 0.92, A.y + Math.sin(an) * rr * A.ry * 0.92, 5 + r() * 12, 0xb2955a, 0.5).setDepth(-22); }
+      // surf line along the top edge (you were spat from the sea)
+      for (var sx = 0; sx < WW; sx += 10) scene.add.rectangle(sx, A.y - A.ry - 30 + Math.sin(sx * 0.04) * 6, 8, 3, 0xe6f0f8, 0.6).setDepth(-22);
+      // ONE quicksand pit — slows the player (no damage), offset from the boss
+      var qx = A.x + A.rx * 0.34, qy = A.y + A.ry * 0.30, qr = Math.min(A.rx, A.ry) * 0.15;
+      scene.add.ellipse(qx, qy, qr * 2.1, qr * 1.5, 0x7a6a3a, 0.95).setDepth(-21);
+      scene.add.ellipse(qx, qy, qr * 1.5, qr * 1.02, 0x574c2c, 0.95).setDepth(-20.9);
+      for (var q = 0; q < 5; q++) scene.add.circle(qx + (r() - 0.5) * qr, qy + (r() - 0.5) * qr * 0.7, 2, 0x3e3620, 0.9).setDepth(-20.8);
+      C.quicksand = { x: qx, y: qy, r: qr };
+      C.patches.push({ x: qx, y: qy, r: qr, dieAt: Infinity, obj: null, slowMult: 0.6, dmg: 0, tickMs: 1000, nextTickAt: 0, src: 'the quicksand' });
+      scene._realmStart = { x: A.x, y: A.y + A.ry - 70 };                          // spat to the bottom of the sand
+      // any-realm horde pool: every mob from every biome whose texture is loaded
+      var pool = [];
+      try { for (var bk in DATA.biomes) { (DATA.biomes[bk].mobs || []).forEach(function (k) { var md = DATA.mobs[k]; if (md && !md.boss && scene.textures.exists(md.texture) && pool.indexOf(k) < 0) pool.push(k); }); } } catch (e) {}
+      if (!pool.length) pool = ((DATA.biomes[scene.realmBiome] || {}).mobs || ['shipRatPack']).slice();
+      var hc = scene.realmDef.hordeCfg || {};
+      C.horde = { goal: hc.goal || 1000, kills: 0, pool: pool, nextAt: 0, intervalMs: hc.intervalMs || 650,
+                  burst: hc.burst || 5, maxCap: hc.maxCap || 52, rampMs: hc.rampMs || 6000, startAt: scene.time.now };
+      var W = scene.scale.width;
+      C.hordeText = scene.add.text(W / 2, 44, 'DEVOURED  0 / ' + C.horde.goal,
+        { fontFamily: 'monospace', fontSize: 15, color: '#ffe08a', stroke: '#3a2410', strokeThickness: 3 })
+        .setScrollFactor(0).setOrigin(0.5).setDepth(60);
+    },
+    _arenaSpawnPoint: function (scene, C) {
+      var A = C.arena, an = (typeof SIM !== 'undefined' ? SIM.rng() : Math.random()) * Math.PI * 2;
+      return { x: A.x + Math.cos(an) * A.rx * 0.98, y: A.y + Math.sin(an) * A.ry * 0.98 };
+    },
+    // ACT 2 horde director: START AT 1 mob, ramp cap slowly (time + kills). All
+    // spawns via queueSpawn (safe from inside update). Fires the finale when the
+    // 1000-kill counter AND the whale are both down.
+    _hordeStep: function (scene, C, time) {
+      var H = C.horde, p = scene.player; if (!H) return;
+      H.kills = p.state.kills;
+      var elapsed = time - H.startAt;
+      var cap = Math.min(H.maxCap, 1 + Math.floor(elapsed / H.rampMs) + Math.floor(H.kills / 40));
+      if (time >= H.nextAt && !scene.closing && !scene._bellyFinaleFired) {
+        H.nextAt = time + H.intervalMs;
+        var want = Math.min(H.burst, cap - scene.mobs.countActive(true));
+        for (var i = 0; i < want; i++) {
+          var k = H.pool[Math.floor((typeof SIM !== 'undefined' ? SIM.rng() : Math.random()) * H.pool.length)];
+          var pt = BE._arenaSpawnPoint(scene, C);
+          scene.queueSpawn({ key: k, x: pt.x, y: pt.y });
+        }
+      }
+      if (C.hordeText && C.hordeText.active) C.hordeText.setText('DEVOURED  ' + Math.min(H.kills, H.goal) + ' / ' + H.goal);
+      if (H.kills >= H.goal && scene._bellyBossDead && !scene._bellyFinaleFired && scene.triggerBellyFinale) scene.triggerBellyFinale();
+    },
+    // ---------------------------------------------- ACT 1 — CLEAR THE GUTS ---
+    _gutsStep: function (scene, C, time) {
+      var G = C.guts; if (!G) return;
+      if (!G.closing && scene.player.state.kills >= G.goal) {
+        G.closing = true;
+        if (scene.spawnEvent) scene.spawnEvent.paused = true;                     // stop the incoming tide of mobs
+        scene.banner('THE GUTS ARE EMPTYING\nfinish them off — CLEAR IT OUT', '#d8ffa0');
+      }
+      if (G.closing && !G.cleared && scene.mobs.countActive(true) === 0) {
+        G.cleared = true;
+        BE._beaching(scene, C, time);
+      }
+    },
+    // clearing the guts BEACHES the whale (csBeach cutscene) → the sand arena.
+    _beaching: function (scene, C, time) {
+      var mode = scene.mode || 'clear';
+      var rd = { map: 'pinnacle', mode: mode };   // ACT 2 = the standalone PINNACLE OF CORRUPTION map
+      // The beaching cutscene fires EVERY time the guts are cleared — Red wants
+      // all finale cutscenes to play on every run, arcade mode included
+      // (2026-07-19), so there's no cutscenesSeen gate here anymore.
+      if (typeof CutsceneScene !== 'undefined') {
+        try { if (typeof ACCOUNT !== 'undefined' && ACCOUNT && ACCOUNT.cutscenesSeen) { ACCOUNT.cutscenesSeen.csBeach = true; persist(); } } catch (e) {}
+        scene.scene.start('Cutscene', { id: 'csBeach', cls: (typeof CURRENT !== 'undefined' && CURRENT && CURRENT.cls) || 'ranger',
+          next: { scene: 'Realm', data: rd } });
+      } else {
+        scene.scene.start('Realm', rd);
+      }
+    },
+
     afterCreate: function (scene) {
-      // no map colliders — the flesh floor is open; safe ground is a tide rule,
-      // not a wall (attaching colliders in setup would throw 'isParent').
+      var C = scene._belly; if (!C) return;
+      // ACT 2: pause the normal director (our horde runs the show), then start
+      // the beached-whale boss fight (bossArrival scales + places it).
+      if (C.stage === 'arena') {
+        if (scene.spawnEvent) scene.spawnEvent.paused = true;
+        scene.time.delayedCall(300, function () { if (!scene.closing && !scene.boss && scene.startBossFight) scene.startBossFight(); });
+      }
     },
 
     _onSafeGround: function (C, x, y) {
@@ -177,8 +269,9 @@
       var p = scene.player, alive = p.state.alive;
       C.popsThisFrame = 0;
 
-      // ---- INTRO CINEMATIC: the SWALLOW beat + the meta line (first time only) ----
-      if (!C.introSeen && !C.introStarted && C.stage === 'guts') BE._playIntro(scene, C, time);
+      // ---- TWO-ACT step: ACT 1 clears the guts → beaching; ACT 2 runs the horde ----
+      if (C.stage === 'guts') BE._gutsStep(scene, C, time);
+      else BE._hordeStep(scene, C, time);
 
       // boss-owned machinery clears when the boss falls — and the whale beaten
       // ONCE reveals BELLY OF THE BEAST permanently (PLAN §1 "???" reveal).
@@ -455,16 +548,19 @@
         C.tide.zones = [];
       }
       C.latch = null;
-      scene.player.setPosition(A.x, A.y + A.ry - 40);
-      scene.cameras.main.centerOn(A.x, A.y);
+      // BIG sand map: the camera FOLLOWS the player (the old arena was a fixed
+      // one-screen view; this one is world-scale).
+      scene.cameras.main.startFollow(scene.player, true, 0.12, 0.12);
       scene.banner('THE TITAN WHALE\nbeached — and it is FURIOUS', '#b13e53');
       try { AUDIO.play('whaleroar'); } catch (e) {}
-      var tx = A.x, ty = A.y - A.ry + 30;
+      var tx = A.x, ty = A.y - A.ry + 60;
       scene.time.delayedCall(def.entranceMs * 0.5, function () {
         if (self.closing || !self.player.state.alive) return;
         self.spawnBossNow(def, tx, ty);
         if (self.boss) {
           var b = self.boss;
+          b.setScale((b.scaleX || 1) * 1.5);                    // Red: 1.5x the current whale size
+          try { if (b.body && b.body.setSize) b.body.setSize(b.body.width * 1.5, b.body.height * 1.5, true); } catch (e) {}
           b.setAlpha(0);
           self.tweens.add({ targets: b, alpha: 1, duration: 500, onComplete: function () {
             if (!b.active) return;
@@ -510,7 +606,7 @@
       if (time < bs.busyUntil) return;                        // rooted/busy mid-verb (it never moves anyway)
 
       // SIGNATURE — WATER GUN every few verbs
-      if (time >= bs.nextVerbAt && bs.gunEveryIdx >= 3) {
+      if (time >= bs.nextVerbAt && bs.gunEveryIdx >= (PT.waterGun.everyVerbs || 3)) {   // everyVerbs:1 → 3x snipe frequency
         bs.gunEveryIdx = 0;
         bs.nextVerbAt = time + PT.verbEveryMs * rate;
         BE._waterGun(scene, b, player, time);
@@ -646,7 +742,7 @@
         try { AUDIO.play('waterjet'); } catch (e) {}
         var p = self.player;
         if (p.state.alive && dist2seg(p.x, p.y, bx, by, bx + Math.cos(ang) * far, by + Math.sin(ang) * far) < cfg.corridorHalf)
-          Entities.hurtPlayer(self, p, cfg.dmg, self.time.now, 'the WATER GUN', true);
+          Entities.hurtPlayer(self, p, cfg.dmg, self.time.now, 'the WATER GUN', true, !!cfg.oneShot);   // oneShot → true instakill
         // it SLUMPS gasping — VENTED ×1.5
         b.boss.ventedUntil = self.time.now + cfg.ventMs;
         b.boss.ventDmgMult = cfg.ventDmgMult;

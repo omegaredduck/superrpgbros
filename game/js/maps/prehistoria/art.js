@@ -97,404 +97,190 @@
   }
   var mp = function (pts, ox, oy, sc) { return pts.map(function (q) { return [ox + q[0] * sc, oy + q[1] * sc]; }); };
 
-  // ================================ MOBS =====================================
-  // 1 RAPTOR — deinonychus build, horizontal balance beam
-  function raptor160(put, S) {
-    var X = U(S); floor(put, S, 31); shadow(put, X(84), X(132), X(44), X(6));
-    var cLt = P.dinoOLt, c = P.dinoO, cDk = P.dinoODk;
-    theroLeg(put, X, 92, 90, 1.05, cLt, c, cDk, true);
-    var TOP = [[4, 70], [30, 69], [56, 67], [76, 62], [92, 58], [104, 58], [114, 62], [120, 66]];
-    var BOT = [[4, 74], [30, 76], [56, 80], [76, 88], [92, 96], [104, 96], [114, 90], [120, 84]];
-    body(put, X, 4, 120, TOP, BOT, cLt, c, cDk);
-    for (var x = 8; x <= 40; x += 4) stroke(put, X(x), X(pw(x, BOT)), X(x - 2), X(pw(x, BOT) + 4), X(1), function () { return mix(c, cDk, 0.5); });
-    for (var x2 = 48; x2 <= 100; x2 += 10) { for (var i = 0; i <= 6; i++) put(Math.round(X(x2 - i * 0.4)), Math.round(X(pw(x2, TOP) + i)), cDk); }
-    theroLeg(put, X, 96, 92, 1.1, cLt, c, cDk, false);
-    stroke(put, X(112), X(76), X(122), X(84), X(3), function () { return c; });
-    stroke(put, X(122), X(84), X(118), X(90), X(2), function () { return cDk; });
-    for (var k = 0; k < 3; k++) stroke(put, X(114 + k * 3), X(80 + k * 2), X(111 + k * 3), X(86 + k * 2), X(1), function () { return mix(c, cDk, 0.5); });
-    stroke(put, X(118), X(68), X(124), X(58), X(9), function () { return c; });
-    stroke(put, X(124), X(58), X(131), X(50), X(7.4), function () { return mix(cLt, c, 0.4); });
-    var HTOP = [[126, 42], [134, 40], [144, 42], [154, 46]];
-    var HBOT = [[126, 52], [136, 52], [146, 50], [154, 48]];
-    body(put, X, 126, 154, HTOP, HBOT, cLt, c, cDk);
-    for (var xj = 136; xj <= 152; xj++) { var t = (xj - 136) / 16; for (var yj = 52 + t * 2; yj <= 56 + t * 1; yj++) put(Math.round(X(xj)), Math.round(X(yj)), mix(c, cDk, 0.5 + t * 0.3)); }
-    row(put, Math.round(X(51.5)), X(138), X(153), function () { return P.night; });
-    [[140], [145], [150]].forEach(function (q) { stroke(put, X(q[0]), X(51.5), X(q[0]), X(53.5), X(0.9), function () { return P.tooth; }); stroke(put, X(q[0] + 2), X(55), X(q[0] + 2), X(53.5), X(0.9), function () { return P.tooth; }); });
-    put(Math.round(X(133)), Math.round(X(44)), P.eye); put(Math.round(X(133.8)), Math.round(X(44.4)), P.night);
-    stroke(put, X(152), X(44), X(155), X(45), X(1), function () { return cDk; });
-    for (var kc = 0; kc < 4; kc++) stroke(put, X(127 + kc * 2), X(41), X(125 + kc * 2), X(36), X(1), function () { return mix(c, cDk, 0.4); });
-  }
-  // small theropod — shared by the compy swarm
-  function miniThero(put, X, ox, oy, sc, cLt, c, cDk, o) {
-    o = o || {};
-    var TOP = mp([[0, 10], [16, 9], [26, 6], [34, 4], [40, 6]], ox, oy, sc);
-    var BOT = mp([[0, 12], [16, 13], [26, 16], [34, 18], [40, 15]], ox, oy, sc);
-    theroLeg(put, X, ox + 27 * sc, oy + 15 * sc, sc * 0.42, cLt, c, cDk, true);
-    body(put, X, TOP[0][0], TOP[TOP.length - 1][0], TOP, BOT, cLt, c, cDk);
-    theroLeg(put, X, ox + 30 * sc, oy + 16 * sc, sc * 0.46, cLt, c, cDk, false);
-    stroke(put, X(ox + 39 * sc), X(oy + 7 * sc), X(ox + 44 * sc), X(oy + (o.headUp ? -2 : 1) * sc), X(3 * sc), function () { return c; });
-    var hy = oy + (o.headUp ? -4 : -1) * sc;
-    ell(put, X(ox + 47 * sc), X(hy), X(4 * sc), X(2.6 * sc), function (tx, ty) { return mix(cLt, cDk, ty); });
-    stroke(put, X(ox + 50 * sc), X(hy + 0.5 * sc), X(ox + 54 * sc), X(hy + sc), X(1.6 * sc), function () { return cDk; });
-    put(Math.round(X(ox + 46 * sc)), Math.round(X(hy - sc)), o.eyeC || P.eye);
-  }
-  // 2 COMPY SWARM
-  function drawCompies(put, S) {
-    var X = U(S); floor(put, S, 42);
-    shadow(put, X(60), X(96), X(20), X(3)); shadow(put, X(104), X(116), X(18), X(3)); shadow(put, X(44), X(126), X(16), X(3));
-    miniThero(put, X, 34, 66, 0.9, P.dinoGLt, P.dinoG, P.dinoGDk, { headUp: true });
-    miniThero(put, X, 80, 90, 0.75, mix(P.dinoGLt, P.dinoOLt, 0.4), mix(P.dinoG, P.dinoO, 0.4), P.dinoGDk, {});
-    miniThero(put, X, 20, 100, 0.65, P.dinoGLt, P.dinoG, P.dinoGDk, { headUp: true });
-    fern(put, X(136), X(120), X(11));
-  }
-  // 3 TRICERATOPS — the head is a third of the animal
-  function trike160(put, S) {
-    var X = U(S); floor(put, S, 32); shadow(put, X(78), X(134), X(52), X(7));
-    var cLt = P.dinoBLt, c = P.dinoB, cDk = P.dinoBDk;
-    stroke(put, X(52), X(100), X(48), X(128), X(8), function () { return cDk; });
-    stroke(put, X(96), X(102), X(94), X(126), X(7), function () { return cDk; });
-    var TOP = [[14, 92], [28, 78], [46, 66], [66, 62], [86, 64], [102, 70]];
-    var BOT = [[14, 98], [28, 108], [46, 118], [66, 120], [86, 116], [102, 108]];
-    body(put, X, 14, 102, TOP, BOT, cLt, c, cDk);
-    [[36], [56], [76]].forEach(function (q) { for (var i = 0; i <= 8; i++) put(Math.round(X(q[0] + i * 0.2)), Math.round(X(pw(q[0], TOP) + 4 + i * 4)), mix(cDk, c, 0.4)); });
-    stroke(put, X(60), X(104), X(58), X(132), X(9), function () { return c; });
-    ell(put, X(58), X(133), X(6), X(3), function (tx, ty) { return mix(cLt, cDk, ty); }); [[54, 135], [58, 136], [62, 135]].forEach(function (q) { put(Math.round(X(q[0])), Math.round(X(q[1])), P.horn); });
-    stroke(put, X(102), X(104), X(103), X(130), X(8), function () { return mix(c, cDk, 0.25); });
-    ell(put, X(103), X(131), X(5.4), X(3), function (tx, ty) { return mix(cLt, cDk, ty); }); [[100, 133], [104, 134], [107, 132]].forEach(function (q) { put(Math.round(X(q[0])), Math.round(X(q[1])), P.horn); });
-    var HTOP = [[108, 56], [122, 58], [136, 68], [148, 82]];
-    var HBOT = [[108, 90], [124, 94], [140, 96], [148, 98]];
-    body(put, X, 108, 148, HTOP, HBOT, cLt, c, cDk);
-    for (var a = -0.5; a <= 2.5; a += 0.02) {
-      var fr = 27 - Math.abs(Math.sin(a * 1.6)) * 3;
-      var fx = 112 - Math.cos(a - 0.9) * fr * 0.8, fy = 60 - Math.sin(a - 0.9) * fr;
-      stroke(put, X(112), X(62), X(fx), X(fy), X(1.8), (function (aa) { return function () { return mix(P.dinoRLt, P.dinoRDk, clamp(aa / 2.5 * 0.6 + 0.15, 0, 1)); }; })(a));
-    }
-    for (var a2 = -0.5; a2 <= 2.5; a2 += 0.3) { var fx2 = 112 - Math.cos(a2 - 0.9) * 22, fy2 = 60 - Math.sin(a2 - 0.9) * 27; ell(put, X(fx2), X(fy2), X(1.8), X(1.8), function () { return P.hornDk; }); }
-    [[126, 60, 142, 32, 3.6, 0], [132, 62, 150, 40, 3, 0.15]].forEach(function (q) {
-      var bx = q[0], by = q[1], tx2 = q[2], ty2 = q[3], w = q[4], fd = q[5], px2 = bx, py2 = by;
-      for (var i = 1; i <= 12; i++) {
-        var t = i / 12;
-        var nx = bx + (tx2 - bx) * t + Math.sin(t * 1.8) * 3;
-        var ny = by + (ty2 - by) * t;
-        stroke(put, X(px2), X(py2), X(nx), X(ny), X(Math.max(1.2, w * (1 - t * 0.6))), (function (tt) { return function () { return mix(P.horn, P.hornDk, tt * 0.45 + fd); }; })(t));
-        px2 = nx; py2 = ny;
-      }
-    });
-    for (var xb = 146; xb <= 156; xb++) { var tb = (xb - 146) / 10; for (var yb = 86 + tb * 6; yb <= 98 - tb * 2; yb++) put(Math.round(X(xb)), Math.round(X(yb)), mix(P.horn, P.hornDk, tb)); }
-    stroke(put, X(156), X(92), X(154), X(97), X(1.6), function () { return P.hornDk; });
-    row(put, Math.round(X(94)), X(134), X(150), function () { return mix(cDk, P.night, 0.4); });
-    stroke(put, X(142), X(80), X(146), X(70), X(2.6), function () { return P.horn; });
-    ell(put, X(125), X(70), X(2), X(2.2), function () { return P.eye; }); put(Math.round(X(125.5)), Math.round(X(70.4)), P.night);
-    var TT = [[2, 96], [14, 92]], TB = [[2, 100], [14, 98]];
-    body(put, X, 2, 14, TT, TB, cLt, c, cDk);
-  }
-  // 4 STEGOSAURUS — tiny head, peaked hips, thagomizer
-  function stego160(put, S) {
-    var X = U(S); floor(put, S, 33); shadow(put, X(80), X(134), X(50), X(7));
-    var cLt = P.dinoGLt, c = P.dinoG, cDk = P.dinoGDk;
-    stroke(put, X(58), X(96), X(54), X(128), X(8), function () { return cDk; });
-    stroke(put, X(106), X(102), X(104), X(126), X(6), function () { return cDk; });
-    var TOP = [[18, 84], [34, 72], [52, 60], [68, 58], [88, 66], [106, 80], [122, 90]];
-    var BOT = [[18, 92], [34, 102], [52, 112], [68, 114], [88, 112], [106, 106], [122, 100]];
-    body(put, X, 18, 122, TOP, BOT, cLt, c, cDk);
-    for (var x = 40; x <= 104; x++) put(Math.round(X(x)), Math.round(X(pw(x, BOT) - 1)), mix(P.belly, cDk, 0.35));
-    stroke(put, X(64), X(100), X(62), X(132), X(9), function () { return c; });
-    ell(put, X(62), X(133), X(5.4), X(2.6), function (tx, ty) { return mix(cLt, cDk, ty); });
-    stroke(put, X(112), X(102), X(112), X(128), X(6.4), function () { return mix(c, cDk, 0.2); });
-    ell(put, X(112), X(129), X(4.4), X(2.4), function (tx, ty) { return mix(cLt, cDk, ty); });
-    var HTOP = [[122, 88], [134, 90], [146, 94]];
-    var HBOT = [[122, 100], [134, 100], [146, 100]];
-    body(put, X, 122, 146, HTOP, HBOT, cLt, c, cDk);
-    stroke(put, X(146), X(97), X(151), X(98), X(2.4), function () { return P.hornDk; });
-    put(Math.round(X(136)), Math.round(X(92)), P.eye); put(Math.round(X(136.8)), Math.round(X(92.4)), P.night);
-    var plateAt = function (px2, h, dark) {
-      var base = pw(px2, TOP); if (base == null) return;
-      for (var i = 0; i <= h; i++) {
-        var t = i / h, w = 6 * (1 - Math.abs(t - 0.35) * 1.4);
-        if (w <= 0) continue;
-        row(put, Math.round(X(base - i)), X(px2 - w), X(px2 + w), (function (tt) { return function (tx) { return mix(dark ? P.dinoR : P.dinoRLt, P.dinoRDk, clamp(tx + tt * 0.4, 0, 1)); }; })(t));
-      }
-    };
-    [[26, 12], [42, 18], [58, 24], [74, 24], [92, 18], [108, 12]].forEach(function (q) { plateAt(q[0], q[1], false); });
-    [[34, 14], [50, 21], [66, 25], [83, 21], [100, 14]].forEach(function (q) { plateAt(q[0], q[1], true); });
-    var TT = [[2, 76], [18, 84]], TB = [[2, 84], [18, 92]];
-    body(put, X, 2, 18, TT, TB, cLt, c, cDk);
-    [[2, 62, 3], [10, 58, 3], [0, 74, 2.6], [8, 70, 2.6]].forEach(function (q) { stroke(put, X(q[0] + 4), X(80), X(q[0]), X(q[1]), X(q[2]), function () { return mix(P.horn, P.hornDk, 0.25); }); });
-  }
-  // 5 PTERANODON
-  function drawPtero(put, S) {
-    var X = U(S); floor(put, S, 45);
-    ell(put, X(80), X(126), X(18), X(4), function () { return '#08090a'; });
-    [[-1], [1]].forEach(function (q) {
-      var sd = q[0];
-      var shx = 80 + sd * 6, wrx = 80 + sd * 30, tipx = 80 + sd * 66;
-      stroke(put, X(shx), X(58), X(wrx), X(44), X(2.6), function () { return P.furDk; });
-      stroke(put, X(wrx), X(44), X(tipx), X(70), X(2), function () { return P.furDk; });
-      for (var i = 0; i <= 14; i++) {
-        var t = i / 14;
-        var bx = shx + (wrx - shx) * t, by2 = 58 + (44 - 58) * t;
-        stroke(put, X(80 + sd * 4), X(66), X(bx), X(by2), X(1.2), (function (tt) { return function () { return mix('#b06a4a', '#5a2e1a', 0.3 + tt * 0.3); }; })(t));
-      }
-      for (var i2 = 0; i2 <= 16; i2++) {
-        var t2 = i2 / 16;
-        var bx2 = wrx + (tipx - wrx) * t2, by3 = 44 + (70 - 44) * t2;
-        stroke(put, X(80 + sd * (8 + t2 * 10)), X(66 + t2 * 4), X(bx2), X(by3), X(1.1), (function (tt) { return function () { return mix('#b06a4a', '#5a2e1a', 0.35 + tt * 0.35); }; })(t2));
-      }
-    });
-    ell(put, X(80), X(64), X(7), X(9), function (tx, ty) { return mix('#d29a6e', '#6a3e22', clamp(tx + ty * 0.5 - 0.15, 0, 1)); });
-    stroke(put, X(78), X(72), X(74), X(80), X(1.8), function () { return '#6a3e22'; });
-    stroke(put, X(82), X(72), X(86), X(80), X(1.8), function () { return '#6a3e22'; });
-    stroke(put, X(80), X(56), X(82), X(48), X(5), function () { return '#d29a6e'; });
-    ell(put, X(84), X(44), X(6), X(4.4), function (tx, ty) { return mix('#e2b088', '#6a3e22', ty); });
-    for (var ib = 0; ib <= 10; ib++) { var tbk = ib / 10; stroke(put, X(88 + tbk * 18), X(44 + tbk * 5), X(88 + tbk * 18), X(45 + tbk * 5), X(2.6 * (1 - tbk * 0.75)), (function (tt) { return function () { return mix('#e2b088', '#8a4e2a', tt * 0.5); }; })(tbk)); }
-    var cx2 = 80, cy2 = 41;
-    for (var ic = 1; ic <= 9; ic++) { var tc = ic / 9; var nx = 80 - tc * 22, ny = 41 - tc * 8; stroke(put, X(cx2), X(cy2), X(nx), X(ny), X(3.4 * (1 - tc * 0.7)), (function (tt) { return function () { return mix(P.dinoRLt, P.dinoRDk, tt * 0.4); }; })(tc)); cx2 = nx; cy2 = ny; }
-    put(Math.round(X(82)), Math.round(X(42.5)), P.eye); put(Math.round(X(82.6)), Math.round(X(42.8)), P.night);
-  }
-  // 6 DILOPHOSAURUS — twin round crests
-  function drawDilo(put, S) {
-    var X = U(S); floor(put, S, 46); shadow(put, X(80), X(130), X(38), X(5));
-    var cLt = P.dinoGLt, c = P.dinoG, cDk = P.dinoGDk;
-    theroLeg(put, X, 86, 88, 1.0, cLt, c, cDk, true);
-    var TOP = [[4, 66], [30, 65], [56, 62], [76, 58], [92, 56], [104, 58], [112, 62]];
-    var BOT = [[4, 70], [30, 72], [56, 78], [76, 86], [92, 92], [104, 90], [112, 84]];
-    body(put, X, 4, 112, TOP, BOT, cLt, c, cDk);
-    theroLeg(put, X, 90, 90, 1.05, cLt, c, cDk, false);
-    stroke(put, X(106), X(72), X(114), X(80), X(2.6), function () { return c; });
-    stroke(put, X(110), X(64), X(118), X(48), X(7.4), function () { return c; });
-    stroke(put, X(118), X(48), X(124), X(40), X(6), function () { return mix(cLt, c, 0.4); });
-    var HTOP = [[120, 33], [130, 31], [142, 33], [150, 37]];
-    var HBOT = [[120, 43], [132, 43], [144, 41], [150, 40]];
-    body(put, X, 120, 150, HTOP, HBOT, cLt, c, cDk);
-    stroke(put, X(144), X(37), X(147), X(39), X(1.4), function () { return cDk; });
-    row(put, Math.round(X(42)), X(132), X(149), function () { return P.night; });
-    [[136], [141], [146]].forEach(function (q) { stroke(put, X(q[0]), X(42), X(q[0]), X(44), X(0.8), function () { return P.tooth; }); });
-    put(Math.round(X(127)), Math.round(X(35)), P.eye); put(Math.round(X(127.6)), Math.round(X(35.4)), P.night);
-    [[0, P.dinoRLt, P.dinoRDk], [3, '#d2886e', '#6a2e1a']].forEach(function (q) {
-      var off = q[0], c1 = q[1], c2 = q[2];
-      for (var a = 0.2; a <= 2.9; a += 0.06) put(Math.round(X(129 + off + Math.cos(a) * -8)), Math.round(X(31 - Math.sin(a) * 9)), mix(c1, c2, Math.abs(a - 1.55) / 1.5));
-      for (var a2 = 0.3; a2 <= 2.8; a2 += 0.1) put(Math.round(X(129 + off + Math.cos(a2) * -6)), Math.round(X(31 - Math.sin(a2) * 7)), mix(c1, c2, 0.5));
-    });
-  }
-  // 20 BRACHIOSAURUS — the colossus
-  function drawBrachio(put, S) {
-    var X = U(S); floor(put, S, 60); shadow(put, X(72), X(140), X(48), X(6));
-    var cLt = '#a8b284', c = '#6e7a50', cDk = '#323a1e';
-    stroke(put, X(44), X(104), X(42), X(138), X(9), function () { return cDk; });
-    stroke(put, X(92), X(100), X(94), X(136), X(10), function () { return cDk; });
-    var TOP = [[16, 96], [36, 84], [60, 74], [84, 66], [102, 64]];
-    var BOT = [[16, 102], [36, 112], [60, 120], [84, 118], [102, 108]];
-    body(put, X, 16, 102, TOP, BOT, cLt, c, cDk);
-    var TT = [[0, 92], [16, 96]], TB = [[0, 98], [16, 102]];
-    body(put, X, 0, 16, TT, TB, cLt, c, cDk);
-    stroke(put, X(52), X(106), X(50), X(140), X(10), function () { return c; });
-    ell(put, X(50), X(141), X(6.4), X(3), function (tx, ty) { return mix(cLt, cDk, ty); });
-    stroke(put, X(98), X(102), X(100), X(138), X(11), function () { return mix(c, cDk, 0.15); });
-    ell(put, X(100), X(139), X(7), X(3), function (tx, ty) { return mix(cLt, cDk, ty); });
-    var nx2 = 104, ny2 = 70;
-    for (var i = 1; i <= 16; i++) {
-      var t = i / 16;
-      var nx = 104 + Math.sin(t * 1.2) * 28, ny = 70 - t * 52;
-      stroke(put, X(nx2), X(ny2), X(nx), X(ny), X(Math.max(4, 11 * (1 - t * 0.55))), (function (tt) { return function () { return mix(c, cDk, tt * 0.25); }; })(t));
-      nx2 = nx; ny2 = ny;
-    }
-    ell(put, X(nx2 + 4), X(ny2 - 2), X(7), X(4.4), function (tx, ty) { return mix(cLt, cDk, ty); });
-    for (var a = 0.4; a <= 2.7; a += 0.2) put(Math.round(X(nx2 + 1 + Math.cos(a) * -4)), Math.round(X(ny2 - 6 - Math.sin(a) * 3)), mix(cLt, c, 0.4));
-    stroke(put, X(nx2 + 10), X(ny2 - 1), X(nx2 + 14), X(ny2), X(2.2), function () { return cDk; });
-    put(Math.round(X(nx2 + 3)), Math.round(X(ny2 - 4)), P.eye);
-    fern(put, X(150), X(16), X(12), P.fern, P.fernLt);
-    put(Math.round(X(140)), Math.round(X(34)), P.fernLt);
-  }
+  // ==================== INSECT MOBS + BOSS (2026-07-19 re-theme) ====================
+  // ---- palette (6-digit hex; [lo,hi] = shadow,lit) --------------------------
+  var B = {
+    antrust:['#7a3a1c','#d2864a'], antdark:['#2e3038','#787284'],
+    term:['#8a6a44','#e6ce9c'], termHd:['#3a2414','#aa7038'],
+    grub:['#a08050','#e8dcb4'], grubHd:['#5a3a1e','#aa7038'],
+    wasp:['#6a4e0a','#f4d040'], waspB:'#2a2418',
+    horn:['#5a2c0a','#ec8e2a'], hornB:'#331c0c',
+    bee:['#6a4a12','#eec048'], beeFz:['#5a4020','#b48a4c'], beeB:'#2c2010',
+    mayf:['#5e8060','#dceccc'],
+    centi:['#6a281a','#d2643a'], cleg:'#b49a5e',
+    milli:['#343a46','#8a94a6'], mleg:'#b48a48',
+    // boss
+    wbody:['#2e2a38','#5c5468'], wband:['#7a3e14','#e08a34'],
+    mFore:['#5a2810','#d2642a'], mHind:['#3a1c0e','#8a3c1c'],
+    mBody:['#241410','#5c382a'], mBand:'#f0b446', mGlow:'#fa9632', mEye:'#fadc78',
+    coc:['#5a2e14','#c8783a'], cocGlow:'#f0a046', cocFleck:'#ecce78',
+    soil:['#3a2a1a','#7a5836'], soilD:'#2a1e12'
+  };
+  var OUT = '#0c0e08', EYE = '#141018', SHINE = '#f2eede';
 
-  // ---- RECOLOR variants (render_prehistoria_recolors.js hue-shift) ----------
-  function hex2rgb(h) { return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; }
-  function rgb2hex(r, g, b) { return '#' + [r, g, b].map(function (v) { return Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0'); }).join(''); }
-  function rgb2hsl(r, g, b) {
-    r /= 255; g /= 255; b /= 255;
-    var mx = Math.max(r, g, b), mn = Math.min(r, g, b), h = 0, s = 0, l = (mx + mn) / 2;
-    if (mx !== mn) {
-      var d = mx - mn;
-      s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
-      if (mx === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
-      else if (mx === g) h = ((b - r) / d + 2) / 6;
-      else h = ((r - g) / d + 4) / 6;
-    }
-    return [h, s, l];
-  }
-  function hsl2rgb(h, s, l) {
-    if (s === 0) { var v = l * 255; return [v, v, v]; }
-    var q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
-    var f = function (t) { t = ((t % 1) + 1) % 1; if (t < 1 / 6) return p + (q - p) * 6 * t; if (t < 1 / 2) return q; if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6; return p; };
-    return [f(h + 1 / 3) * 255, f(h) * 255, f(h - 1 / 3) * 255];
-  }
-  function shifted(deg, satM, litA) {
-    var cache = {};
-    return function (c) {
-      if (cache[c]) return cache[c];
-      var rgb = hex2rgb(c), hsl = rgb2hsl(rgb[0], rgb[1], rgb[2]);
-      var h = hsl[0], s = hsl[1], l = hsl[2], out;
-      if (s < 0.13) out = c;
-      else { h += deg / 360; s = Math.max(0, Math.min(1, s * satM)); l = Math.max(0, Math.min(1, l + litA)); var o = hsl2rgb(h, s, l); out = rgb2hex(o[0], o[1], o[2]); }
-      cache[c] = out; return out;
-    };
-  }
-  function recolored(draw, deg, satM, litA) {
-    var sh = shifted(deg, satM, litA);
-    return function (put, S) { draw(function (x, y, c) { put(x, y, sh(c)); }, S); };
-  }
+  function Xf(S){ return function(v){ return v*S/150; }; }
+  function sh(pal){ var lo=pal[0], hi=pal[1]; return function(tx,ty){ var b=mix(hi,lo,clamp(ty*1.12,0,1)); if(tx>0.8) b=mix(b,lo,0.35); if(tx<0.14) b=mix(b,hi,0.4); return b; }; }
+  function blob(put,X,cx,cy,rx,ry,pal){ ell(put,X(cx),X(cy),X(rx),X(ry),sh(pal)); }
+  function limbline(put,X,pts,w,col){ for(var i=0;i<pts.length-1;i++){ (function(a,b){ stroke(put,X(a[0]),X(a[1]),X(b[0]),X(b[1]),X(w),function(){return col;}); })(pts[i],pts[i+1]); } }
+  function shadowE(put,X,cx,cy,rx,ry){ ell(put,X(cx),X(cy),X(rx),X(ry),function(){return OUT;}); }
+  function eye(put,X,x,y,r){ ell(put,X(x),X(y),X(r),X(r),function(){return EYE;}); put(Math.round(X(x-r*0.4)),Math.round(X(y-r*0.4)),SHINE); }
+  function legs(put,X,hipx,hipy,col,cfg,w){ for(var i=0;i<cfg.length;i++){ var a=cfg[i]; var ar=a[0]*Math.PI/180; var kx=hipx+Math.cos(ar)*a[1], ky=hipy+Math.sin(ar)*a[1]; var a2=ar+a[3]*Math.PI/180; var fx=kx+Math.cos(a2)*a[2], fy=ky+Math.sin(a2)*a[2]; limbline(put,X,[[hipx,hipy],[kx,ky],[fx,fy]],w,col); } }
+  function antenna(put,X,hx,hy,col,ang,ln){ var a=(ang-90)*Math.PI/180; var mx=hx+Math.cos(a)*ln*0.6, my=hy+Math.sin(a)*ln*0.6; var tx=mx+Math.cos(a+0.5)*ln*0.5, ty=my+Math.sin(a+0.5)*ln*0.5; limbline(put,X,[[hx,hy],[mx,my],[tx,ty]],1.6,col); }
+  function wing(put,X,rx,ry,tx,ty,w,memb,vein){ stroke(put,X(rx),X(ry),X(tx),X(ty),X(w),function(){return memb;}); stroke(put,X(rx),X(ry),X((rx+tx)/2),X((ry+ty)/2),X(1.2),function(){return vein;}); }
 
-  // ============ THE PRIMORDIAL — dragon160 #10 (render_dragon_final O) =======
-  function dragon160(put, S, o) {
-    o = o || {};
-    var X = U(S);
-    var cLt = o.scaleLt || '#d2724e', c = o.scale || '#a8442e', cDk = o.scaleDk || '#541e10';
-    var belly = o.belly || '#e8c88a', bellyDk = o.bellyDk || '#a88a4e';
-    var memb = o.memb || mix(c, '#000000', 0.25), membDk = o.membDk || mix(cDk, '#000000', 0.3);
-    if (!o.noFloor) floor(put, S, o.seed || 0);
-    shadow(put, X(76), X(140), X(46), X(6));
-    var wingBone = function (ax, ay, pts, wc) {
-      var px2 = ax, py2 = ay;
-      pts.forEach(function (q) { stroke(put, X(px2), X(py2), X(q[0]), X(q[1]), X(q[2]), function () { return wc; }); px2 = q[0]; py2 = q[1]; });
-    };
-    var drawWing = function (ax, ay, sc, boneC, mC, mD) {
-      wingBone(ax, ay, [[ax - 8 * sc, ay - 22 * sc, 3.4 * sc], [ax - 18 * sc, ay - 34 * sc, 2.6 * sc]], boneC);
-      var wrist = [ax - 18 * sc, ay - 34 * sc];
-      var tips = [[ax - 58 * sc, ay - 26 * sc], [ax - 52 * sc, ay - 6 * sc], [ax - 40 * sc, ay + 6 * sc]];
-      for (var g = 0; g < tips.length; g++) {
-        var from = g === 0 ? wrist : tips[g - 1];
-        var steps = Math.max(18, Math.ceil(S / 5));
-        for (var i = 0; i <= steps; i++) {
-          var t = i / steps;
-          var ex = from[0] + (tips[g][0] - from[0]) * t, ey = from[1] + (tips[g][1] - from[1]) * t;
-          stroke(put, X(ax - 6 * sc), X(ay - 4 * sc), X(ex), X(ey), X(1.6), (function (tt) { return function () { return mix(mC, mD, 0.3 + tt * 0.35); }; })(t));
-        }
-      }
-      tips.forEach(function (q) { stroke(put, X(wrist[0]), X(wrist[1]), X(q[0]), X(q[1]), X(1.8 * sc), function () { return boneC; }); });
-      stroke(put, X(wrist[0]), X(wrist[1]), X(wrist[0] - 3), X(wrist[1] - 4), X(1.4), function () { return P.claw; });
-    };
-    drawWing(96, 56, 0.9, mix(cDk, '#000000', 0.2), mix(memb, '#000000', 0.25), mix(membDk, '#000000', 0.3));
-    if (!o.wyvern) { stroke(put, X(88), X(78), X(94), X(102), X(6), function () { return cDk; }); stroke(put, X(94), X(102), X(90), X(122), X(4), function () { return cDk; }); }
-    stroke(put, X(58), X(88), X(66), X(112), X(8), function () { return cDk; });
-    stroke(put, X(66), X(112), X(60), X(132), X(5), function () { return cDk; });
-    for (var k = 0; k <= 2; k++) stroke(put, X(60), X(132), X(64 + k * 4), X(135), X(2), function () { return mix(P.claw, cDk, 0.5); });
-    var tx2 = 42, ty2 = 80;
-    for (var it = 1; it <= 20; it++) {
-      var t = it / 20;
-      var nx = 42 - t * 40 + Math.sin(t * 3.6) * 6, ny = 80 - Math.sin(t * 2.2) * 26 + t * 8;
-      stroke(put, X(tx2), X(ty2), X(nx), X(ny), X(Math.max(1.6, 9 * (1 - t * 0.8))), (function (tt) { return function () { return mix(c, cDk, tt * 0.4); }; })(t));
-      tx2 = nx; ty2 = ny;
-    }
-    for (var it2 = 0; it2 <= 6; it2++) { var t2 = it2 / 6; row(put, Math.round(X(ty2 - 5 + it2 * 1.6)), X(tx2 - (4 - Math.abs(t2 - 0.5) * 6)), X(tx2 + (4 - Math.abs(t2 - 0.5) * 6)), (function (tt) { return function (tk) { return mix(cLt, cDk, tk + tt * 0.3); }; })(t2)); }
-    var TOP = [[40, 66], [58, 60], [78, 56], [96, 54], [104, 58]];
-    var BOT = [[40, 92], [58, 98], [78, 96], [96, 84], [104, 76]];
-    body(put, X, 40, 104, TOP, BOT, cLt, c, cDk);
-    for (var xb = 44; xb <= 100; xb += 3) { var by = pw(xb, BOT) - 2; row(put, Math.round(X(by)), X(xb - 1.4), X(xb + 1.4), (function (xx) { return function (tk) { return mix(belly, bellyDk, tk + ((xx / 3) % 2) * 0.2); }; })(xb)); row(put, Math.round(X(by - 3)), X(xb - 1.2), X(xb + 1.2), (function (xx) { return function (tk) { return mix(belly, bellyDk, tk * 0.6 + ((xx / 3) % 2) * 0.2); }; })(xb)); }
-    if (o.cracks) { [[54, 70, 62, 80], [70, 64, 76, 76], [86, 62, 90, 72]].forEach(function (q) { stroke(put, X(q[0]), X(q[1]), X(q[2]), X(q[3]), X(1.2), function () { return (o.crackC || P.volcano); }); put(Math.round(X(q[2])), Math.round(X(q[3])), '#ffd24a'); }); }
-    if (o.feathered) { for (var xf = 44; xf <= 100; xf += 5) stroke(put, X(xf), X(pw(xf, TOP) + 2), X(xf - 3), X(pw(xf, TOP) + 8), X(1.2), function () { return mix(cLt, cDk, 0.35); }); }
-    if (!o.wyvern) {
-      stroke(put, X(94), X(76), X(102), X(96), X(6.4), function () { return c; });
-      stroke(put, X(102), X(96), X(98), X(118), X(4.4), function () { return mix(c, cDk, 0.3); });
-      for (var k2 = 0; k2 <= 2; k2++) stroke(put, X(98), X(118), X(102 + k2 * 4), X(121), X(2.2), function () { return P.claw; });
-    }
-    stroke(put, X(64), X(86), X(74), X(108), X(9), function () { return c; });
-    ell(put, X(66), X(92), X(7), X(8), function (tk, ty3) { return mix(cLt, c, clamp(tk + ty3 * 0.5, 0, 1)); });
-    stroke(put, X(74), X(108), X(68), X(128), X(5.4), function () { return mix(c, cDk, 0.3); });
-    stroke(put, X(68), X(128), X(76), X(134), X(4), function () { return mix(c, cDk, 0.45); });
-    for (var k3 = 0; k3 <= 2; k3++) stroke(put, X(76), X(134), X(82 + k3 * 4), X(136), X(2.4), function () { return P.claw; });
-    drawWing(88, 54, 1.15, cDk, memb, membDk);
-    var nx3 = 100, ny3 = 60;
-    [[110, 48, 11], [118, 38, 9], [124, 32, 8]].forEach(function (q) { stroke(put, X(nx3), X(ny3), X(q[0]), X(q[1]), X(q[2]), function () { return c; }); nx3 = q[0]; ny3 = q[1]; });
-    [[104, 58], [110, 50], [116, 42]].forEach(function (q) { row(put, Math.round(X(q[1])), X(q[0] - 2.4), X(q[0] + 2.4), function (tk) { return mix(belly, bellyDk, tk); }); });
-    var HTOP = [[116, 24], [128, 20], [140, 22], [152, 28]];
-    var HBOT = [[116, 36], [130, 38], [142, 38], [152, 34]];
-    body(put, X, 116, 152, HTOP, HBOT, cLt, c, cDk);
-    var JTOP = [[122, 40], [136, 44], [148, 48]];
-    var JBOT = [[122, 46], [138, 51], [148, 53]];
-    body(put, X, 122, 148, JTOP, JBOT, mix(cLt, c, 0.3), mix(c, cDk, 0.2), cDk);
-    for (var xm = 126; xm <= 147; xm++) { var y0 = 36 + (xm - 126) * 0.12, y1 = pw(xm, JTOP); if (y1 > y0 + 2) for (var ym = y0 + 2; ym <= y1 - 1; ym++) put(Math.round(X(xm)), Math.round(X(ym)), mix('#2a0a10', P.night, 0.3)); }
-    [[130], [136], [142], [147]].forEach(function (q) { stroke(put, X(q[0]), X(37 + (q[0] - 126) * 0.1), X(q[0]), X(39.5 + (q[0] - 126) * 0.1), X(0.9), function () { return P.tooth; }); });
-    [[128], [134], [140]].forEach(function (q) { stroke(put, X(q[0]), X(pw(q[0], JTOP)), X(q[0]), X(pw(q[0], JTOP) - 2.4), X(0.9), function () { return P.tooth; }); });
-    ell(put, X(124), X(28), X(2.2), X(2.4), function () { return (o.eyeC || P.eye); });
-    put(Math.round(X(124.6)), Math.round(X(28.4)), P.night);
-    stroke(put, X(120), X(24), X(128), X(23), X(1.8), function () { return cDk; });
-    ell(put, X(146), X(26), X(1.4), X(1.8), function () { return cDk; });
-    var hs = o.horns || 'swept';
-    if (hs === 'swept') {
-      [[0, 3.4], [4, 2.6]].forEach(function (q) { var off = q[0], w = q[1], hx = 118 + off, hy = 22; for (var i = 1; i <= 8; i++) { var t = i / 8; var nx = 118 + off - t * 16, ny = 22 - t * 10 + t * t * 6; stroke(put, X(hx), X(hy), X(nx), X(ny), X(w * (1 - t * 0.6)), (function (tt) { return function () { return mix(P.horn, P.hornDk, tt * 0.5); }; })(t)); hx = nx; hy = ny; } });
-    }
-    [[108, 44], [100, 52], [90, 52], [78, 52], [66, 56], [52, 62], [44, 66]].forEach(function (q, i) { var base = i < 2 ? q[1] : pw(q[0], TOP) - 1; stroke(put, X(q[0]), X(base + 2), X(q[0] - 2), X(base - 5 - (i === 3 ? 2 : 0)), X(2), function () { return mix(P.horn, P.hornDk, 0.35); }); });
-    if (o.breath === 'fire') {
-      for (var i = 0; i <= 16; i++) { var t = i / 16; var bw = 2 + t * 7; ell(put, X(152 + t * 26 * 0.35 + t * 8), X(44 + t * 14), X(bw * 0.7), X(bw * 0.5), (function (tt) { return function (tk) { return mix('#ffd24a', P.volcano, clamp(tt * 0.8 + tk * 0.3, 0, 1)); }; })(t)); }
-      put(Math.round(X(151)), Math.round(X(43)), '#ffffff');
-    }
-  }
-  var PRIMORDIAL_O = { scale: '#8a6a3e', scaleLt: '#b8925e', scaleDk: '#42301a', belly: '#e0d0a0', bellyDk: '#948a5e', feathered: true, horns: 'swept', breath: 'fire', seed: 80 };
-  function drawPrimordial(put, S) { dragon160(put, S, PRIMORDIAL_O); }
-  // P2 IGNITED state — feathers alight (ember cracks + brighter belly glow)
-  function drawPrimordialIgnited(put, S) {
-    var o = {}; for (var k in PRIMORDIAL_O) o[k] = PRIMORDIAL_O[k];
-    o.cracks = true; o.crackC = '#ff9a3f'; o.scaleLt = '#d29a52'; o.belly = '#ffdca0'; o.eyeC = '#ff9a3f';
-    dragon160(put, S, o);
-  }
+  var D = {};   // draws keyed by texture name
 
-  // ---- THE HATCH — 4 entrance frames (render_hatch_frames.js, no black bg) --
-  function hatchNest(put, X) {
-    for (var a = 0; a < 6.28; a += 0.03) {
-      var rr = 84 + Math.sin(a * 9) * 4;
-      for (var w = 0; w < 12; w++) put(Math.round(X(110 + Math.cos(a) * (rr - w))), Math.round(X(196 + Math.sin(a) * (rr - w) * 0.22 - w * 0.7)), mix(P.mudLt, P.mudDk, (w / 12) * 0.7 + (Math.sin(a * 13) + 1) / 6));
+  // =============================== 8 MOBS ====================================
+  // 4 TERMITE SWARM (three tiny bodies)
+  D.termite = function(put,S,f){ var X=Xf(S); var col=B.term, hd=B.termHd;
+    function one(x,y,s,fr){ shadowE(put,X,x,y+9*s,15*s,3*s);
+      legs(put,X,x-2,y+6*s,mix(col[1],'#000000',0.5),[[75,8*s,9*s, fr?30:45],[105,8*s,9*s,35]],1.6*s);
+      blob(put,X,x-9*s,y,11*s,8*s,col); blob(put,X,x+3*s,y-1*s,7*s,6*s,col); blob(put,X,x+12*s,y-2*s,7*s,6*s,hd);
+      limbline(put,X,[[x+17*s,y-4*s],[x+23*s,y-6*s]],2*s,mix(hd[1],'#000000',0.3)); eye(put,X,x+13*s,y-3*s,1.5);
     }
+    one(58,66,1.0,f); one(96,92,0.85,!f); one(46,102,0.72,f);
+  };
+  // 10 GOLIATH GRUB (fat C-curve larva)
+  D.grub = function(put,S,f){ var X=Xf(S); var col=B.grub, hd=B.grubHd; shadowE(put,X,74,122,40,7);
+    var segs=[[46,108],[40,92],[44,78],[56,68],[72,64],[90,66],[104,74],[110,88]];
+    for(var i=0;i<segs.length;i++){ var r=15-Math.abs(i-4)*1.4; blob(put,X,segs[i][0],segs[i][1]+(f?(i%2):0),r,r,col); }
+    blob(put,X,112,92,11,10,hd);
+    limbline(put,X,[[118,96],[124,104]],2.4,mix(hd[1],'#000000',0.2));
+    var pl=[[48,110],[58,106],[70,100]]; for(var j=0;j<pl.length;j++) limbline(put,X,[[pl[j][0],pl[j][1]],[pl[j][0]-3,pl[j][1]+7]],2.4,mix(col[0],'#000000',0.2));
+    eye(put,X,116,90,1.8);
+  };
+  // 11 GIANT WASP (diver) — flap frame f
+  D.wasp = function(put,S,f){ var X=Xf(S); var col=B.wasp, dk=B.waspB; shadowE(put,X,70,126,24,5);
+    var wy=f?70:82; wing(put,X,70,84,40,wy,18,'#dfe4ee', mix('#dfe4ee','#556677',0.5));
+    wing(put,X,74,84,54,wy+4,12,'#dfe4ee', mix('#dfe4ee','#556677',0.5));
+    legs(put,X,66,104,mix(col[1],'#000000',0.4),[[80,16,20,45],[100,16,20,35],[118,16,22,40]],2.2);
+    blob(put,X,46,100,17,13,col);
+    for(var i=0;i<3;i++){ var bx=36+i*8; limbline(put,X,[[bx,90],[bx-2,112]],3,dk); }
+    limbline(put,X,[[32,110],[26,120]],2,dk);
+    blob(put,X,70,94,10,10,col); blob(put,X,88,90,11,10,col);
+    limbline(put,X,[[96,88],[104,86]],2.4,dk); eye(put,X,90,88,2.6); antenna(put,X,92,84,dk,-30,16);
+  };
+  // 12 HORNET (enrager)
+  D.hornet = function(put,S,f){ var X=Xf(S); var col=B.horn, dk=B.hornB; shadowE(put,X,70,126,26,5);
+    var wy=f?68:82; wing(put,X,70,84,38,wy,20,'#e6dccd', mix('#e6dccd','#554444',0.5));
+    wing(put,X,74,84,50,wy+4,15,'#e6dccd', mix('#e6dccd','#554444',0.5));
+    legs(put,X,66,106,mix(col[1],'#000000',0.4),[[80,18,22,45],[100,18,22,35],[118,18,24,40]],2.4);
+    blob(put,X,46,102,19,14,col);
+    for(var i=0;i<3;i++){ var bx=34+i*10; limbline(put,X,[[bx,90],[bx-2,116]],3.2,dk); }
+    limbline(put,X,[[30,114],[23,126]],2.4,dk);
+    blob(put,X,72,94,11,11,col); blob(put,X,91,88,13,11,col);
+    limbline(put,X,[[100,84],[108,82]],2.4,dk); eye(put,X,93,86,3.0); antenna(put,X,95,82,dk,-30,18);
+  };
+  // 14 HONEY BEE (support)
+  D.bee = function(put,S,f){ var X=Xf(S); var col=B.bee, fz=B.beeFz, dk=B.beeB; shadowE(put,X,70,126,24,5);
+    var wy=f?66:82; wing(put,X,70,82,46,wy,16,'#e6e8f0', mix('#e6e8f0','#556677',0.5));
+    legs(put,X,66,106,mix(col[1],'#000000',0.4),[[80,16,18,45],[100,16,18,35],[118,16,20,40]],2.2);
+    blob(put,X,48,102,17,14,col);
+    for(var i=0;i<3;i++){ var bx=40+i*10; limbline(put,X,[[bx,90],[bx-1,114]],3,dk); }
+    blob(put,X,72,98,14,13,fz); blob(put,X,90,94,11,10,B.antdark);
+    eye(put,X,93,92,2.6); antenna(put,X,94,88,dk,-30,15);
+  };
+  // 15 GIANT MAYFLY (fragile filler)
+  D.mayfly = function(put,S,f){ var X=Xf(S); var col=B.mayf; shadowE(put,X,70,124,16,4);
+    var wy=f?40:46; wing(put,X,66,76,50,wy,22,'#d2ecd8', mix('#d2ecd8','#66886a',0.5));
+    wing(put,X,72,76,84,wy+2,17,'#d2ecd8', mix('#d2ecd8','#66886a',0.5));
+    blob(put,X,66,82,7,8,col);
+    for(var i=0;i<7;i++) blob(put,X,58-i*6,86,5-i*0.3,4,col);
+    var tl=[-4,0,4]; for(var k=0;k<3;k++) limbline(put,X,[[28,88],[10,88+tl[k]]],1.2,mix(col[0],'#000000',0.2));
+    legs(put,X,66,86,mix(col[1],'#000000',0.4),[[80,10,12,50],[100,10,12,40]],1.4);
+    blob(put,X,80,80,8,7,col); eye(put,X,84,78,3.0); antenna(put,X,86,74,col[0],-20,12);
+  };
+  // 19 GIANT CENTIPEDE (serpentine) — phase f
+  D.centipede = function(put,S,f){ var X=Xf(S); var col=B.centi, lg=B.cleg; shadowE(put,X,74,124,44,5);
+    var ph=f?1.6:0.0; var path=[]; for(var i=0;i<13;i++) path.push([20+i*9, 96+Math.sin(i*0.7+ph)*12]);
+    for(var i2=0;i2<path.length;i2++) limbline(put,X,[[path[i2][0],path[i2][1]],[path[i2][0],path[i2][1]+16]],1.8,mix(lg,'#000000',0.15));
+    for(var i3=0;i3<path.length;i3++){ var r=(i3>1&&i3<11)?8:6; blob(put,X,path[i3][0],path[i3][1],r,r,col); }
+    var hx=path[12][0], hy=path[12][1]; blob(put,X,hx+3,hy,9,8,col);
+    limbline(put,X,[[hx+9,hy-4],[hx+16,hy-8]],2.4,col[1]); limbline(put,X,[[hx+9,hy+3],[hx+16,hy+2]],2.4,col[1]);
+    eye(put,X,hx+5,hy-2,1.8); antenna(put,X,hx+8,hy-5,col[0],-20,16);
+  };
+  // 20 ARTHROPLEURA (colossus, serpentine)
+  D.arthro = function(put,S,f){ var X=Xf(S); var col=B.milli, lg=B.mleg; shadowE(put,X,72,126,54,7);
+    var ph=f?1.4:0.0; var path=[]; for(var i=0;i<12;i++) path.push([24+i*10, 96+Math.sin(i*0.45+ph)*4]);
+    for(var i2=0;i2<path.length;i2++) limbline(put,X,[[path[i2][0],path[i2][1]+6],[path[i2][0],path[i2][1]+20]],2.4,mix(lg,'#000000',0.15));
+    for(var i3=0;i3<path.length;i3++){ var r=(i3>1&&i3<10)?13:10; blob(put,X,path[i3][0],path[i3][1],r,9,col);
+      stroke(put,X(path[i3][0]-r),X(path[i3][1]-3),X(path[i3][0]+r),X(path[i3][1]-3),X(1.4),function(){return mix(col[1],'#ffffff',0.2);}); }
+    var hx=path[11][0], hy=path[11][1]; blob(put,X,hx+4,hy,11,9,col);
+    limbline(put,X,[[hx+11,hy-4],[hx+18,hy-9]],2.4,col[1]); limbline(put,X,[[hx+11,hy+3],[hx+18,hy+1]],2.4,col[1]);
+    eye(put,X,hx+6,hy-2,2.0); antenna(put,X,hx+9,hy-6,col[0],-20,16);
+  };
+
+  // =============================== BOSS ======================================
+  function wormBody(put,X,path,rbase){ var n=path.length;
+    for(var i=0;i<n;i++){ var r=rbase; if(i===0)r=rbase*0.6; else if(i===1)r=rbase*0.82;
+      var pal=(i%2===0)?B.wband:B.wbody; blob(put,X,path[i][0],path[i][1],r,r,pal); }
+    var h=n-1, p=path[h-1], hx=path[h][0], hy=path[h][1];
+    var dx=hx-p[0], dy=hy-p[1], dl=Math.hypot(dx,dy)||1; dx/=dl; dy/=dl; var nx=-dy, ny=dx;
+    blob(put,X,hx+dx*3,hy+dy*3,12,11,B.wbody);
+    for(var s=-1;s<=1;s+=2){ limbline(put,X,[[hx+dx*6+nx*s*4,hy+dy*6+ny*s*4],[hx+dx*10+nx*s*6,hy+dy*10+ny*s*6]],3,B.wband[1]); }
+    eye(put,X,hx+dx*4-nx*3,hy+dy*4-ny*3,2.2);
   }
-  function hatchDragon(put, S) {
-    var dS = 150, ox = Math.round((S - dS) / 2) + 4, oy = 34, u = S / 220;
-    var o = {}; for (var k in PRIMORDIAL_O) o[k] = PRIMORDIAL_O[k]; o.noFloor = true;
-    dragon160(function (x, y, c) { put(x + Math.round(ox * u), y + Math.round(oy * u), c); }, Math.round(dS * u), o);
-  }
-  function eggHalf(put, X, side, ox, flash) {
-    for (var y = 16; y <= 202; y++) {
-      var t = (y - 110) / 96;
-      if (Math.abs(t) > 1) continue;
-      var w = 66 * Math.sqrt(1 - t * t) * (y < 110 ? 0.92 : 1);
-      var splitX = 110 + Math.sin(y * 0.3) * 4;
-      var x0 = 110 - w, x1 = 110 + w;
-      if (side < 0) x1 = Math.min(x1, splitX);
-      if (side > 0) x0 = Math.max(x0, splitX);
-      if (x1 <= x0) continue;
-      for (var x = x0; x <= x1; x++) {
-        var tx = (x - (110 - w)) / (2 * w);
-        var c = mix(P.white, P.bellyDk, clamp(tx * 1.2 + Math.abs(t) * 0.25, 0, 1));
-        if (flash) c = mix(c, '#ffffff', 0.62);
-        put(Math.round(X(x + ox)), Math.round(X(y)), c);
-      }
-      if (side !== 0) { var ex = side < 0 ? x1 : x0; put(Math.round(X(ex + ox)), Math.round(X(y)), flash ? '#ffffff' : P.bellyDk); }
+  // WORM (P1) side crawl — serpentine phase f
+  D.worm = function(put,S,f){ var X=Xf(S); shadowE(put,X,75,120,40,7);
+    var ph=f?0.9:0.0; var path=[]; for(var i=0;i<9;i++) path.push([24+i*13, 96+Math.sin(i*0.5+ph)*6]);
+    wormBody(put,X,path,12);
+  };
+  // COCOON (#6 ribbed + gold flecks) ; f=1 => cracked/glowing (burst beat)
+  D.cocoon = function(put,S,crack){ var X=Xf(S); shadowE(put,X,75,124,22,5);
+    var top=44,bot=122,w=21,cx=75, pal=B.coc;
+    // spindle body via horizontal rows
+    for(var y=top;y<=bot;y++){ var t=(y-top)/(bot-top); var ww=w*(1-Math.abs(t-0.45)*0.9); if(ww<=0)continue;
+      row(put,Math.round(X(y)),X(cx-ww),X(cx+ww),(function(tt){return function(tx){ var b=mix(pal[1],pal[0],clamp(tt*1.1,0,1)); if(tx>0.8)b=mix(b,pal[0],0.4); if(tx<0.16)b=mix(b,pal[1],0.4); return b; };})(t)); }
+    // ridges
+    for(var k=0;k<9;k++){ var t2=0.15+k*0.09; var yy=top+(bot-top)*t2, ww2=w*(1-t2*0.45); stroke(put,X(cx-ww2),X(yy),X(cx+ww2),X(yy),X(1.6),function(){return mix(pal[0],'#000000',0.3);}); }
+    if(crack){ stroke(put,X(cx),X(top+6),X(cx),X(bot-8),X(3),function(){return '#ffe090';}); stroke(put,X(cx),X(top+6),X(cx),X(bot-8),X(1.2),function(){return '#ffffdc';}); }
+    else stroke(put,X(cx),X(top+6),X(cx),X(bot-10),X(1.6),function(){return B.cocGlow;});
+    // gold flecks
+    var fl=[[70,64],[80,74],[68,90],[82,100],[74,110],[78,58],[72,82]]; for(var g=0;g<fl.length;g++) ell(put,X(fl[g][0]),X(fl[g][1]),X(1.3),X(1.3),function(){return B.cocFleck;});
+    stroke(put,X(cx),X(top),X(cx),X(top-8),X(2),function(){return mix(pal[0],'#000000',0.2);});   // cremaster
+  };
+  // MOTH (P2, ember, top-down spread) — flap frame f
+  D.moth = function(put,S,f){ var X=Xf(S); var cx=75; shadowE(put,X,cx,126,30,5);
+    var lift=f?6:0;
+    function wingPair(pts,pal){ // pts left-side polygon (x,y); mirror to right; fill via bbox rows
+      var xs=pts.map(function(p){return p[0];}), ys=pts.map(function(p){return p[1];});
+      // draw as stroked fan from thorax to each vertex (approx filled)
+      for(var vi=0;vi<pts.length;vi++){ stroke(put,X(cx),X(80-lift),X(pts[vi][0]),X(pts[vi][1]-lift),X(2.2),sh(pal)); stroke(put,X(cx),X(80-lift),X(cx*2-pts[vi][0]),X(pts[vi][1]-lift),X(2.2),sh(pal)); }
     }
-    if (!flash) [[84, 90], [130, 74], [96, 140], [128, 150], [76, 160], [140, 116]].forEach(function (q) {
-      if (side < 0 && q[0] > 110) return; if (side > 0 && q[0] < 110) return;
-      put(Math.round(X(q[0] + ox)), Math.round(X(q[1])), P.bellyDk); put(Math.round(X(q[0] + 4 + ox)), Math.round(X(q[1] + 3)), mix(P.bellyDk, P.white, 0.3));
-    });
-  }
-  function hatchFrame(F) {
-    return function (put, S) {
-      var X = function (v) { return v * S / 220; };
-      hatchNest(put, X);
-      if (F === 1) {
-        eggHalf(put, X, 0, 0, false);
-        stroke(put, X(110), X(30), X(108), X(70), X(1.2), function () { return P.bellyDk; });
-      } else if (F === 2) {
-        eggHalf(put, X, 0, 0, false);
-        for (var y = 22; y <= 198; y += 2) { var sx2 = 110 + Math.sin(y * 0.3) * 4; put(Math.round(X(sx2)), Math.round(X(y)), '#2a1a08'); put(Math.round(X(sx2 + 1)), Math.round(X(y)), mix(P.volcano, '#ffd24a', (y % 6) / 6)); }
-      } else if (F === 3) {
-        hatchDragon(put, S);
-        eggHalf(put, X, -1, -44, true);
-        eggHalf(put, X, 1, 44, true);
-        [[30, 60], [24, 110], [34, 160], [190, 60], [196, 110], [186, 160]].forEach(function (q) { stroke(put, X(q[0] - 6), X(q[1]), X(q[0] + 6), X(q[1]), X(1.4), function () { return '#ffffff'; }); });
-      } else {
-        hatchDragon(put, S);
-        [[36, 80], [30, 130], [44, 170], [184, 76], [192, 126], [178, 168], [110, 30]].forEach(function (q, i) {
-          put(Math.round(X(q[0])), Math.round(X(q[1])), i % 2 ? '#ffffff' : mix('#ffffff', '#10140a', 0.5));
-        });
-      }
-    };
-  }
+    // hindwings (under)
+    for(var a=0;a<10;a++){ var t=a/9; var lx=cx-14-t*26, ly=90-lift+Math.sin(t*3.14)*2; ell(put,X(lx),X(ly+t*22),X(9-t*5),X(11-t*5),sh(B.mHind)); ell(put,X(cx*2-lx),X(ly+t*22),X(9-t*5),X(11-t*5),sh(B.mHind)); }
+    // forewings (upper, big)
+    for(var b=0;b<12;b++){ var t2=b/11; var fx=cx-10-t2*40, fy=66-lift-t2*4; var rr=13-t2*6; ell(put,X(fx),X(fy+t2*18),X(rr),X(rr*1.1),sh(B.mFore)); ell(put,X(cx*2-fx),X(fy+t2*18),X(rr),X(rr*1.1),sh(B.mFore)); }
+    // wing bands + eyespots
+    for(var sd=-1;sd<=1;sd+=2){ var sx=cx+sd*36; ell(put,X(sx),X(66-lift),X(6),X(6),function(){return B.mBand;}); ell(put,X(sx),X(66-lift),X(3),X(3),function(){return '#f4f4f0';}); ell(put,X(sx),X(66-lift),X(1.4),X(1.4),function(){return '#141018';}); }
+    for(var u=0;u<8;u++){ var t3=u/7; ell(put,X(cx-16-t3*20),X(58-lift+t3*4),X(1.4),X(1.4),function(){return B.mGlow;}); ell(put,X(cx+16+t3*20),X(58-lift+t3*4),X(1.4),X(1.4),function(){return B.mGlow;}); }
+    // body: furry thorax + segmented abdomen
+    blob(put,X,cx,80,10,13,B.mBody);
+    for(var i=0;i<6;i++){ blob(put,X,cx,92+i*7,8-i*0.7,5,B.mBody); }
+    blob(put,X,cx,66,7,6,B.mBody);
+    for(var sd2=-1;sd2<=1;sd2+=2){ var base=[cx+sd2*3,62]; var tip=[cx+sd2*20,44];
+      limbline(put,X,[base,tip],2,mix(B.mBody[1],'#000000',0.2));
+      for(var tb=1;tb<7;tb++){ var pxx=base[0]+(tip[0]-base[0])*tb/7, pyy=base[1]+(tip[1]-base[1])*tb/7; limbline(put,X,[[pxx,pyy],[pxx+sd2*5,pyy-2]],1,mix(B.mBody[1],'#000000',0.3)); } }
+    put(Math.round(X(cx-3)),Math.round(X(66)),EYE); put(Math.round(X(cx+3)),Math.round(X(66)),EYE);
+  };
+
+  // ---- DIG-OUT entrance frames (5) ----
+  function ground(put,X,hole,mound){ for(var y=118;y<150;y++){ row(put,Math.round(X(y)),X(0),X(150),(function(yy){return function(tx){return mix(B.soil[1],B.soil[0],clamp((yy-118)/24,0,1));};})(y)); }
+    if(mound>0){ for(var y2=118-mound;y2<118;y2++){ var t=(118-y2)/mound; var ww=30*(1-t*0.7); row(put,Math.round(X(y2)),X(75-ww),X(75+ww),function(){return mix(B.soil[1],'#ffffff',0.06);}); } }
+    if(hole>0){ ell(put,X(75),X(116),X(hole),X(hole*0.4),function(){return '#160f0a';}); } }
+  function clods(put,X,arr){ for(var i=0;i<arr.length;i++) ell(put,X(arr[i][0]),X(arr[i][1]),X(arr[i][2]),X(arr[i][2]),sh(B.soil)); }
+  D.dig1 = function(put,S){ var X=Xf(S); ground(put,X,0,8);
+    var cr=[[[66,116],[70,109],[64,104]],[[84,116],[80,110],[86,105]],[[75,114],[75,102]]]; for(var i=0;i<cr.length;i++) limbline(put,X,cr[i],1.4,B.soilD);
+    clods(put,X,[[58,114,3],[92,115,3]]); };
+  D.dig2 = function(put,S){ var X=Xf(S); ground(put,X,22,10); clods(put,X,[[50,94,4],[60,84,3],[92,88,4],[100,98,3],[75,78,4],[40,104,3]]);
+    wormBody(put,X,[[75,116],[75,104]],12); };
+  D.dig3 = function(put,S){ var X=Xf(S); ground(put,X,24,11); clods(put,X,[[52,88,4],[98,84,4],[46,102,3],[104,100,3]]);
+    wormBody(put,X,[[75,120],[75,104],[75,88],[75,72],[75,58]],12); };
+  D.dig4 = function(put,S){ var X=Xf(S); ground(put,X,24,11); clods(put,X,[[50,98,4],[52,110,3],[104,108,3]]);
+    wormBody(put,X,[[72,120],[70,102],[72,84],[82,70],[98,68],[112,78],[118,94]],12); };
+  D.dig5 = function(put,S){ var X=Xf(S); ground(put,X,16,8);
+    wormBody(put,X,[[30,112],[44,109],[58,110],[72,109],[86,110],[100,109],[112,110]],12); };
+
 
   // ============================= DECOR (20) ==================================
   function dFerns(put, S) {
@@ -879,40 +665,47 @@
 
   // ======================= REGISTRY buildArt hook ===========================
   var PH_ART = {
-    P: P,
     buildInto: function (ctx) {
       var MS = ctx.SIZE;
-      // ---- roster (7) ----
-      ctx.spr('prehistoriaRaptorHi', MS, MS, raptor160);
-      ctx.spr('prehistoriaCompyHi', MS, MS, drawCompies);
-      ctx.spr('prehistoriaTrikeHi', MS, MS, trike160);
-      ctx.spr('prehistoriaStegoHi', MS, MS, stego160);
-      ctx.spr('prehistoriaPteroHi', MS, MS, drawPtero);
-      ctx.spr('prehistoriaDiloHi', MS, MS, drawDilo);
-      ctx.spr('prehistoriaBrachioHi', MS, MS, drawBrachio);
-      // ---- recolor variants (ptero EXEMPT — 6 only) ----
-      ctx.spr('prehistoriaRaptorJungleHi', MS, MS, recolored(raptor160, 85, 0.95, -0.02));   // orange->green
-      ctx.spr('prehistoriaCompyRustHi', MS, MS, recolored(drawCompies, -85, 1.05, 0));        // green->rust
-      ctx.spr('prehistoriaTrikeMossHi', MS, MS, recolored(trike160, -140, 0.9, 0.01));        // blue->olive
-      ctx.spr('prehistoriaStegoEmberHi', MS, MS, recolored(stego160, -95, 1.05, 0));          // green->ember
-      ctx.spr('prehistoriaDiloMidnightHi', MS, MS, recolored(drawDilo, 130, 0.8, -0.05));     // green->indigo
-      ctx.spr('prehistoriaBrachioStormHi', MS, MS, recolored(drawBrachio, 130, 0.85, -0.02)); // sage->slate
-      ctx.MOB_HI.raptor = 'prehistoriaRaptorHi';        ctx.MOB_DISPLAY.raptor = 50;
-      ctx.MOB_HI.compy = 'prehistoriaCompyHi';          ctx.MOB_DISPLAY.compy = 28;
-      ctx.MOB_HI.trike = 'prehistoriaTrikeHi';          ctx.MOB_DISPLAY.trike = 64;
-      ctx.MOB_HI.stego = 'prehistoriaStegoHi';          ctx.MOB_DISPLAY.stego = 62;
-      ctx.MOB_HI.ptero = 'prehistoriaPteroHi';          ctx.MOB_DISPLAY.ptero = 54;
-      ctx.MOB_HI.dilo = 'prehistoriaDiloHi';            ctx.MOB_DISPLAY.dilo = 50;
-      ctx.MOB_HI.brachio = 'prehistoriaBrachioHi';      ctx.MOB_DISPLAY.brachio = 110;
-      // ---- boss: THE PRIMORDIAL (160px canvas) + P2 IGNITED state ----
-      ctx.spr('prehistoriaPrimordialHi', 160, 160, drawPrimordial);
-      ctx.spr('prehistoriaPrimordialIgnitedHi', 160, 160, drawPrimordialIgnited);
-      ctx.BOSS_HI.primordial = { key: 'prehistoriaPrimordialHi', size: 160, display: 140, bodyW: 52, bodyH: 62 };
-      // ---- THE HATCH: 4 entrance frames (egg towering -> crack -> reveal -> flash) ----
-      ctx.spr('prehistoriaHatch1', 160, 160, hatchFrame(1));
-      ctx.spr('prehistoriaHatch2', 160, 160, hatchFrame(2));
-      ctx.spr('prehistoriaHatch3', 160, 160, hatchFrame(3));
-      ctx.spr('prehistoriaHatch4', 160, 160, hatchFrame(4));
+      // ---- INSECT roster (8) : base + 'b' flap/undulation frame ----
+      ctx.spr('prehistoriaTermiteHi', MS, MS, function(p,S){D.termite(p,S,0);});
+      ctx.spr('prehistoriaTermiteHib', MS, MS, function(p,S){D.termite(p,S,1);});
+      ctx.MOB_HI.termite = 'prehistoriaTermiteHi'; ctx.MOB_DISPLAY.termite = 78;
+      ctx.spr('prehistoriaGrubHi', MS, MS, function(p,S){D.grub(p,S,0);});
+      ctx.spr('prehistoriaGrubHib', MS, MS, function(p,S){D.grub(p,S,1);});
+      ctx.MOB_HI.grub = 'prehistoriaGrubHi'; ctx.MOB_DISPLAY.grub = 118;
+      ctx.spr('prehistoriaWaspHi', MS, MS, function(p,S){D.wasp(p,S,0);});
+      ctx.spr('prehistoriaWaspHib', MS, MS, function(p,S){D.wasp(p,S,1);});
+      ctx.MOB_HI.wasp = 'prehistoriaWaspHi'; ctx.MOB_DISPLAY.wasp = 96;
+      ctx.spr('prehistoriaHornetHi', MS, MS, function(p,S){D.hornet(p,S,0);});
+      ctx.spr('prehistoriaHornetHib', MS, MS, function(p,S){D.hornet(p,S,1);});
+      ctx.MOB_HI.hornet = 'prehistoriaHornetHi'; ctx.MOB_DISPLAY.hornet = 102;
+      ctx.spr('prehistoriaBeeHi', MS, MS, function(p,S){D.bee(p,S,0);});
+      ctx.spr('prehistoriaBeeHib', MS, MS, function(p,S){D.bee(p,S,1);});
+      ctx.MOB_HI.bee = 'prehistoriaBeeHi'; ctx.MOB_DISPLAY.bee = 92;
+      ctx.spr('prehistoriaMayflyHi', MS, MS, function(p,S){D.mayfly(p,S,0);});
+      ctx.spr('prehistoriaMayflyHib', MS, MS, function(p,S){D.mayfly(p,S,1);});
+      ctx.MOB_HI.mayfly = 'prehistoriaMayflyHi'; ctx.MOB_DISPLAY.mayfly = 84;
+      ctx.spr('prehistoriaCentipedeHi', MS, MS, function(p,S){D.centipede(p,S,0);});
+      ctx.spr('prehistoriaCentipedeHib', MS, MS, function(p,S){D.centipede(p,S,1);});
+      ctx.MOB_HI.centipede = 'prehistoriaCentipedeHi'; ctx.MOB_DISPLAY.centipede = 150;
+      ctx.spr('prehistoriaArthroHi', MS, MS, function(p,S){D.arthro(p,S,0);});
+      ctx.spr('prehistoriaArthroHib', MS, MS, function(p,S){D.arthro(p,S,1);});
+      ctx.MOB_HI.arthro = 'prehistoriaArthroHi'; ctx.MOB_DISPLAY.arthro = 224;
+      // ---- BOSS: THE PRIMORDIAL METAMORPH (worm P1 / cocoon / moth P2) ----
+      ctx.spr('prehistoriaWormHi',  160, 160, function(p,S){D.worm(p,S,0);});
+      ctx.spr('prehistoriaWormHib', 160, 160, function(p,S){D.worm(p,S,1);});
+      ctx.spr('prehistoriaMothHi',  160, 160, function(p,S){D.moth(p,S,0);});
+      ctx.spr('prehistoriaMothHib', 160, 160, function(p,S){D.moth(p,S,1);});
+      ctx.spr('prehistoriaCocoonHi',      160, 160, function(p,S){D.cocoon(p,S,0);});
+      ctx.spr('prehistoriaCocoonCrackHi', 160, 160, function(p,S){D.cocoon(p,S,1);});
+      ctx.BOSS_HI.primordial = { key: 'prehistoriaWormHi', size: 160, display: 180, bodyW: 78, bodyH: 34 };
+      // ---- DIG-OUT entrance (5 beats) ----
+      ctx.spr('prehistoriaDig1', 160, 160, D.dig1);
+      ctx.spr('prehistoriaDig2', 160, 160, D.dig2);
+      ctx.spr('prehistoriaDig3', 160, 160, D.dig3);
+      ctx.spr('prehistoriaDig4', 160, 160, D.dig4);
+      ctx.spr('prehistoriaDig5', 160, 160, D.dig5);
       // ---- decor (20) ----
       ctx.spr('phdFerns', 64, 64, dFerns);
       ctx.spr('phdCycad', 64, 64, dCycad);
@@ -947,7 +740,6 @@
       ctx.tex('phtCrater', 48, 48, tCrater);
     }
   };
-
   if (typeof module !== 'undefined' && module.exports) module.exports = PH_ART;
   root.PREHISTORIA_ART = PH_ART;
 })(typeof window !== 'undefined' ? window : this);

@@ -115,95 +115,88 @@
     installData: function (DATA) {
       DATA.biomes.prehistoria = {
         name: 'Prehistoria', tile: 'phtJungle',
-        mobs: ['raptor', 'compy', 'trike', 'stego', 'ptero', 'dilo', 'brachio']
+        mobs: ['termite', 'mayfly', 'wasp', 'centipede', 'bee', 'hornet', 'grub', 'arthro']
       };
       DATA.realms.prehistoria = {
         name: 'Prehistoria', biome: 'prehistoria', boss: 'primordial',
         kind: 'prehistoria', music: 'prehistoria',
-        // METEOR SHOWER cycle knobs (PLAN §2) — ALL TUNE ME
-        meteor: { cycleMs: 15000, omenMs: 1600, waveCount: 5, impactWarnMs: 1000,
-                  gapMs: 320, radius: 62, dmg: 20, puddleMs: 3200, puddleDmg: 5,
-                  puddleTickMs: 700, neBias: 0.62, maxLive: 8, safeR: 150 },
-        // BRACHIO neutral-until-provoked (PLAN §4, trap list)
-        brachio: { neutralUntilProvoked: true, calmMs: 9000 },
-        // RECOLOR spawn table — one variant per mob EXCEPT the pterodactyl (6 rows)
-        recolorVariants: [
-          { base: 'raptor',  name: 'Jungle Raptor',   tex: 'prehistoriaRaptorJungleHi',   tint: 0x6aac4e },
-          { base: 'compy',   name: 'Rust Compies',    tex: 'prehistoriaCompyRustHi',      tint: 0xc87a2e },
-          { base: 'trike',   name: 'Moss Triceratops',tex: 'prehistoriaTrikeMossHi',      tint: 0x7a8a3a },
-          { base: 'stego',   name: 'Ember Stego',     tex: 'prehistoriaStegoEmberHi',     tint: 0xc8452a },
-          { base: 'dilo',    name: 'Midnight Dilo',   tex: 'prehistoriaDiloMidnightHi',   tint: 0x4a4a8a },
-          { base: 'brachio', name: 'Storm Brachio',   tex: 'prehistoriaBrachioStormHi',   tint: 0x5a6a7a }
-        ]
+        // ARMY ANT MARCH cycle — a telegraphed MOVING column sweeps across the map
+        antMarch: { cycleMs: 15000, warnMs: 1400, marchMs: 5200, laneHalf: 58, dmg: 18,
+                    speed: 150, warnSegMs: 900, vertical: false, maxLive: 1 },
+        // ARTHROPLEURA neutral-until-provoked colossus
+        arthro: { neutralUntilProvoked: true, calmMs: 9000 }
       };
 
-      // ---- the 7 mobs (Red picks #1 2 3 4 5 6 20; DINOS ONLY) ----
-      DATA.mobs.raptor = { name: 'Raptor', texture: 'prehistoriaRaptorHi', hp: 55, spd: 132, xp: 16, cost: 2,
-        deathTint: 0xc87a2e, chase: { contactDmg: 10 },
-        skins: ['prehistoriaRaptorHi', 'prehistoriaRaptorJungleHi'],   // mixed recolor
-        mapVerb: 'raptorLunge',                                        // warned sickle-claw mini-dash
-        lunge: { range: 260, warnMs: 520, dashMs: 300, dashSpeed: 430, cooldownMs: 3600 },
-        maxConcurrent: 5, unlockAt: 0 };
-      DATA.mobs.compy = { name: 'Compy Swarm', texture: 'prehistoriaCompyHi', hp: 14, spd: 152, xp: 5, cost: 1,
-        deathTint: 0x5a7a34, chase: { contactDmg: 4 },
-        skins: ['prehistoriaCompyHi', 'prehistoriaCompyRustHi'],
+      // ---- the 8 insect mobs (Red picks; DINOS RETIRED) ----
+      DATA.mobs.termite = { name: 'Termite Swarm', texture: 'prehistoriaTermiteHi', hp: 14, spd: 150, xp: 5, cost: 1,
+        deathTint: 0xc8a86a, chase: { contactDmg: 4 }, flap: true,
         maxConcurrent: 8, unlockAt: 0 };
-      DATA.mobs.trike = { name: 'Triceratops', texture: 'prehistoriaTrikeHi', hp: 180, spd: 60, xp: 26, cost: 3,
-        deathTint: 0x4a6a7a, chase: { contactDmg: 12 },
-        skins: ['prehistoriaTrikeHi', 'prehistoriaTrikeMossHi'],
-        mapVerb: 'trikeCharge',                                        // warned shield-charge line, capped KB
-        charge: { everyMs: 5200, range: 460, warnMs: 950, len: 520, half: 26, chargeMs: 1000, speed: 440, kb: 300, dmg: 20 },
-        unlockAt: 25 };
-      DATA.mobs.stego = { name: 'Stegosaurus', texture: 'prehistoriaStegoHi', hp: 240, spd: 42, xp: 32, cost: 4,
-        deathTint: 0x5a7a34, chase: { contactDmg: 14 },
-        skins: ['prehistoriaStegoHi', 'prehistoriaStegoEmberHi'],
-        mapVerb: 'stegoSweep',                                         // warned thagomizer tail sweep (rear arc)
-        sweep: { everyMs: 4600, range: 190, warnMs: 850, halfRad: 1.05, dmg: 20 },
-        maxConcurrent: 2, unlockAt: 40 };
-      DATA.mobs.ptero = { name: 'Pterodactyl', texture: 'prehistoriaPteroHi', hp: 42, spd: 116, xp: 16, cost: 2,
-        deathTint: 0xb06a4a, float: true,                              // airborne diver — NO recolor (Red exempt), NO chase
-        mapVerb: 'pteroDive',                                          // shadow marks the dive lane (valkyrie tech)
+      DATA.mobs.mayfly = { name: 'Giant Mayfly', texture: 'prehistoriaMayflyHi', hp: 20, spd: 156, xp: 8, cost: 1,
+        deathTint: 0xbfe0c0, float: true, flap: true, chase: { contactDmg: 4 },
+        wander: { jitter: 0.5 },                                     // erratic evasive drift
+        mapVerb: 'mayflyFlit', flit: { everyMs: 1400, dist: 120, dur: 260 },
+        maxConcurrent: 4, unlockAt: 0 };
+      DATA.mobs.wasp = { name: 'Giant Wasp', texture: 'prehistoriaWaspHi', hp: 42, spd: 118, xp: 16, cost: 2,
+        deathTint: 0xd2a020, float: true, flap: true,
+        mapVerb: 'waspDive',                                          // shadow-marked dive (valkyrie tech)
         dive: { everyMs: 4800, range: 460, warnMs: 950, len: 300, half: 30, diveMs: 340, speed: 480, dmg: 16 },
         maxConcurrent: 3, unlockAt: 30 };
-      DATA.mobs.dilo = { name: 'Dilophosaurus', texture: 'prehistoriaDiloHi', hp: 70, spd: 82, xp: 20, cost: 3,
-        deathTint: 0x5a7a34, chase: { contactDmg: 8 },
-        skins: ['prehistoriaDiloHi', 'prehistoriaDiloMidnightHi'],
-        mapVerb: 'diloSpit',                                           // warned venom arc -> lingering venom puddle
-        spit: { everyMs: 5000, range: 420, count: 2, scatter: 120, radius: 60, warnMs: 900,
-                dmg: 14, puddleMs: 3800, puddleDmg: 4, puddleTickMs: 800, slowMult: 0.6 },
-        unlockAt: 35 };
-      DATA.mobs.brachio = { name: 'Brachiosaurus', texture: 'prehistoriaBrachioHi', hp: 420, spd: 30, xp: 60, cost: 5,
-        deathTint: 0x6e7a50, chase: { contactDmg: 18 },
-        skins: ['prehistoriaBrachioHi', 'prehistoriaBrachioStormHi'],
-        mapVerb: 'brachioStomp',                                       // NEUTRAL until provoked -> warned quake-stomp circle
-        stomp: { everyMs: 4200, range: 220, warnMs: 1000, radius: 120, dmg: 22, wanderSpd: 34 },
+      DATA.mobs.hornet = { name: 'Hornet', texture: 'prehistoriaHornetHi', hp: 64, spd: 120, xp: 20, cost: 3,
+        deathTint: 0xd07028, float: true, flap: true, chase: { contactDmg: 10 },
+        mapVerb: 'hornetEnrage',                                      // ramps spd + dmg the longer it's near you
+        enrage: { nearRange: 240, rampMs: 3200, spdMult: 1.7, dmgMult: 2.0, glow: 0xff9a3f },
+        maxConcurrent: 3, unlockAt: 35 };
+      DATA.mobs.bee = { name: 'Honey Bee', texture: 'prehistoriaBeeHi', hp: 50, spd: 112, xp: 15, cost: 2,
+        deathTint: 0xd0a848, float: true, flap: true, chase: { contactDmg: 6 },
+        mapVerb: 'beeBuff',                                           // POLLEN buff — hastes/shields nearby bugs
+        buff: { everyMs: 5000, radius: 220, hasteMult: 1.35, durMs: 3000, warnMs: 600 },
+        maxConcurrent: 2, unlockAt: 35 };
+      DATA.mobs.grub = { name: 'Goliath Grub', texture: 'prehistoriaGrubHi', hp: 240, spd: 42, xp: 32, cost: 4,
+        deathTint: 0xc8b488, flap: true, chase: { contactDmg: 14 },  // slow HP tank roadblock
+        maxConcurrent: 2, unlockAt: 40 };
+      DATA.mobs.centipede = { name: 'Giant Centipede', texture: 'prehistoriaCentipedeHi', hp: 70, spd: 150, xp: 20, cost: 3,
+        deathTint: 0xc8643a, flap: true, chase: { contactDmg: 8 },   // serpentine
+        mapVerb: 'centiBurrow',                                       // submerge -> warned pop-up re-emerge
+        burrow: { everyMs: 5200, warnMs: 900, submergeMs: 700, range: 360, popRadius: 60, dmg: 18 },
+        unlockAt: 25 };
+      DATA.mobs.arthro = { name: 'Arthropleura', texture: 'prehistoriaArthroHi', hp: 440, spd: 30, xp: 62, cost: 5,
+        deathTint: 0x8a94a6, flap: true, chase: { contactDmg: 18 },  // NEUTRAL colossus + trample, serpentine
+        mapVerb: 'arthroTrample',
+        trample: { everyMs: 5200, range: 480, warnMs: 1050, len: 460, half: 30, chargeMs: 1000, speed: 430, kb: 300, dmg: 22 },
         maxConcurrent: 1, unlockAt: 55 };
 
-      // ---- THE PRIMORDIAL — feathered dino-dragon (mapOwned; hatches from the egg) ----
+      // ---- THE PRIMORDIAL METAMORPH — worm P1 -> cocoon -> moth P2 (two-kill) ----
       DATA.bosses.primordial = {
-        name: 'The Primordial', texture: 'prehistoriaPrimordialHi',
-        hp: 4200, spd: 34, xp: 620, contactDmg: 22, deathTint: 0xc8452a,
+        name: 'The Primordial Metamorph', texture: 'prehistoriaWormHi',
+        hp: 2100, spd: 44, xp: 640, contactDmg: 22, deathTint: 0xe08a34,
         lootTable: 'primordial',
-        mapOwned: true, entranceMs: 3600,                              // THE HATCH = 4 beats
+        mapOwned: true, entranceMs: 4200,                             // 5-beat DIG-OUT
+        metamorph: { wormFlap: 'prehistoriaWormHib', mothTexture: 'prehistoriaMothHi',
+                     mothFlap: 'prehistoriaMothHib', cocoon: 'prehistoriaCocoonHi',
+                     cocoonCrack: 'prehistoriaCocoonCrackHi', cocoonMs: 2800, p2Hp: 2100 },
         patterns: {
-          verbEveryMs: 5200,
-          tailLash:   { range: 210, warnMs: 850, halfRad: 0.9, dmg: 24 },
-          fireBreath: { range: 320, warnMs: 1100, halfRad: 0.55, sweepRad: 1.1, steps: 6, gapMs: 130, dmg: 22 },
-          wingGust:   { range: 300, warnMs: 900, halfRad: 0.7, dmg: 14, kb: 300 },   // CAPPED knockback (displacement tag)
-          compyCall:  { everyMs: 15000, count: 3, cap: 10 },           // fromBoss, glow, NO drops
-          dive:       { warnMs: 950, len: 520, half: 30, diveMs: 360, speed: 520, dmg: 22, count: 2 }, // P2 shadow strafes
-          meteorCall: { count: 6, ringR: 200, warnMs: 1000, gapMs: 300, ventMs: 3400, ventDmgMult: 1.5 }, // SIGNATURE
+          verbEveryMs: 5000,
+          // --- P1 WORM ---
+          burrow:     { range: 520, warnMs: 950, len: 520, half: 34, diveMs: 360, speed: 520, dmg: 24 }, // signature
+          dirtSpray:  { range: 420, warnMs: 900, count: 3, scatter: 150, radius: 60, dmg: 18, gapMs: 130 },
+          quake:      { range: 230, warnMs: 1000, radius: 140, dmg: 22 },
+          termiteCall:{ everyMs: 12000, count: 3, cap: 10 },
+          // --- P2 MOTH ---
+          diveStrafe: { warnMs: 950, len: 520, half: 32, diveMs: 360, speed: 540, dmg: 22, count: 2 },
+          scaleDust:  { count: 5, radius: 64, warnMs: 900, gapMs: 260, puddleMs: 3600, puddleDmg: 5, tickMs: 700 },
+          wingGust:   { range: 300, warnMs: 900, halfRad: 0.7, dmg: 14, kb: 300 },                        // CAPPED kb
+          moonLure:   { everyMs: 14000, warnMs: 1000, pull: 130, durMs: 1400, summon: 3 },
           p2HpPct: 0.5,
           overclock:  { hpPct: 0.28, rateMult: 0.74 }
         },
-        title: 'THE APEX HATCHLING',
+        title: 'THE FINAL INSTAR',
         hints: [
-          'Streaks in the sky mean stones are coming — stand OUTSIDE the warned circles.',
-          'The lava puddles cool and fade; wait them out rather than wading through.',
-          'His DIVE follows the shadow along its lane — step off the marked line.',
-          'Dilos spit from the reeds and the venom LINGERS — never fight from a puddle.',
-          'The big longneck is peaceful until you hit it; let it wander and it leaves you be.',
-          'When his roar CALLS THE METEORS down, the last stone leaves him WINDED — unload.'
+          'It claws UP from the earth — the churned mound shows where it will surface.',
+          'The worm BURROWS and erupts beneath you; step off the shadowed lane.',
+          'When it rears back it SPRAYS grit in a cone — read the arc and slip aside.',
+          'Kill the worm and it COCOONS — the moth that climbs out is a fresh fight.',
+          'The moth sheds burning SCALE-DUST; never stand in the glowing powder.',
+          'Its wing-gust only shoves you — the ANT MARCH column is the real killer.'
         ]
       };
       DATA.dropTables.primordial = { rolls: 2, entries: [
@@ -214,42 +207,28 @@
         { item: 'w5', w: 0.2 }, { item: 'a5', w: 0.2 }, { item: 'ar5', w: 0.2 }, { item: 'r5', w: 0.2 }
       ]};
 
-      // ---- SFX (PLAN §7) + the theme ----
-      DATA.audio.sounds.meteoromen = { type: 'sawtooth', freq: 2600, freqEnd: 900, len: 0.7, vol: 0.07, limitMs: 800,
-                                       noise: { vol: 0.05, hp: 2600 } };
-      DATA.audio.sounds.meteorboom = { type: 'triangle', freq: 120, freqEnd: 40, len: 0.6, vol: 0.16, limitMs: 700,
-                                       noise: { vol: 0.12, hp: 400 } };
-      DATA.audio.sounds.lavasizzle = { type: 'sawtooth', freq: 1800, freqEnd: 1400, len: 0.5, vol: 0.06, limitMs: 600,
-                                       noise: { vol: 0.05, hp: 3000 } };
-      DATA.audio.sounds.raptorshriek = { type: 'square', freq: 1400, freqEnd: 700, len: 0.3, vol: 0.1, limitMs: 350,
-                                         noise: { vol: 0.05, hp: 1800 } };
-      DATA.audio.sounds.compychirp = { type: 'square', freq: 1800, freqEnd: 2200, len: 0.1, vol: 0.08, limitMs: 160 };
-      DATA.audio.sounds.trikebellow = { type: 'sawtooth', freq: 140, freqEnd: 90, len: 0.6, vol: 0.14, limitMs: 700,
-                                        noise: { vol: 0.06, hp: 300 } };
-      DATA.audio.sounds.stegowhoosh = { type: 'square', freq: 500, freqEnd: 160, len: 0.28, vol: 0.13, limitMs: 320 };
-      DATA.audio.sounds.pteroscreech = { type: 'square', freq: 2400, freqEnd: 1000, len: 0.28, vol: 0.09, limitMs: 320,
-                                         noise: { vol: 0.05, hp: 2400 } };
-      DATA.audio.sounds.dilospit = { type: 'sawtooth', freq: 1600, freqEnd: 600, len: 0.24, vol: 0.1, limitMs: 280,
-                                     noise: { vol: 0.06, hp: 2000 } };
-      DATA.audio.sounds.quakestomp = { type: 'triangle', freq: 90, freqEnd: 50, len: 0.7, vol: 0.16, limitMs: 800,
-                                       noise: { vol: 0.08, hp: 260 } };
-      DATA.audio.sounds.hatchcrack = { type: 'square', freq: 700, freqEnd: 200, len: 0.4, vol: 0.15, limitMs: 450,
-                                       noise: { vol: 0.1, hp: 1200 } };
-      DATA.audio.sounds.hatchflash = { type: 'square', arp: [880, 1100, 1320, 1760], len: 0.6, vol: 0.14, limitMs: 700 };
-      DATA.audio.sounds.dragonroar = { type: 'sawtooth', freq: 160, freqEnd: 70, len: 0.9, vol: 0.17, limitMs: 1000,
-                                       noise: { vol: 0.1, hp: 320 } };
-      DATA.audio.sounds.tailwhoosh = { type: 'square', freq: 520, freqEnd: 140, len: 0.26, vol: 0.14, limitMs: 300 };
-      DATA.audio.sounds.breathrake = { type: 'sawtooth', freq: 900, freqEnd: 400, len: 0.6, vol: 0.1, limitMs: 700,
-                                       noise: { vol: 0.08, hp: 1400 } };
-      DATA.audio.sounds.wingbuffet = { type: 'sawtooth', freq: 260, freqEnd: 120, len: 0.5, vol: 0.13, limitMs: 600,
-                                       noise: { vol: 0.09, hp: 500 } };
-      DATA.audio.sounds.ignitefwoosh = { type: 'sawtooth', freq: 300, freqEnd: 900, len: 0.5, vol: 0.12, limitMs: 600,
-                                         noise: { vol: 0.08, hp: 1000 } };
-      DATA.audio.sounds.windedsnort = { type: 'triangle', freq: 200, freqEnd: 90, len: 0.5, vol: 0.13, limitMs: 600 };
+      // ---- SFX (insect re-theme) + the theme (PRIMAL.EXE KEPT) ----
+      DATA.audio.sounds.antmarchwarn = { type: 'square', freq: 1400, freqEnd: 1700, len: 0.16, vol: 0.07, limitMs: 200 };
+      DATA.audio.sounds.antmarch = { type: 'square', freq: 900, freqEnd: 700, len: 0.5, vol: 0.06, limitMs: 600, noise: { vol: 0.06, hp: 1600 } };
+      DATA.audio.sounds.wormburrow = { type: 'sawtooth', freq: 400, freqEnd: 120, len: 0.5, vol: 0.13, limitMs: 600, noise: { vol: 0.08, hp: 400 } };
+      DATA.audio.sounds.wormheave = { type: 'triangle', freq: 160, freqEnd: 70, len: 0.7, vol: 0.16, limitMs: 800, noise: { vol: 0.1, hp: 300 } };
+      DATA.audio.sounds.dirtspray = { type: 'sawtooth', freq: 1200, freqEnd: 500, len: 0.3, vol: 0.1, limitMs: 340, noise: { vol: 0.09, hp: 900 } };
+      DATA.audio.sounds.quakestomp = { type: 'triangle', freq: 90, freqEnd: 50, len: 0.7, vol: 0.16, limitMs: 800, noise: { vol: 0.08, hp: 260 } };
+      DATA.audio.sounds.termitechitter = { type: 'square', freq: 2000, freqEnd: 2400, len: 0.08, vol: 0.07, limitMs: 140 };
+      DATA.audio.sounds.waspdive = { type: 'sawtooth', freq: 1800, freqEnd: 700, len: 0.3, vol: 0.1, limitMs: 340, noise: { vol: 0.06, hp: 1800 } };
+      DATA.audio.sounds.hornetbuzz = { type: 'sawtooth', freq: 300, freqEnd: 360, len: 0.4, vol: 0.09, limitMs: 480, noise: { vol: 0.05, hp: 600 } };
+      DATA.audio.sounds.beebuzz = { type: 'triangle', freq: 340, freqEnd: 300, len: 0.3, vol: 0.08, limitMs: 360 };
+      DATA.audio.sounds.centiburrow = { type: 'sawtooth', freq: 700, freqEnd: 200, len: 0.34, vol: 0.1, limitMs: 380, noise: { vol: 0.07, hp: 700 } };
+      DATA.audio.sounds.digrumble = { type: 'triangle', freq: 120, freqEnd: 44, len: 0.9, vol: 0.16, limitMs: 1000, noise: { vol: 0.12, hp: 300 } };
+      DATA.audio.sounds.cocoonform = { type: 'square', freq: 500, freqEnd: 900, len: 0.5, vol: 0.12, limitMs: 600 };
+      DATA.audio.sounds.mothscreech = { type: 'square', freq: 2200, freqEnd: 900, len: 0.5, vol: 0.12, limitMs: 600, noise: { vol: 0.06, hp: 2000 } };
+      DATA.audio.sounds.winggust = { type: 'sawtooth', freq: 260, freqEnd: 120, len: 0.5, vol: 0.13, limitMs: 600, noise: { vol: 0.09, hp: 500 } };
+      DATA.audio.sounds.scaledust = { type: 'sawtooth', freq: 1600, freqEnd: 1200, len: 0.5, vol: 0.06, limitMs: 600, noise: { vol: 0.05, hp: 2600 } };
+      DATA.audio.sounds.moonlure = { type: 'triangle', arp: [660, 880, 990, 1320], len: 0.7, vol: 0.1, limitMs: 800 };
       DATA.audio.music.prehistoria = PRIMAL;
 
       MAPS.addConsoleMap(DATA, { id: 'prehistoria', name: 'PREHISTORIA',
-        sub: 'the sky is falling', locked: false });
+        sub: 'the swarm stirs', locked: false });
     },
 
     buildArt: function (ctx) {
@@ -257,12 +236,12 @@
     },
 
     mobVerbs: {
-      raptorLunge:  function (scene, m, player, time) { return scene._phRaptor(m, player, time); },
-      trikeCharge:  function (scene, m, player, time) { return scene._phTrike(m, player, time); },
-      stegoSweep:   function (scene, m, player, time) { return scene._phStego(m, player, time); },
-      pteroDive:    function (scene, m, player, time) { return scene._phPtero(m, player, time); },
-      diloSpit:     function (scene, m, player, time) { return scene._phDilo(m, player, time); },
-      brachioStomp: function (scene, m, player, time) { return scene._phBrachio(m, player, time); }
+      mayflyFlit:    function (scene, m, player, time) { return scene._phMayfly(m, player, time); },
+      waspDive:      function (scene, m, player, time) { return scene._phWasp(m, player, time); },
+      hornetEnrage:  function (scene, m, player, time) { return scene._phHornet(m, player, time); },
+      beeBuff:       function (scene, m, player, time) { return scene._phBee(m, player, time); },
+      centiBurrow:   function (scene, m, player, time) { return scene._phCenti(m, player, time); },
+      arthroTrample: function (scene, m, player, time) { return scene._phArthro(m, player, time); }
     },
 
     scene: (typeof PREHISTORIA_SCENE !== 'undefined') ? PREHISTORIA_SCENE : {}

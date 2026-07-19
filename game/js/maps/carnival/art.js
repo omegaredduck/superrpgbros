@@ -711,17 +711,17 @@
       ctx.spr('whackAMoleHi', MS, MS, drawMole);
       ctx.spr('cymbalMonkeyHi', MS, MS, drawMonkey);
       ctx.spr('ferrisPhantomHi', MS, MS, drawFerris);
-      ctx.MOB_HI.creepyClown = 'creepyClownHi';               ctx.MOB_DISPLAY.creepyClown = 52;
-      ctx.MOB_HI.balloonWisp = 'balloonWispHi';               ctx.MOB_DISPLAY.balloonWisp = 46;
-      ctx.MOB_HI.carnyBarker = 'carnyBarkerHi';               ctx.MOB_DISPLAY.carnyBarker = 54;
-      ctx.MOB_HI.possessedTeddy = 'possessedTeddyHi';         ctx.MOB_DISPLAY.possessedTeddy = 48;
-      ctx.MOB_HI.popcornPoltergeist = 'popcornPoltergeistHi'; ctx.MOB_DISPLAY.popcornPoltergeist = 50;
-      ctx.MOB_HI.strongmanShade = 'strongmanShadeHi';         ctx.MOB_DISPLAY.strongmanShade = 58;
-      ctx.MOB_HI.cottonCandyBlob = 'cottonCandyBlobHi';       ctx.MOB_DISPLAY.cottonCandyBlob = 52;
-      ctx.MOB_HI.knifeJuggler = 'knifeJugglerHi';             ctx.MOB_DISPLAY.knifeJuggler = 54;
-      ctx.MOB_HI.whackAMole = 'whackAMoleHi';                 ctx.MOB_DISPLAY.whackAMole = 48;
-      ctx.MOB_HI.cymbalMonkey = 'cymbalMonkeyHi';             ctx.MOB_DISPLAY.cymbalMonkey = 46;
-      ctx.MOB_HI.ferrisPhantom = 'ferrisPhantomHi';           ctx.MOB_DISPLAY.ferrisPhantom = 64;
+      ctx.MOB_HI.creepyClown = 'creepyClownHi';               ctx.MOB_DISPLAY.creepyClown = 109;
+      ctx.MOB_HI.balloonWisp = 'balloonWispHi';               ctx.MOB_DISPLAY.balloonWisp = 97;
+      ctx.MOB_HI.carnyBarker = 'carnyBarkerHi';               ctx.MOB_DISPLAY.carnyBarker = 113;
+      ctx.MOB_HI.possessedTeddy = 'possessedTeddyHi';         ctx.MOB_DISPLAY.possessedTeddy = 101;
+      ctx.MOB_HI.popcornPoltergeist = 'popcornPoltergeistHi'; ctx.MOB_DISPLAY.popcornPoltergeist = 105;
+      ctx.MOB_HI.strongmanShade = 'strongmanShadeHi';         ctx.MOB_DISPLAY.strongmanShade = 122;
+      ctx.MOB_HI.cottonCandyBlob = 'cottonCandyBlobHi';       ctx.MOB_DISPLAY.cottonCandyBlob = 109;
+      ctx.MOB_HI.knifeJuggler = 'knifeJugglerHi';             ctx.MOB_DISPLAY.knifeJuggler = 113;
+      ctx.MOB_HI.whackAMole = 'whackAMoleHi';                 ctx.MOB_DISPLAY.whackAMole = 101;
+      ctx.MOB_HI.cymbalMonkey = 'cymbalMonkeyHi';             ctx.MOB_DISPLAY.cymbalMonkey = 97;
+      ctx.MOB_HI.ferrisPhantom = 'ferrisPhantomHi';           ctx.MOB_DISPLAY.ferrisPhantom = 134;
       // ---- boss: THE RINGMASTER (128px canvas) ----
       ctx.spr('ringmasterHi', 128, 128, drawRingmaster);
       ctx.BOSS_HI.ringmaster = { key: 'ringmasterHi', size: 128, display: 122, bodyW: 46, bodyH: 68 };

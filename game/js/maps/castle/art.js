@@ -813,18 +813,18 @@
       ctx.spr('animatedArmorHi', MS, MS, drawAnimatedArmor);
       ctx.spr('armorPieceHi', MS, MS, drawArmorPiece);
       ctx.spr('crimsonDuelistHi', MS, MS, drawCrimsonDuelist);
-      ctx.MOB_HI.gargoyle = 'gargoyleHi';               ctx.MOB_DISPLAY.gargoyle = 56;
-      ctx.MOB_HI.bloodMaiden = 'bloodMaidenHi';         ctx.MOB_DISPLAY.bloodMaiden = 54;
-      ctx.MOB_HI.halberdGuard = 'halberdGuardHi';       ctx.MOB_DISPLAY.halberdGuard = 54;
-      ctx.MOB_HI.portraitPhantom = 'portraitPhantomHi'; ctx.MOB_DISPLAY.portraitPhantom = 52;
-      ctx.MOB_HI.vampInitiate = 'vampInitiateHi';       ctx.MOB_DISPLAY.vampInitiate = 52;
-      ctx.MOB_HI.direRats = 'direRatsHi';               ctx.MOB_DISPLAY.direRats = 48;
-      ctx.MOB_HI.animatedArmor = 'animatedArmorHi';     ctx.MOB_DISPLAY.animatedArmor = 62;
+      ctx.MOB_HI.gargoyle = 'gargoyleHi';               ctx.MOB_DISPLAY.gargoyle = 118;
+      ctx.MOB_HI.bloodMaiden = 'bloodMaidenHi';         ctx.MOB_DISPLAY.bloodMaiden = 113;
+      ctx.MOB_HI.halberdGuard = 'halberdGuardHi';       ctx.MOB_DISPLAY.halberdGuard = 113;
+      ctx.MOB_HI.portraitPhantom = 'portraitPhantomHi'; ctx.MOB_DISPLAY.portraitPhantom = 109;
+      ctx.MOB_HI.vampInitiate = 'vampInitiateHi';       ctx.MOB_DISPLAY.vampInitiate = 109;
+      ctx.MOB_HI.direRats = 'direRatsHi';               ctx.MOB_DISPLAY.direRats = 101;
+      ctx.MOB_HI.animatedArmor = 'animatedArmorHi';     ctx.MOB_DISPLAY.animatedArmor = 130;
       // M7k AUDIT fix: armorReborn had no HI entry — the reassembled armor
       // rendered ~96px with a corner hitbox. Same sheet + display as the base.
-      ctx.MOB_HI.armorReborn = 'animatedArmorHi';       ctx.MOB_DISPLAY.armorReborn = 62;
-      ctx.MOB_HI.armorPiece = 'armorPieceHi';           ctx.MOB_DISPLAY.armorPiece = 38;
-      ctx.MOB_HI.crimsonDuelist = 'crimsonDuelistHi';   ctx.MOB_DISPLAY.crimsonDuelist = 54;
+      ctx.MOB_HI.armorReborn = 'animatedArmorHi';       ctx.MOB_DISPLAY.armorReborn = 130;
+      ctx.MOB_HI.armorPiece = 'armorPieceHi';           ctx.MOB_DISPLAY.armorPiece = 80;
+      ctx.MOB_HI.crimsonDuelist = 'crimsonDuelistHi';   ctx.MOB_DISPLAY.crimsonDuelist = 113;
       // ---- boss: WIDE mounted sprite (generous body — m6e hitbox lesson) ----
       ctx.spr('palekingHi', 128, 128, drawPaleKing);
       ctx.BOSS_HI.paleking = { key: 'palekingHi', size: 128, display: 170, bodyW: 100, bodyH: 60 };

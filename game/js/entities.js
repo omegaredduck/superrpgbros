@@ -190,7 +190,7 @@ var Entities = (function () {
     // shot→mob overlap applies via Entities.applySlow.
     var weapon = DATA.weapons[DATA.classes[st.cls].weapon];
     var wDmg = weapon.dmg + SIM.weaponMod(st.equipment).dmg;
-    var interval = 1000 / SIM.fireRate(weapon, st.stats.dex);
+    var interval = 1000 / (SIM.fireRate(weapon, st.stats.dex) * SIM.projFreq('player'));
     if (intent.firing && time - st.lastShotAt >= interval) {
       st.lastShotAt = time;
       // M4: a MELEE weapon (the Knight's sword) swings an ARC instead of firing
@@ -275,6 +275,8 @@ var Entities = (function () {
       channelWhirlwind(scene, p, st, ab, intent, time, dt);
     } else if (ab.type === 'barrage') {
       channelBarrage(scene, p, st, ab, intent, time);
+    } else if (ab.type === 'shadowClone') {
+      castShadowClone(scene, p, st, ab, intent, time, wDmg);
     } else {
       var abFx = SIM.abilityFor(ab, st.equipment);
       if (intent.ability && st.mp >= abFx.mpCost && time - st.lastAbilityAt >= ab.cooldownMs) {
@@ -425,17 +427,48 @@ var Entities = (function () {
     scene.events.emit('player-ability', ab);
   }
 
+  // NINJA (Red 2026-07-19): SHADOW CLONE JUTSU — a one-shot cast (cost + cooldown,
+  // just like the volley) that hands the SCENE a squad of shadow clones. The
+  // clones are scene-owned (RealmScene.summonShadowClones creates them, its
+  // updateShadowClones flies them + fires their homing bleed-stars, and they
+  // expire on their own timer), so this only pays the CHI and kicks it off.
+  // wDmg (basic weapon damage incl. gear) is snapshotted here and scaled per
+  // clone shot by dmgMult — the same "lock damage at cast" rule the volley uses.
+  // Realm-only: the nexus has no summonShadowClones and forces intent.ability
+  // false, so the guard makes the cast a harmless no-op in the chamber.
+  function castShadowClone(scene, p, st, ab, intent, time, wDmg) {
+    if (!scene.summonShadowClones) return;
+    var abFx = SIM.abilityFor(ab, st.equipment);
+    if (intent.ability && st.mp >= abFx.mpCost && time - st.lastAbilityAt >= ab.cooldownMs) {
+      st.lastAbilityAt = time;
+      st.mp -= abFx.mpCost;
+      scene.summonShadowClones(p, st, ab, abFx.count, wDmg, time);
+      scene.events.emit('player-ability', ab);
+    }
+  }
+
   // M4.6: fromBoss — call sites tag the source (boss contact / boss bolts =
   // true) so per-class dmgTaken multipliers can bite hardest where the user
   // asked: the boss. Scaling happens BEFORE the flat DEF subtraction.
-  function hurtPlayer(scene, p, dmg, time, sourceName, fromBoss) {
+  function hurtPlayer(scene, p, dmg, time, sourceName, fromBoss, trueDmg) {
     var st = p.state;
     if (!st.alive || time - st.lastHitAt < DATA.combat.iframesMs) return;
     // M5.3 DEV MODE: immortality — take no damage at all (the Settings toggle)
     try { if (SAVE.settings().dev) return; } catch (e) {}
     st.lastHitAt = time;
     dmg = SIM.incomingDmg(DATA.classes[st.cls], dmg, !!fromBoss);
+    // 2026-07-18 (Red): BOSS damage scales with campaign depth here — every boss
+    // source passes fromBoss=true, so this one site covers radial/stream filler,
+    // contact, AND every telegraphed map verb. Mobs already carry depth in their
+    // dmgMult (set in spawnMob), so they are NOT re-scaled here.
+    if (fromBoss) dmg = Math.round(dmg * SIM.depthMult(scene.progressDepth || 0).bossDmg);
     var real = Math.max(DATA.combat.minDamage, dmg - Math.floor(st.stats.def));
+    // NO ONE-SHOTS (Red): clamp any single hit to a fraction of MAX HP so death
+    // always takes ≥2 hits — even a signature "instakill". 1.0 disables it.
+    // trueDmg (Red 2026-07-19: the Titan Whale's WATER GUN snipe) bypasses the
+    // no-one-shot clamp for a genuine instakill.
+    var cap = DATA.combat.maxSingleHitPct;
+    if (!trueDmg && cap && cap < 1) real = Math.min(real, Math.max(DATA.combat.minDamage, Math.floor(st.stats.hp * cap)));
     st.hp -= real;
     scene.events.emit('player-hurt', real);
     if (st.hp <= 0) { st.hp = 0; st.alive = false; scene.events.emit('player-died', sourceName); }
@@ -479,13 +512,16 @@ var Entities = (function () {
     else m.body.setSize(11, 11).setOffset(2.5, 2.5);
     m._baseScale = baseScale;
     m.id = nextId++;
-    // M5.4 (user): MOBS SCALE WITH YOUR LEVEL — HP · XP · damage all multiply
-    // by this at spawn (level is otherwise cosmetic; xp.levelPower false). The
-    // dmgMult rides on m.mob and is read at the contact + shoot damage sites.
+    // 2026-07-18 (Red): mob HP · XP · damage scale with campaign DEPTH (regions
+    // cleared) via SIM.depthMult, composed with the (now-retired, default 1.0)
+    // level scaler. dmgMult rides on m.mob and is read at the contact + shoot
+    // damage sites. depth 0 → every factor is 1.0 → old numbers exactly.
     var lm = SIM.mobLevelMult(scene.player && scene.player.state ? scene.player.state.level : 1);
-    var _hp0 = Math.max(1, Math.round(def.hp * lm));
+    var _dm = SIM.depthMult(scene.progressDepth || 0);
+    var _hpM = lm * _dm.mobHp, _xpM = lm * _dm.mobXp, _dgM = lm * _dm.mobDmg;
+    var _hp0 = Math.max(1, Math.round(def.hp * _hpM));
     m.mob = { key: key, def: def, hp: _hp0, maxHp: _hp0,   // M5.7: maxHp at spawn (repair-unit mend baseline)
-              xp: Math.max(1, Math.round(def.xp * lm)), spd: def.spd, dmgMult: lm,
+              xp: Math.max(1, Math.round(def.xp * _xpM)), spd: def.spd, dmgMult: _dgM,
               affix: null, evolved: false, lastShotAt: 0, lastContactAt: 0,
               slowUntil: 0, slowMult: 1, frosted: false,     // M4: frost slow (pooled — reset)
               burnUntil: 0, nextBurnAt: 0, burnTick: 0, burnEvery: 0, scorched: false, // M4.6: fire volley burn
@@ -528,11 +564,11 @@ var Entities = (function () {
       var af = A.mob[pick];
       if (af && !(af.splitShots && !def.shoot)) {          // forced or rolled — same rule
         m.mob.affix = af;
-        // M5.4: champion mults stack ON TOP of the level scale (lm)
-        m.mob.hp  = Math.max(1, Math.round(def.hp  * (af.hpMult  || 1) * lm));
-        m.mob.xp  = Math.max(1, Math.round(def.xp  * (af.xpMult  || 1) * lm));
+        // M5.4/2026-07-18: champion mults stack ON TOP of the level+depth scale
+        m.mob.hp  = Math.max(1, Math.round(def.hp  * (af.hpMult  || 1) * _hpM));
+        m.mob.xp  = Math.max(1, Math.round(def.xp  * (af.xpMult  || 1) * _xpM));
         m.mob.spd = Math.round(def.spd * (af.spdMult || 1));
-        m.mob.dmgMult = lm * (af.dmgMult || 1);
+        m.mob.dmgMult = _dgM * (af.dmgMult || 1);
         m.setScale((m._baseScale || 2) * (af.scale || 1)).setTint(af.tint);
         // M3 polish: CHAMPION NAMEPLATE — read the threat, don't memorize
         // tints. Presentation only (seam rule 3); follows in updateMob.
@@ -828,7 +864,7 @@ var Entities = (function () {
       var want = def.shoot.range * 0.85;
       var dir = dist > want ? 1 : (dist < want * 0.6 ? -0.7 : 0);
       m.setVelocity(dx / dist * spd * dir, dy / dist * spd * dir);
-      if (dist < def.shoot.range && time - m.mob.lastShotAt >= def.shoot.cooldownMs) {
+      if (dist < def.shoot.range && time - m.mob.lastShotAt >= def.shoot.cooldownMs / SIM.projFreq('mob')) {
         m.mob.lastShotAt = time;
         var base = Math.atan2(dy, dx), n = def.shoot.count, half = (n - 1) / 2;
         for (var i = 0; i < n; i++) {
@@ -1011,7 +1047,10 @@ var Entities = (function () {
     if (bm) b.body.setSize(bm.body.w, bm.body.h).setOffset(bm.body.ox, bm.body.oy);
     else b.body.setSize(14, 12).setOffset(3, 5);
     b.id = nextId++;
-    b.boss = { key: key, def: def, hp: def.hp, maxHp: def.hp,
+    // 2026-07-18 (Red): boss HP scales with campaign depth (regions cleared).
+    // depth 0 → ×1.0 → def.hp exactly. Boss DAMAGE scales in hurtPlayer.
+    var _bhp = Math.max(1, Math.round(def.hp * SIM.depthMult(scene.progressDepth || 0).bossHp));
+    b.boss = { key: key, def: def, hp: _bhp, maxHp: _bhp,
                nextRadialAt: time + 1600,               // grace period before the first pattern
                nextStreamAt: time + 3000,
                streamLeft: 0, nextStreamShotAt: 0, lastContactAt: 0,
@@ -1075,7 +1114,7 @@ var Entities = (function () {
     // (M4.6: boss bolts carry fromBoss — hurtPlayer scales them per class)
     // (M6e: guarded — a boss may define no radial/stream at all)
     if (P.radial && time >= b.boss.nextRadialAt) {
-      b.boss.nextRadialAt = time + P.radial.everyMs * rate;
+      b.boss.nextRadialAt = time + P.radial.everyMs * rate / SIM.projFreq('boss');
       for (var i = 0; i < P.radial.count; i++) {
         var a = Math.PI * 2 * i / P.radial.count;
         var rs = fireProjectile(scene, scene.enemyShots, b.x, b.y, a,
@@ -1087,7 +1126,7 @@ var Entities = (function () {
     }
     // pattern 2: aimed stream — rapid shots that track your position per shot
     if (P.stream && b.boss.streamLeft === 0 && time >= b.boss.nextStreamAt) {
-      b.boss.nextStreamAt = time + P.stream.everyMs * rate;
+      b.boss.nextStreamAt = time + P.stream.everyMs * rate / SIM.projFreq('boss');
       b.boss.streamLeft = P.stream.shots;
       b.boss.nextStreamShotAt = time;
     }
